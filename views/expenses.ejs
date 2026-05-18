@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:20px; }
+        .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .stat-card.red::before    { background:linear-gradient(90deg,#EF4444,#F87171); }
+        .stat-card.blue::before   { background:linear-gradient(90deg,#3B82F6,#60A5FA); }
+        .stat-card.green::before  { background:linear-gradient(90deg,#10B981,#34D399); }
+        .stat-card.amber::before  { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+        .stat-card.purple::before { background:linear-gradient(90deg,#8B5CF6,#A78BFA); }
+        .stat-label { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+        .stat-val   { font-size:22px; font-weight:800; line-height:1.1; }
+        .stat-sub   { font-size:11px; color:var(--muted); margin-top:6px; }
+
+        .charts-row { display:grid; grid-template-columns:220px 1fr 1fr; gap:16px; margin-bottom:20px; }
+        .card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; }
+        .card-title { font-size:14px; font-weight:700; margin:0 0 14px; }
+
+        .cat-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+        .cat-legend { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+        .cat-item { display:flex; align-items:center; gap:8px; font-size:12px; }
+
+        .filter-bar { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+        .filter-bar input, .filter-bar select { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:8px 12px; font-size:13px; font-family:'Outfit',sans-serif; outline:none; }
+        .filter-bar select option { background:#1E293B; color:#F8FAFC; }
+
+        .tbl-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+        table { width:100%; border-collapse:collapse; }
+        th { background:var(--sub-bg); color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; padding:11px 16px; text-align:left; white-space:nowrap; }
+        td { padding:11px 16px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:var(--hover-bg); }
+
+        .cat-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+
+        .pagination { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-top:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+        .page-info { font-size:13px; color:var(--muted); }
+        .page-btns a { padding:6px 14px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); text-decoration:none; font-size:13px; }
+        .page-btns a.active { background:var(--primary); color:white; border-color:var(--primary); }
+
+        .modal-overlay { position:fixed; inset:0; background:var(--overlay-bg); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; padding:20px; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:520px; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .modal-title { font-size:17px; font-weight:700; margin:0; }
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+
+        .profit-positive { color:#10B981; font-weight:700; }
+        .profit-negative { color:#EF4444; font-weight:700; }
+        .summary-bar { height:8px; border-radius:4px; overflow:hidden; background:var(--sub-bg); margin-top:8px; }
+        .summary-bar-fill { height:100%; border-radius:4px; }
+        .cat-monthly-table th { background:var(--sub-bg); color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:10px 14px; text-align:right; white-space:nowrap; }
+        .cat-monthly-table th:first-child { text-align:left; }
+        .cat-monthly-table td { padding:10px 14px; border-bottom:1px solid var(--border); font-size:13px; text-align:right; }
+        .cat-monthly-table td:first-child { text-align:left; }
+        .cat-monthly-table tr:last-child td { border-bottom:none; font-weight:700; background:var(--sub-bg); }
+        .cat-monthly-table tr:hover td { background:var(--hover-bg); }
+        .cat-monthly-table .zero { color:var(--muted); font-size:11px; }
+
+        @media(max-width:1100px) { .charts-row { grid-template-columns:1fr 1fr; } }
+        @media(max-width:768px)  { .charts-row { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Dana Operasional' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">💸 Pengeluaran Operasional</h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">Kelola dan pantau dana operasional bisnis ISP Anda</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <a href="/expenses/categories" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text);">
+                    <i class="fas fa-tags"></i> Kelola Kategori
+                </a>
+                <button class="btn btn-primary" onclick="openAddModal()">
+                    <i class="fas fa-plus"></i> Tambah Pengeluaran
+                </button>
+            </div>
+        </div>
+
+        <!-- ── STAT CARDS ── -->
+        <div class="stats-row">
+            <div class="stat-card red">
+                <div class="stat-label">Total Pengeluaran</div>
+                <div class="stat-val">Rp <%= Math.floor(stats.totalExpense||0).toLocaleString('id-ID') %></div>
+                <div class="stat-sub"><%= stats.totalCount||0 %> transaksi <%= monthFilter ? 'bln '+monthFilter : '' %> <%= yearFilter %></div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-label">Rata-rata per Transaksi</div>
+                <div class="stat-val" style="font-size:18px;">Rp <%= Math.floor(stats.avgExpense||0).toLocaleString('id-ID') %></div>
+                <div class="stat-sub">dari <%= stats.totalCount||0 %> entri</div>
+            </div>
+            <div class="stat-card amber">
+                <div class="stat-label">Pengeluaran Terbesar</div>
+                <div class="stat-val" style="font-size:18px;">Rp <%= Math.floor(stats.maxExpense||0).toLocaleString('id-ID') %></div>
+                <div class="stat-sub">dalam periode ini</div>
+            </div>
+            <% const revenue6m = monthlyComparison.length ? monthlyComparison[monthlyComparison.length-1].revenue : 0; %>
+            <% const profit6m  = revenue6m - (stats.totalExpense||0); %>
+            <div class="stat-card <%= profit6m >= 0 ? 'green' : 'red' %>">
+                <div class="stat-label">Estimasi Laba Bersih</div>
+                <div class="stat-val" style="font-size:18px; color:<%= profit6m >= 0 ? '#10B981' : '#EF4444' %>">
+                    Rp <%= Math.floor(Math.abs(profit6m)).toLocaleString('id-ID') %>
+                </div>
+                <div class="stat-sub"><%= profit6m >= 0 ? '✅ Untung' : '❌ Rugi' %> — Pemasukan Rp <%= Math.floor(revenue6m).toLocaleString('id-ID') %></div>
+            </div>
+        </div>
+
+        <!-- ── CHARTS ── -->
+        <div class="charts-row">
+            <!-- Donut kategori -->
+            <div class="card" style="display:flex; flex-direction:column; align-items:center;">
+                <p class="card-title" style="align-self:flex-start;">🏷 Per Kategori</p>
+                <% if (byCategory && byCategory.length > 0) { %>
+                <canvas id="catDonut" width="180" height="180"></canvas>
+                <div class="cat-legend" id="catLegend"></div>
+                <% } else { %>
+                <div style="text-align:center; color:var(--muted); padding:40px 0; font-size:13px;">Belum ada data</div>
+                <% } %>
+            </div>
+
+            <!-- Trend harian -->
+            <div class="card">
+                <p class="card-title">📅 Trend Pengeluaran Harian</p>
+                <canvas id="dailyChart" height="160"></canvas>
+            </div>
+
+            <!-- Pemasukan vs Pengeluaran 6 bulan -->
+            <div class="card">
+                <p class="card-title">⚖️ Pemasukan vs Pengeluaran 6 Bulan</p>
+                <canvas id="compChart" height="160"></canvas>
+            </div>
+        </div>
+
+        <!-- ── PER KATEGORI PER BULAN ── -->
+        <div class="card" style="margin-bottom:20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+                <h3 class="card-title" style="margin:0;">📊 Pengeluaran Per Kategori Per Bulan</h3>
+                <div style="display:flex; gap:8px; align-items:center; font-size:12px; color:var(--muted);">
+                    <i class="fas fa-info-circle"></i> 6 bulan terakhir
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;">
+                <!-- Stacked Bar Chart -->
+                <div>
+                    <canvas id="catMonthlyChart" height="200"></canvas>
+                </div>
+                <!-- Tabel ringkasan -->
+                <div style="overflow-x:auto;">
+                    <table class="cat-monthly-table" id="catMonthlyTable" style="width:100%; border-collapse:collapse;">
+                        <thead id="catMonthlyHead"></thead>
+                        <tbody id="catMonthlyBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── FILTER ── -->
+        <form method="GET" action="/expenses" class="filter-bar">
+            <input type="text" name="search" placeholder="Cari keterangan..." value="<%= search %>" style="min-width:200px; flex:1; max-width:260px;">
+            <select name="category">
+                <option value="">Semua Kategori</option>
+                <% categories.forEach(c => { %>
+                <option value="<%= c.id %>" <%= catFilter==c.id ? 'selected':'' %>><%= c.name %></option>
+                <% }) %>
+            </select>
+            <select name="month">
+                <option value="">Semua Bulan</option>
+                <% ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].forEach((m,i) => { %>
+                <option value="<%= i+1 %>" <%= monthFilter==(i+1) ? 'selected':'' %>><%= m %></option>
+                <% }) %>
+            </select>
+            <select name="year">
+                <% for(let y = new Date().getFullYear(); y >= new Date().getFullYear()-3; y--) { %>
+                <option value="<%= y %>" <%= yearFilter==y ? 'selected':'' %>><%= y %></option>
+                <% } %>
+            </select>
+            <input type="hidden" name="page" value="1">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
+            <% if (search || catFilter || monthFilter) { %>
+            <a href="/expenses?year=<%= yearFilter %>" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--muted);">✕ Reset</a>
+            <% } %>
+        </form>
+
+        <!-- ── TABLE ── -->
+        <div class="tbl-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Tanggal</th>
+                        <th>Kategori</th>
+                        <th>Keterangan</th>
+                        <th>Jumlah</th>
+                        <th>Catatan</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <% if (expenses && expenses.length > 0) { %>
+                    <% expenses.forEach((e, idx) => { %>
+                    <tr>
+                        <td style="color:var(--muted); font-size:11px;"><%= ((pagination.page-1)*pagination.perPage)+idx+1 %></td>
+                        <td style="white-space:nowrap;">
+                            <div style="font-weight:600;">
+                                <%= new Date(e.date).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %>
+                            </div>
+                            <div style="font-size:11px; color:var(--muted);">
+                                <%= new Date(e.date).toLocaleDateString('id-ID',{weekday:'short'}) %>
+                            </div>
+                        </td>
+                        <td>
+                            <% if (e.category_name) { %>
+                            <span class="cat-badge" style="background:<%= e.category_color %>22; color:<%= e.category_color %>; border:1px solid <%= e.category_color %>44;">
+                                <i class="fas <%= e.category_icon || 'fa-tag' %>"></i>
+                                <%= e.category_name %>
+                            </span>
+                            <% } else { %>
+                            <span style="color:var(--muted); font-size:12px;">-</span>
+                            <% } %>
+                        </td>
+                        <td style="max-width:200px;">
+                            <div style="font-weight:500;"><%= e.description || '-' %></div>
+                        </td>
+                        <td style="font-weight:700; white-space:nowrap; color:#EF4444;">
+                            Rp <%= parseFloat(e.amount).toLocaleString('id-ID') %>
+                        </td>
+                        <td style="font-size:12px; color:var(--muted); max-width:160px;">
+                            <%= e.notes ? e.notes.substring(0,60) + (e.notes.length > 60 ? '...' : '') : '-' %>
+                        </td>
+                        <td>
+                            <div style="display:flex; gap:6px;">
+                                <button onclick='openEditModal(<%- JSON.stringify(e) %>)'
+                                    style="width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteExpense(<%= e.id %>)"
+                                    style="width:30px; height:30px; border-radius:8px; border:1px solid rgba(239,68,68,.3); background:rgba(239,68,68,.08); color:#EF4444; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr><td colspan="7" style="text-align:center; color:var(--muted); padding:50px;">
+                        <i class="fas fa-receipt" style="font-size:32px; opacity:.3; display:block; margin-bottom:12px;"></i>
+                        Belum ada pengeluaran. Klik "Tambah Pengeluaran" untuk mulai.
+                    </td></tr>
+                <% } %>
+                </tbody>
+            </table>
+
+            <% if (pagination.totalPages > 1) { %>
+            <%
+                const buildUrl = (p) => {
+                    const q = new URLSearchParams();
+                    if (search)     q.set('search', search);
+                    if (catFilter)  q.set('category', catFilter);
+                    if (monthFilter)q.set('month', monthFilter);
+                    q.set('year', yearFilter);
+                    q.set('page', p);
+                    return '/expenses?' + q.toString();
+                };
+            %>
+            <div class="pagination">
+                <div class="page-info">
+                    Menampilkan <b><%= ((pagination.page-1)*pagination.perPage)+1 %>–<%= Math.min(pagination.page*pagination.perPage, pagination.total) %></b>
+                    dari <b><%= pagination.total %></b> pengeluaran
+                </div>
+                <div class="page-btns" style="display:flex; gap:6px;">
+                    <a href="<%= buildUrl(pagination.page-1) %>" style="<%= pagination.page<=1 ? 'opacity:.4;pointer-events:none;' : '' %> padding:6px 14px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); text-decoration:none; font-size:13px;">← Prev</a>
+                    <span style="padding:6px 14px; border-radius:8px; border:1px solid var(--primary); background:var(--primary); color:white; font-size:13px;"><%= pagination.page %> / <%= pagination.totalPages %></span>
+                    <a href="<%= buildUrl(pagination.page+1) %>" style="<%= pagination.page>=pagination.totalPages ? 'opacity:.4;pointer-events:none;' : '' %> padding:6px 14px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); text-decoration:none; font-size:13px;">Next →</a>
+                </div>
+            </div>
+            <% } %>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Tambah -->
+<div class="modal-overlay" id="addModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="modal-title">➕ Tambah Pengeluaran</h3>
+            <button onclick="document.getElementById('addModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">×</button>
+        </div>
+        <form id="addForm">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Kategori</label>
+                    <select id="addCat" class="form-control">
+                        <option value="">-- Pilih Kategori --</option>
+                        <% categories.forEach(c => { %>
+                        <option value="<%= c.id %>"><i class="fas <%= c.icon %>"></i> <%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Jumlah (Rp) *</label>
+                    <input type="number" id="addAmount" class="form-control" placeholder="0" required min="1">
+                </div>
+                <div class="form-group">
+                    <label>Tanggal *</label>
+                    <input type="date" id="addDate" class="form-control" required value="<%= new Date().toISOString().split('T')[0] %>">
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Keterangan</label>
+                    <input type="text" id="addDesc" class="form-control" placeholder="Contoh: Bayar internet upstream Maret">
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Catatan Detail</label>
+                    <textarea id="addNotes" class="form-control" rows="3" placeholder="Detail tambahan (opsional)..." style="resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="document.getElementById('addModal').style.display='none'" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Edit -->
+<div class="modal-overlay" id="editModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="modal-title">✏️ Edit Pengeluaran</h3>
+            <button onclick="document.getElementById('editModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;">×</button>
+        </div>
+        <form id="editForm">
+            <input type="hidden" id="editId">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Kategori</label>
+                    <select id="editCat" class="form-control">
+                        <option value="">-- Pilih Kategori --</option>
+                        <% categories.forEach(c => { %>
+                        <option value="<%= c.id %>"><%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Jumlah (Rp) *</label>
+                    <input type="number" id="editAmount" class="form-control" required min="1">
+                </div>
+                <div class="form-group">
+                    <label>Tanggal *</label>
+                    <input type="date" id="editDate" class="form-control" required>
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Keterangan</label>
+                    <input type="text" id="editDesc" class="form-control">
+                </div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>Catatan Detail</label>
+                    <textarea id="editNotes" class="form-control" rows="3" style="resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="document.getElementById('editModal').style.display='none'" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Perbarui</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const byCategory     = <%- JSON.stringify(byCategory || []) %>;
+const dailyTrend     = <%- JSON.stringify(dailyTrend || []) %>;
+const monthlyComp    = <%- JSON.stringify(monthlyComparison || []) %>;
+const categoryMonthly = <%- JSON.stringify(categoryMonthly || []) %>;
+const isDark        = !document.documentElement.classList.contains('light-theme');
+const gridColor     = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+const tickColor     = isDark ? '#94A3B8' : '#64748B';
+
+// ── Per Kategori Per Bulan — Stacked Bar + Tabel ──
+(function buildCatMonthly() {
+    if (!categoryMonthly || categoryMonthly.length === 0) return;
+
+    // Kumpulkan semua bulan unik (format "Jan 2025")
+    const monthSet = new Set();
+    categoryMonthly.forEach(r => {
+        if (r.month && r.year) {
+            const d = new Date(r.year, r.month - 1, 1);
+            monthSet.add(d.toLocaleString('id-ID', { month: 'short', year: 'numeric' }));
+        }
+    });
+    const months = Array.from(monthSet);
+
+    // Kumpulkan semua kategori unik
+    const catMap = {};
+    categoryMonthly.forEach(r => {
+        if (!catMap[r.category_name]) catMap[r.category_name] = { color: r.color || '#6366F1', data: {} };
+        const d = new Date(r.year, r.month - 1, 1);
+        const label = d.toLocaleString('id-ID', { month: 'short', year: 'numeric' });
+        catMap[r.category_name].data[label] = {
+            total: parseFloat(r.total) || 0,
+            count: parseInt(r.count) || 0
+        };
+    });
+    const catNames = Object.keys(catMap);
+
+    // Datasets untuk stacked bar
+    const datasets = catNames.map(name => ({
+        label: name,
+        data:  months.map(m => catMap[name].data[m] ? catMap[name].data[m].total : 0),
+        backgroundColor: catMap[name].color + 'BB',
+        borderColor:     catMap[name].color,
+        borderWidth: 1,
+        borderRadius: 3
+    }));
+
+    new Chart(document.getElementById('catMonthlyChart'), {
+        type: 'bar',
+        data: { labels: months, datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { labels: { color: tickColor, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.dataset.label}: Rp ${Math.floor(ctx.parsed.y).toLocaleString('id-ID')}`
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: tickColor } },
+                y: { stacked: true, grid: { color: gridColor },
+                     ticks: { color: tickColor, callback: v => 'Rp ' + (v/1000).toFixed(0) + 'K' } }
+            }
+        }
+    });
+
+    // ── Tabel: baris=kategori, kolom=bulan ──
+    const thead = document.getElementById('catMonthlyHead');
+    const tbody = document.getElementById('catMonthlyBody');
+
+    // Header: Kategori | Bln1 | Bln2 | ... | Total
+    let headHtml = '<tr><th>Kategori</th>';
+    months.forEach(m => headHtml += `<th>${m}</th>`);
+    headHtml += '<th>Total</th><th>Txn</th></tr>';
+    thead.innerHTML = headHtml;
+
+    // Totals per bulan untuk baris total
+    const monthTotals  = {};
+    const monthCounts  = {};
+    months.forEach(m => { monthTotals[m] = 0; monthCounts[m] = 0; });
+
+    let bodyHtml = '';
+    let grandTotal = 0, grandCount = 0;
+
+    catNames.forEach(name => {
+        const cat = catMap[name];
+        let rowTotal = 0, rowCount = 0;
+        let rowHtml = `<tr>
+            <td>
+                <span style="display:inline-flex;align-items:center;gap:6px;">
+                    <span style="width:10px;height:10px;border-radius:3px;background:${cat.color};flex-shrink:0;"></span>
+                    ${name}
+                </span>
+            </td>`;
+        months.forEach(m => {
+            const val   = cat.data[m] ? cat.data[m].total : 0;
+            const cnt   = cat.data[m] ? cat.data[m].count : 0;
+            rowTotal   += val;
+            rowCount   += cnt;
+            monthTotals[m] += val;
+            monthCounts[m] += cnt;
+            if (val > 0) {
+                rowHtml += `<td>
+                    <div style="font-weight:600;">Rp ${Math.floor(val).toLocaleString('id-ID')}</div>
+                    <div style="font-size:10px;color:var(--muted);">${cnt} txn</div>
+                </td>`;
+            } else {
+                rowHtml += `<td class="zero">-</td>`;
+            }
+        });
+        grandTotal += rowTotal;
+        grandCount += rowCount;
+        rowHtml += `<td style="color:#EF4444;font-weight:700;">Rp ${Math.floor(rowTotal).toLocaleString('id-ID')}</td>`;
+        rowHtml += `<td style="color:var(--muted);">${rowCount}</td>`;
+        rowHtml += '</tr>';
+        bodyHtml += rowHtml;
+    });
+
+    // Baris total
+    let totalRow = '<tr><td>TOTAL</td>';
+    months.forEach(m => {
+        const v = monthTotals[m];
+        totalRow += v > 0
+            ? `<td>Rp ${Math.floor(v).toLocaleString('id-ID')}<div style="font-size:10px;font-weight:400;">${monthCounts[m]} txn</div></td>`
+            : `<td class="zero">-</td>`;
+    });
+    totalRow += `<td style="color:#EF4444;">Rp ${Math.floor(grandTotal).toLocaleString('id-ID')}</td>`;
+    totalRow += `<td>${grandCount}</td></tr>`;
+    bodyHtml += totalRow;
+    tbody.innerHTML = bodyHtml;
+})();
+
+// ── Donut kategori ──
+if (byCategory.length > 0) {
+    const colors = byCategory.map(c => c.color || '#6366F1');
+    new Chart(document.getElementById('catDonut'), {
+        type: 'doughnut',
+        data: {
+            labels: byCategory.map(c => c.name),
+            datasets: [{ data: byCategory.map(c => parseFloat(c.total)), backgroundColor: colors,
+                borderColor: isDark ? '#111827' : '#fff', borderWidth:3, hoverOffset:6 }]
+        },
+        options: { responsive:false, cutout:'68%', plugins:{ legend:{display:false},
+            tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: Rp ${Math.floor(ctx.parsed).toLocaleString('id-ID')}` } } } }
+    });
+    const total = byCategory.reduce((a,c) => a + parseFloat(c.total), 0);
+    const legend = document.getElementById('catLegend');
+    byCategory.forEach(c => {
+        const pct = total > 0 ? Math.round((parseFloat(c.total)/total)*100) : 0;
+        legend.innerHTML += `
+        <div class="cat-item">
+            <span class="cat-dot" style="background:${c.color}"></span>
+            <span style="flex:1; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${c.name}">${c.name}</span>
+            <span style="font-weight:700; color:var(--text); font-size:11px;">${pct}%</span>
+        </div>`;
+    });
+}
+
+// ── Daily trend ──
+const daysInMonth = Array.from({length:31}, (_,i) => i+1);
+const dailyMap = {};
+dailyTrend.forEach(d => dailyMap[d.day] = parseFloat(d.total));
+new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+        labels: daysInMonth,
+        datasets: [{ label:'Pengeluaran', data: daysInMonth.map(d => dailyMap[d] || 0),
+            backgroundColor: 'rgba(239,68,68,0.5)', borderColor:'#EF4444', borderWidth:1, borderRadius:4 }]
+    },
+    options: { responsive:true, plugins:{ legend:{display:false} },
+        scales:{ y:{ beginAtZero:true, grid:{color:gridColor}, ticks:{color:tickColor, callback:v => 'Rp '+(v/1000).toFixed(0)+'K'} },
+                 x:{ grid:{display:false}, ticks:{color:tickColor, font:{size:10}, maxTicksLimit:10} } } }
+});
+
+// ── Comparison chart ──
+new Chart(document.getElementById('compChart'), {
+    type: 'bar',
+    data: {
+        labels: monthlyComp.map(d => d.month),
+        datasets: [
+            { label:'Pemasukan', data: monthlyComp.map(d => d.revenue), backgroundColor:'rgba(16,185,129,0.6)', borderColor:'#10B981', borderWidth:1, borderRadius:4 },
+            { label:'Pengeluaran', data: monthlyComp.map(d => d.expense), backgroundColor:'rgba(239,68,68,0.6)', borderColor:'#EF4444', borderWidth:1, borderRadius:4 },
+            { label:'Laba', data: monthlyComp.map(d => d.profit), type:'line', borderColor:'#F59E0B', backgroundColor:'rgba(245,158,11,0.1)', fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#F59E0B' }
+        ]
+    },
+    options: { responsive:true, plugins:{ legend:{ labels:{ color:tickColor, font:{size:11} } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: Rp ${Math.floor(ctx.parsed.y).toLocaleString('id-ID')}` } } },
+        scales:{ y:{ beginAtZero:true, grid:{color:gridColor}, ticks:{color:tickColor, callback:v => 'Rp '+(v/1000).toFixed(0)+'K'} },
+                 x:{ grid:{display:false}, ticks:{color:tickColor} } } }
+});
+
+// ── Modal ──
+function openAddModal() {
+    document.getElementById('addModal').style.display = 'flex';
+}
+function openEditModal(e) {
+    document.getElementById('editId').value     = e.id;
+    document.getElementById('editCat').value    = e.category_id || '';
+    document.getElementById('editAmount').value = e.amount;
+    document.getElementById('editDate').value   = e.date ? e.date.split('T')[0] : '';
+    document.getElementById('editDesc').value   = e.description || '';
+    document.getElementById('editNotes').value  = e.notes || '';
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+document.getElementById('addForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const body = {
+        category_id: document.getElementById('addCat').value || null,
+        amount:      document.getElementById('addAmount').value,
+        date:        document.getElementById('addDate').value,
+        description: document.getElementById('addDesc').value,
+        notes:       document.getElementById('addNotes').value
+    };
+    const res = await fetch('/expenses/api/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { document.getElementById('addModal').style.display='none'; setTimeout(() => location.reload(), 800); }
+});
+
+document.getElementById('editForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id   = document.getElementById('editId').value;
+    const body = {
+        category_id: document.getElementById('editCat').value || null,
+        amount:      document.getElementById('editAmount').value,
+        date:        document.getElementById('editDate').value,
+        description: document.getElementById('editDesc').value,
+        notes:       document.getElementById('editNotes').value
+    };
+    const res = await fetch('/expenses/api/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { document.getElementById('editModal').style.display='none'; setTimeout(() => location.reload(), 800); }
+});
+
+async function deleteExpense(id) {
+    if (!confirm('Hapus pengeluaran ini?')) return;
+    const res = await fetch('/expenses/api/' + id, { method:'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 800);
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color = type === 'success' ? '#10B981' : '#EF4444';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

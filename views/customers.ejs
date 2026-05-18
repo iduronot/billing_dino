@@ -1,0 +1,662 @@
+<head>
+    <%- include('partials/head') %>
+        <style>
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 16px;
+                margin-bottom: 24px;
+            }
+
+            .stat-card {
+                background: var(--card-bg);
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                padding: 22px;
+                position: relative;
+                overflow: hidden;
+                transition: transform 0.2s;
+                cursor: pointer;
+            }
+
+            .stat-card:hover {
+                transform: translateY(-2px);
+                background: rgba(255, 255, 255, .04);
+            }
+
+            .stat-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+            }
+
+            .stat-card.blue::before {
+                background: linear-gradient(90deg, #3B82F6, #6366F1);
+            }
+
+            .stat-card.green::before {
+                background: linear-gradient(90deg, #10B981, #34D399);
+            }
+
+            .stat-card.red::before {
+                background: linear-gradient(90deg, #EF4444, #F87171);
+            }
+
+            .stat-card.active-filter {
+                border-color: var(--primary);
+                background: rgba(59, 130, 246, .08);
+            }
+
+            .stat-label {
+                font-size: 13px;
+                color: var(--muted);
+                margin-bottom: 8px;
+            }
+
+            .stat-value {
+                font-size: 26px;
+                font-weight: 700;
+                line-height: 1;
+            }
+
+            .toolbar {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 16px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+
+            .pagination {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 10px;
+                padding: 20px;
+            }
+
+            .overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, .7);
+                backdrop-filter: blur(4px);
+                display: none;
+                align-items: center;
+                justify-content: center;
+                z-index: 9999;
+            }
+
+            .modal {
+                background: var(--modal-bg);
+                border: 1px solid var(--border);
+                border-radius: 20px;
+                width: 100%;
+                max-width: 550px;
+                padding: 28px;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .modal-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+
+            .modal-title {
+                font-size: 18px;
+                font-weight: 600;
+                margin: 0;
+            }
+
+            .close-btn {
+                background: none;
+                border: none;
+                color: var(--muted);
+                font-size: 22px;
+                cursor: pointer;
+            }
+
+            .form-group {
+                margin-bottom: 14px;
+            }
+
+            .form-group label {
+                display: block;
+                margin-bottom: 6px;
+                font-size: 13px;
+                color: var(--muted);
+            }
+
+            .form-row {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 14px;
+            }
+
+            .toast {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                background: var(--toast-bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 14px 20px;
+                z-index: 9999;
+                display: none;
+                font-size: 14px;
+                box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+            }
+
+            .toast.show {
+                display: block;
+            }
+
+            @media(max-width:768px) {
+                .form-row {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+</head>
+
+<body>
+    <%- include('partials/sidebar') %>
+
+        <main class="main">
+            <%- include('partials/topbar', { title: t.customer_management }) %>
+                <div class="content">
+                    <div class="page-header" style="margin-bottom:25px">
+                        <h1 class="page-title"><%= t.customer_list %></h1>
+                        <div style="display:flex;gap:25px;flex-wrap:wrap;align-items:center">
+                            <button class="btn btn-primary" onclick="openModal('add')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"
+                                    viewBox="0 0 24 24">
+                                    <path d="M12 4v16m8-8H4" />
+                                </svg> <%= t.add_customer %>
+                            </button>
+                            <a href="/export/customers" class="btn"
+                                style="background:rgba(16,185,129,.15);color:var(--success);border:1px solid rgba(16,185,129,.3)">📥
+                                <%= t.export_csv %></a>
+                        </div>
+                    </div>
+
+                    <!-- Stats filter cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card blue <%= filter === 'all' ? 'active-filter' : '' %>"
+                            onclick="window.location.href='/customers?filter=all<%= search ? '&search='+search : '' %>'">
+                            <div class="stat-label"><%= t.total_customers %></div>
+                            <div class="stat-value">
+                                <%= stats.total || 0 %>
+                            </div>
+                        </div>
+                        <div class="stat-card green <%= filter === 'active' ? 'active-filter' : '' %>"
+                            onclick="window.location.href='/customers?filter=active<%= search ? '&search='+search : '' %>'">
+                            <div class="stat-label"><%= t.active %></div>
+                            <div class="stat-value">
+                                <%= stats.active || 0 %>
+                            </div>
+                        </div>
+                        <div class="stat-card red <%= filter === 'isolated' ? 'active-filter' : '' %>"
+                            onclick="window.location.href='/customers?filter=isolated<%= search ? '&search='+search : '' %>'">
+                            <div class="stat-label"><%= t.isolated_short %></div>
+                            <div class="stat-value">
+                                <%= stats.isolated || 0 %>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Toolbar -->
+                    <div class="toolbar">
+                        <form method="GET" action="/customers" style="display:flex;gap:10px;flex:1;">
+                            <input type="hidden" name="filter" value="<%= filter %>">
+                            <input type="text" name="search" class="form-control"
+                                placeholder="<%= t.search_placeholder %>" value="<%= search %>"
+                                style="flex:1;max-width:320px;">
+                            <button type="submit" class="btn btn-primary"><%= t.search_btn %></button>
+                            <% if(search) { %><a href="/customers?filter=<%= filter %>" class="btn"
+                                    style="background:rgba(255,255,255,.1);color:var(--text);"><%= t.reset_btn %></a>
+                                <% } %>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th><%= t.name_contact %></th>
+                                    <th><%= t.package_router %></th>
+                                    <th>PPPoE</th>
+                                    <th><%= t.method_iso_date %></th>
+                                    <th><%= t.status %></th>
+                                    <th><%= t.actions %></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (customers && customers.length> 0) { %>
+                                    <% customers.forEach(c=> { %>
+                                        <tr>
+                                            <td style="color:var(--muted)">#<%= c.id %>
+                                            </td>
+                                            <td>
+                                                <div style="font-weight:600">
+                                                    <%= c.name %>
+                                                </div>
+                                                <div style="font-size:12px;color:var(--muted);margin-top:2px">📱 <%=
+                                                        c.phone || '-' %>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <%= c.package_name || t.no_package %>
+                                                </div>
+                                                <div style="font-size:12px;color:var(--muted)">
+                                                    <%= c.router_name || t.default_router %>
+                                                </div>
+                                            </td>
+                                            <td><code
+                                                    style="background:rgba(255,255,255,.08);padding:2px 8px;border-radius:6px;font-size:12px"><%= c.pppoe_username || '-' %></code>
+                                            </td>
+                                            <td>
+                                                <div style="font-size:12px;color:var(--primary);font-weight:600">
+                                                    <%= c.billing_method==='rolling' ? t.rolling_30 : t.monthly %>
+                                                </div>
+                                                <div style="color:var(--muted)"><%= t.day_short %> <%= c.isolation_date || 20 %>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+                                                    <span class="badge badge-<%= c.status %>">
+                                                        <%= c.status==='active' ? t.active : t.isolated_short %>
+                                                    </span>
+                                                    <% if(c.installation_status === 'pending') { %>
+                                                        <span onclick="markInstalled(<%= c.id %>)" title="Klik untuk tandai sudah terpasang"
+                                                            class="badge" style="background:rgba(245,158,11,0.15); color:#F59E0B; font-size:10px; border:1px solid rgba(245,158,11,0.3); white-space:nowrap; cursor:pointer;">
+                                                            ⚠ PENDING INSTALL
+                                                        </span>
+                                                    <% } %>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                                                    <!-- Bayar -->
+                                                    <a href="/customers/<%= c.id %>/pay"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;"
+                                                        title="Buat tagihan / pembayaran">
+                                                        💰 Bayar
+                                                    </a>
+                                                    <!-- Edit -->
+                                                    <button onclick='editCustomer(<%- JSON.stringify(c) %>)'
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Edit data pelanggan">
+                                                        ✏️ Edit
+                                                    </button>
+                                                    <!-- Isolir / Aktifkan -->
+                                                    <% if(c.status==='isolated') { %>
+                                                    <button onclick="doAction('/customers/<%= c.id %>/unisolate','<%= t.confirm_unisolate_cust %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Aktifkan kembali pelanggan">
+                                                        🔓 Aktifkan
+                                                    </button>
+                                                    <% } else { %>
+                                                    <button onclick="doAction('/customers/<%= c.id %>/isolate','<%= t.confirm_isolate_cust %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(245,158,11,.12);color:#F59E0B;border:1px solid rgba(245,158,11,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Isolir pelanggan (putus layanan)">
+                                                        🔒 Isolir
+                                                    </button>
+                                                    <% } %>
+                                                    <!-- Hapus -->
+                                                    <button onclick="deleteItem('/customers/<%= c.id %>','<%= t.confirm_delete_cust %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Hapus pelanggan permanen">
+                                                        🗑 Hapus
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <% }); %>
+                                            <% } else { %>
+                                                <tr>
+                                                    <td colspan="7"
+                                                        style="text-align:center;color:var(--muted);padding:40px"><%= t.no_customer_data %></td>
+                                                </tr>
+                                                <% } %>
+                            </tbody>
+                        </table>
+                        <% if (pagination.totalPages> 1) { %>
+                            <div class="pagination">
+                                <% if(pagination.page> 1) { %><a
+                                        href="/customers?page=<%= pagination.page-1 %>&filter=<%= filter %><%= search?'&search='+search:'' %>"
+                                        class="btn" style="background:rgba(255,255,255,.08);color:var(--text)">←
+                                        <%= t.prev %></a>
+                                    <% } %>
+                                        <span style="color:var(--muted);font-size:14px">Hal <%= pagination.page %> / <%=
+                                                     pagination.totalPages %> (Total: <%= pagination.total %>)</span>
+                                        <% if(pagination.page < pagination.totalPages) { %><a
+                                                href="/customers?page=<%= pagination.page+1 %>&filter=<%= filter %><%= search?'&search='+search:'' %>"
+                                                class="btn"
+                                                style="background:rgba(255,255,255,.08);color:var(--text)"><%= t.next %> →</a>
+                                            <% } %>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+        </main>
+
+        <!-- Add/Edit Modal -->
+        <div class="overlay" id="modalOverlay" onclick="closeModal(event)">
+            <div class="modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <h2 class="modal-title" id="modalTitle"><%= t.add_customer %></h2>
+                    <button class="close-btn" onclick="closeModal()">×</button>
+                </div>
+                <form id="customerForm">
+                    <input type="hidden" id="customerId">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.full_name %> *</label>
+                            <input type="text" id="fName" class="form-control" required placeholder="<%= t.full_name %>">
+                        </div>
+                        <div class="form-group">
+                            <label><%= t.phone_number %> *</label>
+                            <input type="text" id="fPhone" class="form-control" required placeholder="08xxxxxxxx">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><%= t.email_label %></label>
+                        <input type="email" id="fEmail" class="form-control" placeholder="pelanggan@email.com">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.pppoe_username %></label>
+                            <div style="display:flex; gap:8px;">
+                                <input type="text" id="fPppoe" class="form-control" placeholder="pppoe.username" style="flex:1">
+                                <button type="button" class="btn" onclick="fetchActivePppoe()" title="Ambil dari MikroTik Aktif" style="background:var(--primary-soft); color:var(--primary); width:42px; height:42px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:10px; padding:0;">
+                                    <i class="fas fa-search-location"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label><%= t.pppoe_password %></label>
+                            <input type="text" id="fPppoePass" class="form-control" placeholder="<%= t.optional %>">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.internet_packages %></label>
+                            <select id="fPackage" class="form-control">
+                                <option value=""><%= t.select_package %></option>
+                                <% packages.forEach(p=> { %>
+                                    <option value="<%= p.id %>">
+                                        <%= p.name %> (Rp <%= Math.floor(p.price).toLocaleString('id-ID') %>)
+                                    </option>
+                                    <% }); %>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><%= t.mikrotik %></label>
+                            <select id="fRouter" class="form-control">
+                                <option value=""><%= t.default_router %></option>
+                                <% routers.forEach(r=> { %>
+                                    <option value="<%= r.id %>">
+                                        <%= r.name %> (<%= r.ip_address %>)
+                                    </option>
+                                    <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.billing_method %></label>
+                            <select id="fBillingMethod" class="form-control">
+                                <option value="fixed"><%= t.monthly_fixed %></option>
+                                <option value="rolling"><%= t.rolling_30_pay %></option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label><%= t.odp_connection %></label>
+                            <select id="fOdp" class="form-control">
+                                <option value=""><%= t.select_odp %></option>
+                                <% odps.forEach(o => { %>
+                                    <option value="<%= o.id %>"><%= o.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.iso_day %> (<%= t.monthly_only %>)</label>
+                            <input type="number" id="fIsoDate" class="form-control" value="20" min="1" max="28">
+                        </div>
+                        <div class="form-group">
+                            <label><%= t.address %></label>
+                            <input type="text" id="fAddress" class="form-control" placeholder="<%= t.address %>">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Pilih Teknisi (Notifikasi Telegram)</label>
+                            <select id="fTechnician" class="form-control">
+                                <option value="">Tanpa Teknisi</option>
+                                <% technicians.forEach(tech => { %>
+                                    <option value="<%= tech.id %>"><%= tech.username %> (<%= tech.telegram_id || 'No TG ID' %>)</option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Latitude (koordinat peta)</label>
+                            <input type="text" id="fLat" class="form-control" placeholder="-6.xxxxxx">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Longitude (koordinat peta)</label>
+                            <input type="text" id="fLng" class="form-control" placeholder="106.xxxxxx">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary"
+                        style="width:100%;justify-content:center;padding:13px;margin-top:6px"><%= t.save_customer %></button>
+                </form>
+            </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+
+        <!-- Modal Pick PPPoE -->
+        <div id="pppoeModal" class="overlay" style="z-index:10000;">
+            <div class="modal" style="max-width:450px;">
+                <div class="modal-header">
+                    <h3 class="modal-title"><%= t.pick_active_pppoe %></h3>
+                    <button class="close-btn" onclick="document.getElementById('pppoeModal').style.display='none'">&times;</button>
+                </div>
+                <div style="margin-bottom:15px;">
+                    <input type="text" id="pppoeSearch" class="form-control" placeholder="<%= t.search_username %>" onkeyup="filterPppoeList()">
+                </div>
+                <div id="pppoeList" style="max-height:350px; overflow-y:auto; border:1px solid var(--border); border-radius:12px; background:var(--input-bg);">
+                    <div style="padding:30px; text-align:center; color:var(--muted);"><%= t.loading_data %></div>
+                </div>
+                <div style="margin-top:15px; font-size:11px; color:var(--muted); text-align:center;">
+                    * Menampilkan session aktif yang belum terdaftar di database.
+                </div>
+            </div>
+        </div>
+
+      <script>
+document.addEventListener('DOMContentLoaded', () => {
+    const overlay = document.getElementById('modalOverlay');
+    const customerForm = document.getElementById('customerForm');
+    let editMode = false;
+
+    window.openModal = function(mode, data) {
+        if (!overlay) return console.error('Modal overlay not found');
+        editMode = mode === 'edit';
+        document.getElementById('modalTitle').textContent = editMode ? 'Edit Pelanggan' : 'Tambah Pelanggan';
+        
+        if (editMode && data) {
+            document.getElementById('customerId').value = data.id;
+            document.getElementById('fName').value = data.name || '';
+            document.getElementById('fEmail').value = data.email || '';
+            document.getElementById('fPhone').value = data.phone || '';
+            document.getElementById('fPppoe').value = data.pppoe_username || '';
+            document.getElementById('fPppoePass').value = '';
+            document.getElementById('fPackage').value = data.package_id || '';
+            document.getElementById('fRouter').value = data.router_id || '';
+            document.getElementById('fBillingMethod').value = data.billing_method || 'fixed';
+            document.getElementById('fIsoDate').value = data.isolation_date || 20;
+            document.getElementById('fOdp').value = data.odp_id || '';
+            document.getElementById('fAddress').value = data.address || '';
+            document.getElementById('fTechnician').value = data.technician_id || '';
+            document.getElementById('fLat').value = data.lat || '';
+            document.getElementById('fLng').value = data.lng || '';
+        } else {
+            if (customerForm) customerForm.reset();
+            document.getElementById('customerId').value = '';
+            document.getElementById('fBillingMethod').value = 'fixed';
+            document.getElementById('fIsoDate').value = 20;
+            document.getElementById('fTechnician').value = '';
+        }
+        overlay.style.display = 'flex';
+    };
+
+    let pppoeData = [];
+    window.fetchActivePppoe = async function() {
+        const modal = document.getElementById('pppoeModal');
+        const list = document.getElementById('pppoeList');
+        modal.style.display = 'flex';
+        list.innerHTML = `<div style="padding:40px; text-align:center;"><i class="fas fa-spinner fa-spin"></i><br><br><%= t.connecting_mikrotik %></div>`;
+        
+        try {
+            const res = await fetch('/api/mikrotik/active-pppoe-unlinked');
+            const d = await res.json();
+            if (d.success) {
+                pppoeData = d.data;
+                renderPppoeList(pppoeData);
+            } else {
+                list.innerHTML = `<div style="padding:30px; text-align:center; color:var(--danger)">${d.message}</div>`;
+            }
+        } catch (e) {
+            list.innerHTML = `<div style="padding:30px; text-align:center; color:var(--danger)">Gagal memuat data</div>`;
+        }
+    };
+
+    function renderPppoeList(data) {
+        const list = document.getElementById('pppoeList');
+        if (data.length === 0) {
+            list.innerHTML = `<div style="padding:40px; text-align:center; color:var(--muted)"><%= t.no_active_sessions %></div>`;
+            return;
+        }
+        list.innerHTML = data.map(item => `
+            <div onclick="selectPppoe('${item.username}', '${item.router_id}')" style="padding:14px 18px; border-bottom:1px solid var(--border); cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                <div style="font-weight:600; color:var(--primary); font-size:14px;">${item.username}</div>
+                <div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px; color:var(--muted);">
+                    <span><i class="fas fa-network-wired"></i> ${item.router_name}</span>
+                    <span><i class="fas fa-clock"></i> ${item.uptime}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.filterPppoeList = function() {
+        const query = document.getElementById('pppoeSearch').value.toLowerCase();
+        const filtered = pppoeData.filter(item => item.username.toLowerCase().includes(query));
+        renderPppoeList(filtered);
+    };
+
+    window.selectPppoe = function(user, routerId) {
+        document.getElementById('fPppoe').value = user;
+        document.getElementById('fRouter').value = routerId;
+        document.getElementById('pppoeModal').style.display = 'none';
+        showToast('<%= t.pppoe_selected %>: ' + user, 'success');
+    };
+
+    window.editCustomer = function(data) { openModal('edit', data); };
+    
+    window.closeModal = function(e) { 
+        if (!overlay) return;
+        if (!e || e.target === overlay) overlay.style.display = 'none'; 
+    };
+
+    if (customerForm) {
+        customerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('customerId').value;
+            const body = {
+                name: document.getElementById('fName').value,
+                email: document.getElementById('fEmail').value,
+                phone: document.getElementById('fPhone').value,
+                pppoe_username: document.getElementById('fPppoe').value,
+                pppoe_password: document.getElementById('fPppoePass').value,
+                package_id: document.getElementById('fPackage').value || null,
+                router_id: document.getElementById('fRouter').value || null,
+                billing_method: document.getElementById('fBillingMethod').value,
+                isolation_date: document.getElementById('fIsoDate').value,
+                odp_id: document.getElementById('fOdp').value || null,
+                address: document.getElementById('fAddress').value,
+                technician_id: document.getElementById('fTechnician').value || null,
+                lat: document.getElementById('fLat').value || null,
+                lng: document.getElementById('fLng').value || null
+            };
+            const url = editMode ? `/customers/${id}` : '/customers';
+            const method = editMode ? 'PUT' : 'POST';
+            try {
+                const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+                const data = await res.json();
+                showToast(data.message, data.success ? 'success' : 'error');
+                if (data.success) { overlay.style.display = 'none'; setTimeout(() => location.reload(), 1000); }
+            } catch (err) {
+                showToast('Gagal memproses data', 'error');
+            }
+        });
+    }
+});
+
+async function doAction(url, msg) {
+    if (!confirm(msg)) return;
+    try {
+        const res = await fetch(url, { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) setTimeout(() => location.reload(), 1000);
+    } catch (e) { showToast('Terjadi kesalahan server', 'error'); }
+}
+
+async function deleteItem(url, msg) {
+    if (!confirm(msg)) return;
+    try {
+        const res = await fetch(url, { method: 'DELETE' });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) setTimeout(() => location.reload(), 1000);
+    } catch (e) { showToast('Gagal menghapus data', 'error'); }
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    if (!t) return alert(msg);
+    t.textContent = msg;
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color = type === 'success' ? '#10B981' : '#EF4444';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function markInstalled(id) {
+    if (!confirm('Tandai pelanggan ini sudah terpasang?')) return;
+    const res = await fetch(`/customers/${id}/mark-installed`, { method: 'POST' });
+    const d = await res.json();
+    if (d.success) location.reload();
+    else alert(d.message || 'Gagal update');
+}
+</script>
+</body>
+
+</html>

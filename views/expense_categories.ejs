@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; margin-bottom:20px; }
+        .cat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; }
+        .cat-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; }
+        .cat-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; margin-bottom:12px; }
+        .cat-name { font-size:15px; font-weight:700; margin-bottom:4px; }
+        .cat-meta { font-size:12px; color:var(--muted); }
+        .cat-actions { display:flex; gap:8px; margin-top:14px; }
+        .btn-icon { width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .2s; }
+        .btn-icon:hover { background:var(--primary); color:white; border-color:var(--primary); }
+        .btn-icon.danger:hover { background:#EF4444; border-color:#EF4444; }
+        .modal-overlay { position:fixed; inset:0; background:var(--overlay-bg); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:460px; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .color-options { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+        .color-opt { width:28px; height:28px; border-radius:8px; cursor:pointer; border:2px solid transparent; transition:all .2s; }
+        .color-opt.selected { border-color:white; transform:scale(1.2); }
+        .icon-options { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+        .icon-opt { width:36px; height:36px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:14px; transition:all .2s; }
+        .icon-opt.selected, .icon-opt:hover { background:var(--primary); color:white; border-color:var(--primary); }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Kategori Pengeluaran' }) %>
+    <div class="content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">🏷 Kategori Pengeluaran</h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">Kelola kategori untuk mengelompokkan pengeluaran operasional</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <a href="/expenses" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text);">
+                    <i class="fas fa-arrow-left"></i> Kembali
+                </a>
+                <button class="btn btn-primary" onclick="openAddModal()">
+                    <i class="fas fa-plus"></i> Tambah Kategori
+                </button>
+            </div>
+        </div>
+
+        <div class="cat-grid">
+            <% categories.forEach(c => { %>
+            <div class="cat-card" style="border-left-color:<%= c.color %>;">
+                <style>.cat-card:nth-child(<%= categories.indexOf(c)+1 %>)::before { background:<%= c.color %>; }</style>
+                <div class="cat-icon" style="background:<%= c.color %>22; color:<%= c.color %>;">
+                    <i class="fas <%= c.icon || 'fa-tag' %>"></i>
+                </div>
+                <div class="cat-name"><%= c.name %></div>
+                <div class="cat-meta">
+                    <%= c.expense_count || 0 %> transaksi ·
+                    Rp <%= Math.floor(c.total_amount||0).toLocaleString('id-ID') %>
+                </div>
+                <% if (c.description) { %>
+                <div style="font-size:12px; color:var(--muted); margin-top:6px;"><%= c.description %></div>
+                <% } %>
+                <div class="cat-actions">
+                    <button class="btn-icon" onclick='openEditModal(<%- JSON.stringify(c) %>)' title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-icon danger" onclick="deleteCategory(<%= c.id %>, '<%= c.name %>')" title="Hapus">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Tambah/Edit -->
+<div class="modal-overlay" id="catModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="modalTitle" style="font-size:17px; font-weight:700; margin:0;">Tambah Kategori</h3>
+            <button onclick="document.getElementById('catModal').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer;">×</button>
+        </div>
+        <form id="catForm">
+            <input type="hidden" id="catId">
+            <div class="form-group">
+                <label>Nama Kategori *</label>
+                <input type="text" id="catName" class="form-control" required placeholder="Contoh: Listrik & Utilitas">
+            </div>
+            <div class="form-group">
+                <label>Warna</label>
+                <input type="hidden" id="catColor" value="#6366F1">
+                <div class="color-options" id="colorOptions"></div>
+            </div>
+            <div class="form-group">
+                <label>Ikon</label>
+                <input type="hidden" id="catIcon" value="fa-tag">
+                <div class="icon-options" id="iconOptions"></div>
+            </div>
+            <div class="form-group">
+                <label>Deskripsi</label>
+                <input type="text" id="catDesc" class="form-control" placeholder="Deskripsi singkat (opsional)">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+                <button type="button" onclick="document.getElementById('catModal').style.display='none'" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#EC4899','#84CC16','#6366F1','#94A3B8','#1E293B'];
+const ICONS  = ['fa-cogs','fa-wifi','fa-tools','fa-bolt','fa-users','fa-bullhorn','fa-server','fa-shield-alt','fa-truck','fa-box','fa-wrench','fa-phone','fa-tag','fa-ellipsis-h','fa-building','fa-car','fa-credit-card','fa-file-invoice'];
+
+// Build color picker
+const colorOpts = document.getElementById('colorOptions');
+COLORS.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'color-opt';
+    el.style.background = c;
+    el.dataset.color = c;
+    el.onclick = () => { selectColor(c); };
+    colorOpts.appendChild(el);
+});
+
+// Build icon picker
+const iconOpts = document.getElementById('iconOptions');
+ICONS.forEach(ic => {
+    const el = document.createElement('div');
+    el.className = 'icon-opt';
+    el.dataset.icon = ic;
+    el.innerHTML = `<i class="fas ${ic}"></i>`;
+    el.onclick = () => { selectIcon(ic); };
+    iconOpts.appendChild(el);
+});
+
+function selectColor(c) {
+    document.getElementById('catColor').value = c;
+    document.querySelectorAll('.color-opt').forEach(el => el.classList.toggle('selected', el.dataset.color === c));
+}
+function selectIcon(ic) {
+    document.getElementById('catIcon').value = ic;
+    document.querySelectorAll('.icon-opt').forEach(el => el.classList.toggle('selected', el.dataset.icon === ic));
+}
+
+// Init defaults
+selectColor('#6366F1'); selectIcon('fa-tag');
+
+function openAddModal() {
+    document.getElementById('modalTitle').textContent = 'Tambah Kategori';
+    document.getElementById('catId').value   = '';
+    document.getElementById('catName').value = '';
+    document.getElementById('catDesc').value = '';
+    selectColor('#6366F1'); selectIcon('fa-tag');
+    document.getElementById('catModal').style.display = 'flex';
+}
+
+function openEditModal(c) {
+    document.getElementById('modalTitle').textContent = 'Edit Kategori';
+    document.getElementById('catId').value   = c.id;
+    document.getElementById('catName').value = c.name;
+    document.getElementById('catDesc').value = c.description || '';
+    selectColor(c.color || '#6366F1');
+    selectIcon(c.icon || 'fa-tag');
+    document.getElementById('catModal').style.display = 'flex';
+}
+
+document.getElementById('catForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id   = document.getElementById('catId').value;
+    const body = {
+        name:        document.getElementById('catName').value,
+        color:       document.getElementById('catColor').value,
+        icon:        document.getElementById('catIcon').value,
+        description: document.getElementById('catDesc').value
+    };
+    const url = id ? `/expenses/api/categories/${id}` : '/expenses/api/categories';
+    const res = await fetch(url, { method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { document.getElementById('catModal').style.display='none'; setTimeout(() => location.reload(), 800); }
+});
+
+async function deleteCategory(id, name) {
+    if (!confirm(`Hapus kategori "${name}"?`)) return;
+    const res = await fetch(`/expenses/api/categories/${id}`, { method: 'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 800);
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color = type === 'success' ? '#10B981' : '#EF4444';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ── Date Banner ── */
+        .date-banner { background:linear-gradient(135deg,rgba(59,130,246,0.12),rgba(139,92,246,0.12)); border:1px solid rgba(59,130,246,0.2); border-radius:18px; padding:20px 28px; margin-bottom:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+        .date-left { display:flex; align-items:center; gap:20px; }
+        .date-clock { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; background:linear-gradient(135deg,#60A5FA,#A78BFA); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; }
+        .date-detail { display:flex; flex-direction:column; gap:3px; }
+        .date-day { font-size:20px; font-weight:700; }
+        .date-full { font-size:13px; color:var(--muted); }
+
+        /* ── Date Filter ── */
+        .date-filter { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .date-filter label { font-size:12px; color:var(--muted); font-weight:600; }
+        .date-filter input[type=date] { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:8px 12px; font-size:13px; font-family:'Outfit',sans-serif; outline:none; transition:all 0.2s; }
+        .date-filter input[type=date]:focus { border-color:var(--primary); }
+        .date-filter .btn-filter { background:var(--primary); color:white; border:none; border-radius:10px; padding:8px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; transition:all 0.2s; }
+        .date-filter .btn-filter:hover { opacity:0.85; }
+        .date-filter .btn-reset { background:var(--sub-bg); border:1px solid var(--border); color:var(--muted); border-radius:10px; padding:8px 14px; font-size:12px; cursor:pointer; font-family:'Outfit',sans-serif; transition:all 0.2s; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+        .date-filter .btn-reset:hover { color:var(--text); }
+
+        /* ── Stats Grid ── */
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px; }
+        .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; transition:transform 0.2s; }
+        .stat-card:hover { transform:translateY(-3px); }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .stat-card.blue::before   { background:linear-gradient(90deg,#3B82F6,#6366F1); }
+        .stat-card.green::before  { background:linear-gradient(90deg,#10B981,#34D399); }
+        .stat-card.orange::before { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+        .stat-card.red::before    { background:linear-gradient(90deg,#EF4444,#F87171); }
+        .stat-card.purple::before { background:linear-gradient(90deg,#8B5CF6,#A78BFA); }
+        .stat-card.teal::before   { background:linear-gradient(90deg,#06B6D4,#22D3EE); }
+        .stat-label { font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:500; }
+        .stat-value { font-size:28px; font-weight:800; line-height:1; }
+        .stat-sub { font-size:11px; color:var(--muted); margin-top:7px; }
+
+        /* ── Charts ── */
+        .charts-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:18px; }
+        .charts-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; margin-bottom:18px; }
+        .card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:22px; }
+        .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+        .card-title { font-size:15px; font-weight:700; margin:0; }
+
+        /* ── OLT Section ── */
+        .olt-section { background:var(--card-bg); border:1px solid var(--border); border-radius:18px; padding:24px; margin-bottom:18px; }
+        .olt-section-title { font-size:16px; font-weight:700; margin:0 0 20px; display:flex; align-items:center; gap:10px; }
+        .olt-charts-row { display:grid; grid-template-columns:200px 1fr 1fr; gap:24px; align-items:start; }
+
+        .signal-legend { display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+        .sig-item { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; }
+        .sig-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .sig-label { color:var(--muted); flex:1; }
+        .sig-val { font-weight:700; color:var(--text); }
+
+        /* ── Progress bar OLT ── */
+        .olt-progress { margin-bottom:14px; }
+        .olt-progress-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px; }
+        .olt-progress-label span:first-child { font-weight:600; color:var(--text); max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .olt-progress-label span:last-child { color:var(--muted); }
+        .prog-bar { height:7px; background:var(--sub-bg); border-radius:4px; overflow:hidden; }
+        .prog-fill { height:100%; border-radius:4px; background:linear-gradient(90deg,#10B981,#34D399); transition:width 0.6s ease; }
+        .prog-fill.warn { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+        .prog-fill.bad  { background:linear-gradient(90deg,#EF4444,#F87171); }
+
+        /* ── Tables ── */
+        .table-wrap { overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; }
+        th { color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.6px; padding:11px 14px; text-align:left; background:var(--sub-bg); }
+        td { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:var(--hover-bg); }
+
+        /* ── Misc ── */
+        .alert-overdue { background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.25); color:#EF4444; padding:13px 18px; border-radius:12px; margin-bottom:18px; font-size:14px; display:flex; align-items:center; gap:10px; }
+        .alert-overdue a { color:var(--primary); font-weight:600; margin-left:auto; text-decoration:none; }
+
+        @media(max-width:1100px) { .charts-grid-2, .olt-charts-row { grid-template-columns:1fr; } .charts-grid-3 { grid-template-columns:1fr 1fr; } }
+        @media(max-width:768px)  { .stats-grid { grid-template-columns:repeat(2,1fr); } .charts-grid-3 { grid-template-columns:1fr; } .date-banner { flex-direction:column; align-items:flex-start; } }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Overview Dashboard' }) %>
+    <div class="content">
+
+        <!-- ══ DATE BANNER ══ -->
+        <div class="date-banner">
+            <div class="date-left">
+                <div class="date-clock" id="liveClock">--:--:--</div>
+                <div class="date-detail">
+                    <div class="date-day" id="liveDay">--</div>
+                    <div class="date-full" id="liveDate">-- --- ----</div>
+                </div>
+            </div>
+            <!-- Filter Tanggal -->
+            <form method="GET" action="/" class="date-filter">
+                <label>Dari</label>
+                <input type="date" name="dateFrom" value="<%= dateFrom %>" max="<%= dateTo %>">
+                <label>Sampai</label>
+                <input type="date" name="dateTo"   value="<%= dateTo %>"   min="<%= dateFrom %>">
+                <button type="submit" class="btn-filter"><i class="fas fa-filter"></i> Terapkan</button>
+                <a href="/" class="btn-reset"><i class="fas fa-rotate-left"></i> Reset</a>
+            </form>
+        </div>
+
+        <!-- ══ STATS CARDS ══ -->
+        <%
+            const fmtRp = n => 'Rp ' + Math.floor(n||0).toLocaleString('id-ID');
+        %>
+        <div class="stats-grid">
+            <div class="stat-card blue">
+                <div class="stat-label"><%= t.total_customers || 'Total Pelanggan' %></div>
+                <div class="stat-value"><%= stats.totalCustomers || 0 %></div>
+                <div class="stat-sub"><%= stats.activeCustomers || 0 %> aktif · <%= stats.isolatedCustomers || 0 %> isolir</div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-label"><%= t.monthly_revenue || 'Pendapatan' %> <span style="font-size:10px;opacity:0.7;">(filter)</span></div>
+                <div class="stat-value" style="font-size:19px;"><%= fmtRp(stats.totalRevenue) %></div>
+                <div class="stat-sub"><%= dateFrom %> s/d <%= dateTo %></div>
+            </div>
+            <div class="stat-card teal">
+                <div class="stat-label">Pelanggan Baru <span style="font-size:10px;opacity:0.7;">(filter)</span></div>
+                <div class="stat-value"><%= stats.newCustomers || 0 %></div>
+                <div class="stat-sub">dalam rentang tanggal dipilih</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-label"><%= t.unpaid_invoices || 'Tagihan Belum Bayar' %></div>
+                <div class="stat-value"><%= stats.unpaidInvoices || 0 %></div>
+                <div class="stat-sub"><%= stats.overdueInvoices || 0 %> sudah jatuh tempo</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-label"><%= t.open_tickets || 'Tiket Terbuka' %></div>
+                <div class="stat-value"><%= stats.openTickets || 0 %></div>
+                <div class="stat-sub">perlu ditangani</div>
+            </div>
+            <div class="stat-card purple">
+                <div class="stat-label">ONU Online</div>
+                <div class="stat-value"><%= oltStats.online || 0 %></div>
+                <div class="stat-sub">dari <%= oltStats.total || 0 %> total ONU</div>
+            </div>
+            <div class="stat-card" style="--c:#06B6D4;">
+                <style>.stat-card[style*="06B6D4"]::before{background:linear-gradient(90deg,#06B6D4,#22D3EE);}</style>
+                <div class="stat-label">ONT Online <span style="font-size:10px;opacity:0.7;">(GenieACS)</span></div>
+                <div class="stat-value"><%= (acsStats && acsStats.online) || 0 %></div>
+                <div class="stat-sub"><%= (acsStats && acsStats.linked) || 0 %> terhubung ke pelanggan</div>
+            </div>
+            <a class="stat-card" href="/expenses" style="--c:#EF4444; text-decoration:none;">
+                <style>.stat-card[style*="c:#EF4444"]::before{background:linear-gradient(90deg,#EF4444,#F87171);}</style>
+                <div class="stat-label">Pengeluaran Bulan Ini</div>
+                <div class="stat-value" style="font-size:16px;">Rp <%= Math.floor((expenseStats && expenseStats.totalExpense)||0).toLocaleString('id-ID') %></div>
+                <div class="stat-sub"><%= (expenseStats && expenseStats.totalCount)||0 %> transaksi</div>
+            </a>
+        </div>
+
+        <!-- Alert overdue -->
+        <% if ((stats.overdueInvoices||0) > 0) { %>
+        <div class="alert-overdue">
+            <i class="fas fa-triangle-exclamation"></i>
+            <strong><%= stats.overdueInvoices %></strong> tagihan sudah melewati jatuh tempo
+            <a href="/billing?status=unpaid">Lihat Invoice →</a>
+        </div>
+        <% } %>
+
+        <!-- ══ GRAFIK REVENUE & PELANGGAN ══ -->
+        <div class="charts-grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📈 Pendapatan 6 Bulan</h2>
+                </div>
+                <canvas id="revenueChart" height="190"></canvas>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">👥 Pelanggan Baru 6 Bulan</h2>
+                </div>
+                <canvas id="customerChart" height="190"></canvas>
+            </div>
+        </div>
+
+        <!-- ══ SECTION OLT ══ -->
+        <div class="olt-section">
+            <div class="olt-section-title">
+                <i class="fas fa-satellite-dish" style="color:var(--primary);"></i>
+                Monitoring OLT & ONU
+                <a href="/olt" class="btn" style="margin-left:auto; background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px; padding:6px 14px; border-radius:8px; text-decoration:none;">Detail OLT →</a>
+            </div>
+
+            <div class="olt-charts-row">
+                <!-- Donut online/offline -->
+                <div>
+                    <p style="font-size:12px; color:var(--muted); font-weight:600; text-align:center; margin:0 0 10px;">Status ONU</p>
+                    <canvas id="onuDonut" width="180" height="180"></canvas>
+                    <div style="display:flex; gap:12px; justify-content:center; margin-top:12px; font-size:12px;">
+                        <span><span style="color:#10B981;">●</span> Online: <b><%= oltStats.online||0 %></b></span>
+                        <span><span style="color:#EF4444;">●</span> Offline: <b><%= (oltStats.total||0)-(oltStats.online||0) %></b></span>
+                    </div>
+                </div>
+
+                <!-- Bar per OLT -->
+                <div>
+                    <p style="font-size:12px; color:var(--muted); font-weight:600; margin:0 0 12px;">ONU per Perangkat OLT</p>
+                    <% if (oltPerDevice && oltPerDevice.length > 0) { %>
+                        <% oltPerDevice.forEach(o => {
+                            const pct = o.total > 0 ? Math.round((o.online/o.total)*100) : 0;
+                            const cls = pct >= 80 ? '' : (pct >= 50 ? 'warn' : 'bad');
+                        %>
+                        <div class="olt-progress">
+                            <div class="olt-progress-label">
+                                <span title="<%= o.olt_name %>"><%= o.olt_name %></span>
+                                <span><%= o.online %>/<%= o.total %> (<%= pct %>%)</span>
+                            </div>
+                            <div class="prog-bar">
+                                <div class="prog-fill <%= cls %>" style="width:<%= pct %>%;"></div>
+                            </div>
+                        </div>
+                        <% }) %>
+                    <% } else { %>
+                        <p style="color:var(--muted); font-size:13px;">Belum ada data OLT. Lakukan sync terlebih dahulu.</p>
+                    <% } %>
+                </div>
+
+                <!-- Distribusi sinyal -->
+                <div>
+                    <p style="font-size:12px; color:var(--muted); font-weight:600; margin:0 0 10px;">Kualitas Sinyal RX (Online)</p>
+                    <canvas id="signalChart" height="160"></canvas>
+                    <div class="signal-legend">
+                        <div class="sig-item"><span class="sig-dot" style="background:#10B981;"></span><span class="sig-label">Excellent (> -20 dBm)</span><span class="sig-val"><%= signalDist.excellent||0 %></span></div>
+                        <div class="sig-item"><span class="sig-dot" style="background:#34D399;"></span><span class="sig-label">Good (-20 ~ -25 dBm)</span><span class="sig-val"><%= signalDist.good||0 %></span></div>
+                        <div class="sig-item"><span class="sig-dot" style="background:#F59E0B;"></span><span class="sig-label">Fair (-25 ~ -27 dBm)</span><span class="sig-val"><%= signalDist.fair||0 %></span></div>
+                        <div class="sig-item"><span class="sig-dot" style="background:#F97316;"></span><span class="sig-label">Weak (-27 ~ -30 dBm)</span><span class="sig-val"><%= signalDist.weak||0 %></span></div>
+                        <div class="sig-item"><span class="sig-dot" style="background:#EF4444;"></span><span class="sig-label">Bad (≤ -30 dBm)</span><span class="sig-val"><%= signalDist.bad||0 %></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ TRAFFIC NETWORK ══ -->
+        <div class="card" style="margin-bottom:18px;">
+            <div class="card-header">
+                <h2 class="card-title">🚀 <%= t.network_traffic || 'Traffic Jaringan' %></h2>
+                <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                    <select id="interfaceSelector" style="background:var(--sub-bg); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:12px; outline:none; font-family:'Outfit',sans-serif;">
+                        <option value="ether1">ether1</option>
+                        <option value="ether2">ether2</option>
+                        <option value="ether3">ether3</option>
+                        <option value="ether4">ether4</option>
+                        <option value="ether5">ether5</option>
+                        <option value="sfp-sfpplus1">sfp-sfpplus1</option>
+                        <option value="combo1">combo1</option>
+                        <option value="bridge">bridge</option>
+                    </select>
+                    <span style="color:#10B981; font-size:13px; font-weight:600;"><i class="fas fa-arrow-down"></i> DL: <span id="totalRx">0 Mbps</span></span>
+                    <span style="color:#3B82F6; font-size:13px; font-weight:600;"><i class="fas fa-arrow-up"></i> UL: <span id="totalTx">0 Mbps</span></span>
+                </div>
+            </div>
+            <canvas id="trafficChart" height="90"></canvas>
+        </div>
+
+        <!-- ══ TABEL INVOICE & PELANGGAN TERBARU ══ -->
+        <div class="charts-grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🧾 Invoice Terbaru</h2>
+                    <a href="/billing" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">Lihat Semua</a>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Pelanggan</th><th>Jumlah</th><th>Status</th></tr></thead>
+                        <tbody>
+                        <% if (recentInvoices && recentInvoices.length > 0) { %>
+                            <% recentInvoices.forEach(i => { %>
+                            <tr>
+                                <td style="font-weight:500;"><%= i.customer_name || '-' %></td>
+                                <td>Rp <%= Math.floor(i.amount).toLocaleString('id-ID') %></td>
+                                <td><span class="badge badge-<%= i.status %>"><%= i.status === 'paid' ? (t.paid||'Lunas') : (t.unpaid||'Belum') %></span></td>
+                            </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:30px;">Tidak ada data</td></tr>
+                        <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">👤 Pelanggan Terbaru</h2>
+                    <a href="/customers" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">Lihat Semua</a>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th>Nama</th><th>Paket</th><th>Status</th></tr></thead>
+                        <tbody>
+                        <% if (recentCustomers && recentCustomers.length > 0) { %>
+                            <% recentCustomers.forEach(c => { %>
+                            <tr>
+                                <td style="font-weight:500;"><%= c.name %></td>
+                                <td style="font-size:12px; color:var(--muted);"><%= c.package_name || '-' %></td>
+                                <td><span class="badge badge-<%= c.status %>"><%= c.status === 'active' ? (t.active||'Aktif') : (t.isolated||'Isolir') %></span></td>
+                            </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:30px;">Tidak ada data</td></tr>
+                        <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ PAKET INTERNET ══ -->
+        <div class="card" style="margin-bottom:18px;">
+            <div class="card-header">
+                <h2 class="card-title">📦 Distribusi Paket Internet</h2>
+                <a href="/packages" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">Kelola Paket</a>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start;">
+                <!-- Donut chart paket -->
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <canvas id="packageDonut" width="220" height="220"></canvas>
+                    <div id="packageLegend" style="display:flex; flex-direction:column; gap:6px; margin-top:14px; width:100%; max-width:260px;"></div>
+                </div>
+                <!-- Tabel detail paket -->
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Paket</th>
+                                <th>Harga</th>
+                                <th>Pelanggan</th>
+                                <th>Aktif</th>
+                                <th>Isolir</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <% if (packageDist && packageDist.length > 0) { %>
+                            <% packageDist.forEach(p => {
+                                const pctAktif = p.total_customers > 0 ? Math.round((p.active/p.total_customers)*100) : 0;
+                            %>
+                            <tr>
+                                <td>
+                                    <div style="font-weight:600; font-size:13px;"><%= p.package_name %></div>
+                                    <% if (p.speed_limit) { %>
+                                    <div style="font-size:11px; color:var(--muted);">
+                                        <i class="fas fa-gauge-high" style="font-size:9px;"></i> <%= p.speed_limit %>
+                                    </div>
+                                    <% } %>
+                                </td>
+                                <td style="font-size:12px;">Rp <%= Math.floor(p.price||0).toLocaleString('id-ID') %></td>
+                                <td>
+                                    <span style="font-weight:700; font-size:14px;"><%= p.total_customers %></span>
+                                    <div style="height:4px; background:var(--sub-bg); border-radius:2px; margin-top:5px; min-width:60px;">
+                                        <div style="height:100%; width:<%= pctAktif %>%; background:var(--primary); border-radius:2px;"></div>
+                                    </div>
+                                </td>
+                                <td><span style="color:#10B981; font-weight:600;"><%= p.active||0 %></span></td>
+                                <td><span style="color:#EF4444; font-weight:600;"><%= p.isolated||0 %></span></td>
+                            </tr>
+                            <% }) %>
+                        <% } else { %>
+                            <tr><td colspan="5" style="text-align:center; color:var(--muted); padding:30px;">Belum ada data paket.</td></tr>
+                        <% } %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ PENGELUARAN & ESTIMASI LABA ══ -->
+        <div class="card" style="margin-bottom:18px;">
+            <div class="card-header">
+                <h2 class="card-title">💸 Pengeluaran vs Pemasukan</h2>
+                <a href="/expenses" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">Kelola Pengeluaran</a>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; align-items:start;">
+                <!-- Chart bar comparison -->
+                <div style="grid-column:1/3;">
+                    <canvas id="expenseCompChart" height="100"></canvas>
+                </div>
+                <!-- Ringkasan bulan ini -->
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div style="background:var(--sub-bg); border-radius:12px; padding:14px;">
+                        <div style="font-size:11px; color:var(--muted); font-weight:600; margin-bottom:6px; text-transform:uppercase;">Pemasukan Bulan Ini</div>
+                        <div style="font-size:18px; font-weight:800; color:#10B981;">Rp <%= Math.floor(stats.totalRevenue||0).toLocaleString('id-ID') %></div>
+                    </div>
+                    <div style="background:var(--sub-bg); border-radius:12px; padding:14px;">
+                        <div style="font-size:11px; color:var(--muted); font-weight:600; margin-bottom:6px; text-transform:uppercase;">Pengeluaran Bulan Ini</div>
+                        <div style="font-size:18px; font-weight:800; color:#EF4444;">Rp <%= Math.floor((expenseStats && expenseStats.totalExpense)||0).toLocaleString('id-ID') %></div>
+                    </div>
+                    <%
+                        const estProfit = (stats.totalRevenue||0) - ((expenseStats && expenseStats.totalExpense)||0);
+                        const isProfit  = estProfit >= 0;
+                    %>
+                    <div style="background:<%= isProfit ? 'rgba(16,185,129,.1)' : 'rgba(239,68,68,.1)' %>; border:1px solid <%= isProfit ? 'rgba(16,185,129,.2)' : 'rgba(239,68,68,.2)' %>; border-radius:12px; padding:14px;">
+                        <div style="font-size:11px; color:var(--muted); font-weight:600; margin-bottom:6px; text-transform:uppercase;">Estimasi Laba Bersih</div>
+                        <div style="font-size:20px; font-weight:800; color:<%= isProfit ? '#10B981' : '#EF4444' %>;">
+                            <%= isProfit ? '+' : '-' %> Rp <%= Math.floor(Math.abs(estProfit)).toLocaleString('id-ID') %>
+                        </div>
+                        <div style="font-size:11px; color:var(--muted); margin-top:4px;"><%= isProfit ? '✅ Untung' : '❌ Defisit' %> bulan ini</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ ROUTER ══ -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">🔌 <%= t.router_management || 'Router' %></h2>
+                <a href="/mikrotik" class="btn btn-primary" style="font-size:12px; padding:6px 14px;">Kelola Router</a>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px;">
+                <span style="color:var(--muted); font-size:13px;">Router aktif:</span>
+                <span style="font-weight:700; font-size:15px;"><%= routerStats.online || 0 %> / <%= routerStats.total || 0 %></span>
+                <div style="flex:1; height:8px; background:var(--sub-bg); border-radius:4px; overflow:hidden; max-width:300px;">
+                    <div style="height:100%; width:<%= routerStats.total > 0 ? Math.round((routerStats.online/routerStats.total)*100) : 0 %>%; background:var(--primary); border-radius:4px; transition:width 0.5s;"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<script>
+// ── Live Clock & Date ──
+const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+function updateClock() {
+    const now = new Date();
+    const hh  = String(now.getHours()).padStart(2,'0');
+    const mm  = String(now.getMinutes()).padStart(2,'0');
+    const ss  = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('liveClock').textContent = `${hh}:${mm}:${ss}`;
+    document.getElementById('liveDay').textContent   = HARI[now.getDay()];
+    document.getElementById('liveDate').textContent  = `${now.getDate()} ${BULAN[now.getMonth()]} ${now.getFullYear()}`;
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── Chart helpers ──
+const isLight  = document.documentElement.classList.contains('light-theme');
+const gridColor = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.06)';
+const tickColor = isLight ? '#64748B' : '#94A3B8';
+
+// ── Revenue Chart ──
+const monthlyRevenue = <%- JSON.stringify(monthlyRevenue) %>;
+new Chart(document.getElementById('revenueChart'), {
+    type: 'line',
+    data: {
+        labels: monthlyRevenue.map(d => d.month),
+        datasets: [{ label: 'Pendapatan', data: monthlyRevenue.map(d => d.revenue),
+            borderColor:'#3B82F6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#3B82F6' }]
+    },
+    options: { responsive:true, plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true, grid:{ color:gridColor }, ticks:{ color:tickColor, callback: v => 'Rp '+(v/1000).toFixed(0)+'K' } },
+                 x:{ grid:{ color:gridColor }, ticks:{ color:tickColor } } } }
+});
+
+// ── Customer Chart ──
+const monthlyCustomers = <%- JSON.stringify(monthlyCustomers) %>;
+new Chart(document.getElementById('customerChart'), {
+    type: 'bar',
+    data: {
+        labels: monthlyCustomers.map(d => d.month),
+        datasets: [{ label: 'Pelanggan Baru', data: monthlyCustomers.map(d => d.count),
+            backgroundColor:'rgba(139,92,246,0.5)', borderColor:'#8B5CF6', borderWidth:2, borderRadius:6 }]
+    },
+    options: { responsive:true, plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true, grid:{ color:gridColor }, ticks:{ color:tickColor, stepSize:1 } },
+                 x:{ grid:{ color:gridColor }, ticks:{ color:tickColor } } } }
+});
+
+// ── ONU Donut ──
+const oltOnline  = <%= oltStats.online||0 %>;
+const oltOffline = <%= (oltStats.total||0)-(oltStats.online||0) %>;
+new Chart(document.getElementById('onuDonut'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Online','Offline'],
+        datasets: [{ data: [oltOnline, oltOffline],
+            backgroundColor: ['#10B981','#EF4444'],
+            borderColor: isLight ? '#FFFFFF' : '#111827',
+            borderWidth: 3, hoverOffset: 6 }]
+    },
+    options: { responsive:false, cutout:'70%', plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed}` } } } }
+});
+
+// ── Signal Distribution Chart ──
+const sigDist = <%- JSON.stringify(signalDist) %>;
+new Chart(document.getElementById('signalChart'), {
+    type: 'bar',
+    data: {
+        labels: ['Excellent','Good','Fair','Weak','Bad'],
+        datasets: [{
+            data: [sigDist.excellent||0, sigDist.good||0, sigDist.fair||0, sigDist.weak||0, sigDist.bad||0],
+            backgroundColor: ['#10B981','#34D399','#F59E0B','#F97316','#EF4444'],
+            borderRadius: 5, borderSkipped: false
+        }]
+    },
+    options: { responsive:true, plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true, grid:{ color:gridColor }, ticks:{ color:tickColor, stepSize:1 } },
+                 x:{ grid:{ display:false }, ticks:{ color:tickColor, font:{ size:10 } } } } }
+});
+
+// ── Traffic Chart ──
+const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+const trafficChart = new Chart(trafficCtx, {
+    type: 'line',
+    data: {
+        labels: Array(30).fill(''),
+        datasets: [
+            { label:'Download (Mbps)', data:Array(30).fill(0), borderColor:'#10B981', backgroundColor:'rgba(16,185,129,0.1)', fill:true, tension:0.4, pointRadius:0, borderWidth:2 },
+            { label:'Upload (Mbps)',   data:Array(30).fill(0), borderColor:'#3B82F6', backgroundColor:'rgba(59,130,246,0.1)',  fill:true, tension:0.4, pointRadius:0, borderWidth:2 }
+        ]
+    },
+    options: { responsive:true, animation:{ duration:800 }, plugins:{ legend:{ display:false } },
+        scales:{ y:{ beginAtZero:true, grid:{ color:gridColor }, ticks:{ color:tickColor, callback:v => v+' M' } },
+                 x:{ display:false } } }
+});
+
+async function updateTraffic() {
+    try {
+        const iface = document.getElementById('interfaceSelector').value;
+        const res = await fetch(`/api/mikrotik/traffic?interface=${iface}`);
+        const d   = await res.json();
+        if (d.success && d.data.length > 0) {
+            let rx = 0, tx = 0;
+            d.data.forEach(r => { rx += r.rx; tx += r.tx; });
+            const rxM = (rx/1000000).toFixed(2);
+            const txM = (tx/1000000).toFixed(2);
+            document.getElementById('totalRx').textContent = rxM + ' Mbps';
+            document.getElementById('totalTx').textContent = txM + ' Mbps';
+            trafficChart.data.datasets[0].data.shift(); trafficChart.data.datasets[0].data.push(rxM);
+            trafficChart.data.datasets[1].data.shift(); trafficChart.data.datasets[1].data.push(txM);
+            trafficChart.update('none');
+        }
+    } catch(e) {}
+}
+document.getElementById('interfaceSelector').addEventListener('change', () => {
+    trafficChart.data.datasets[0].data = Array(30).fill(0);
+    trafficChart.data.datasets[1].data = Array(30).fill(0);
+    trafficChart.update(); updateTraffic();
+});
+setInterval(updateTraffic, 2000); updateTraffic();
+
+// ── Expense vs Revenue Comparison Chart ──
+const monthlyExpenses = <%- JSON.stringify(monthlyExpenses || []) %>;
+if (monthlyExpenses.length > 0 && document.getElementById('expenseCompChart')) {
+    // Merge dengan monthlyRevenue
+    new Chart(document.getElementById('expenseCompChart'), {
+        type: 'bar',
+        data: {
+            labels: monthlyRevenue.map(d => d.month),
+            datasets: [
+                { label:'Pemasukan', data: monthlyRevenue.map(d => d.revenue),
+                  backgroundColor:'rgba(16,185,129,0.5)', borderColor:'#10B981', borderWidth:1, borderRadius:5 },
+                { label:'Pengeluaran', data: monthlyExpenses.map(d => d.expense),
+                  backgroundColor:'rgba(239,68,68,0.5)', borderColor:'#EF4444', borderWidth:1, borderRadius:5 },
+                { label:'Laba', data: monthlyRevenue.map((d,i) => d.revenue - (monthlyExpenses[i]?.expense || 0)),
+                  type:'line', borderColor:'#F59E0B', backgroundColor:'rgba(245,158,11,0.1)',
+                  fill:true, tension:0.4, pointRadius:4, pointBackgroundColor:'#F59E0B' }
+            ]
+        },
+        options: {
+            responsive:true,
+            plugins:{ legend:{ labels:{ color:tickColor, font:{size:11} } },
+                tooltip:{ callbacks:{ label: ctx => ` ${ctx.dataset.label}: Rp ${Math.floor(ctx.parsed.y).toLocaleString('id-ID')}` } }
+            },
+            scales:{
+                y:{ beginAtZero:true, grid:{color:gridColor}, ticks:{ color:tickColor, callback:v => 'Rp '+(v/1000000).toFixed(1)+'M' } },
+                x:{ grid:{display:false}, ticks:{color:tickColor} }
+            }
+        }
+    });
+}
+
+// ── Package Distribution Donut ──
+const packageDist = <%- JSON.stringify(packageDist || []) %>;
+// Normalisasi: total_customers dari MySQL bisa bertipe string
+packageDist.forEach(p => { p.total_customers = parseInt(p.total_customers) || 0; });
+if (packageDist.length > 0) {
+    const COLORS = [
+        '#3B82F6','#10B981','#8B5CF6','#F59E0B','#EF4444',
+        '#06B6D4','#F97316','#EC4899','#84CC16','#6366F1'
+    ];
+    const labels = packageDist.map(p => p.package_name);
+    const data   = packageDist.map(p => p.total_customers);
+    const colors = packageDist.map((_, i) => COLORS[i % COLORS.length]);
+
+    new Chart(document.getElementById('packageDonut'), {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data, backgroundColor: colors,
+                borderColor: isLight ? '#FFFFFF' : '#111827',
+                borderWidth: 3, hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: false, cutout: '65%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const p = packageDist[ctx.dataIndex];
+                            const pct = Math.round((p.total_customers / data.reduce((a,b)=>a+b,0)) * 100);
+                            return ` ${p.package_name}: ${p.total_customers} pelanggan (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Legend manual
+    const legendEl = document.getElementById('packageLegend');
+    const total    = data.reduce((a,b) => a+b, 0);
+    packageDist.forEach((p, i) => {
+        const pct = total > 0 ? Math.round((p.total_customers/total)*100) : 0;
+        legendEl.innerHTML += `
+            <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                <span style="width:10px;height:10px;border-radius:3px;background:${colors[i]};flex-shrink:0;"></span>
+                <span style="flex:1; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${p.package_name}">${p.package_name}</span>
+                <span style="font-weight:700; color:var(--text);">${p.total_customers}</span>
+                <span style="color:var(--muted);">(${pct}%)</span>
+            </div>`;
+    });
+}
+</script>
+</body>
+</html>

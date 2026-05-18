@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        .tab-btn { padding:10px 18px; background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:10px; color:var(--muted); cursor:pointer; font-family:'Outfit',sans-serif; transition:all .2s; }
+        .tab-btn:hover { background:rgba(255,255,255,.1); color:var(--text); }
+        .tab-btn.active { background:var(--primary); border-color:var(--primary); color:white; }
+        .settings-tab { display:none; }
+        .settings-tab.active { display:block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+        .setting-group { margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+        .setting-group:last-child { border-bottom:none; }
+        .setting-label { display:block; font-weight:600; margin-bottom:8px; font-size:15px; }
+        .setting-desc { font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.4; }
+        .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;margin-bottom:20px;}
+        .section-title{font-size:16px;font-weight:600;margin:0 0 20px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+        .form-group{margin-bottom:16px;}.form-group label{display:block;margin-bottom:7px;font-size:13px;color:var(--muted);}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}.toast.show{display:block;}
+        .update-section{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:20px;margin-top:8px;}
+        @media(max-width:768px){.main{margin-left:0;}.form-row{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: t.system_settings }) %>
+    <div class="content">
+        <div class="page-header">
+            <h1 class="page-title"><%= t.settings %></h1>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+            <button class="tab-btn active" onclick="showTab('company')">🏢 <%= t.company %></button>
+            <button class="tab-btn" onclick="showTab('wa')">💬 <%= t.whatsapp %></button>
+            <button class="tab-btn" onclick="showTab('telegram')">✈️ <%= t.telegram %></button>
+            <button class="tab-btn" onclick="showTab('payment')">💳 <%= t.payment %></button>
+            <button class="tab-btn" onclick="showTab('billing')">🗓 <%= t.billing %></button>
+
+            <button class="tab-btn" onclick="showTab('acs')">🌐 <%= t.genieacs %></button>
+            <button class="tab-btn" onclick="showTab('import')">📤 <%= t.import_export %></button>
+            <button class="tab-btn" onclick="showTab('users')">👥 <%= t.manage_users %></button>
+            <button class="tab-btn" onclick="showTab('wa_templates')">📝 <%= t.wa_templates %></button>
+            <button class="tab-btn" onclick="showTab('system')">🔄 <%= t.system %></button>
+        </div>
+
+        <div id="tab-company" class="tab-content card">
+            <h2 class="section-title">🏢 <%= t.company_profile %></h2>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.company_name %></label><input type="text" id="company_name" class="form-control" value="<%= settings.company_name||'Dino-Bill ISP'%>"></div>
+                <div class="form-group"><label><%= t.phone_wa %></label><input type="text" id="company_phone" class="form-control" value="<%= settings.company_phone||''%>" placeholder="08xxxxxxxxxx"></div>
+            </div>
+            <div class="form-group"><label><%= t.office_address %></label><input type="text" id="company_address" class="form-control" value="<%= settings.company_address||''%>"></div>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.email_label %></label><input type="email" id="company_email" class="form-control" value="<%= settings.company_email||''%>"></div>
+                <div class="form-group"><label><%= t.website %></label><input type="text" id="company_website" class="form-control" value="<%= settings.company_website||''%>" placeholder="https://"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.timezone %></label>
+                    <select id="timezone" class="form-control">
+                        <option value="Asia/Jakarta" <%=settings.timezone==='Asia/Jakarta'?'selected':''%>>WIB (Asia/Jakarta)</option>
+                        <option value="Asia/Makassar" <%=settings.timezone==='Asia/Makassar'?'selected':''%>>WITA (Asia/Makassar)</option>
+                        <option value="Asia/Jayapura" <%=settings.timezone==='Asia/Jayapura'?'selected':''%>>WIT (Asia/Jayapura)</option>
+                    </select>
+                </div>
+                <div class="form-group"><label><%= t.currency %></label>
+                    <select id="currency" class="form-control">
+                        <option value="IDR" <%=settings.currency==='IDR'?'selected':''%>>IDR - Rupiah</option>
+                        <option value="USD" <%=settings.currency==='USD'?'selected':''%>>USD - Dollar</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="save(['company_name','company_phone','company_address','company_email','company_website','timezone','currency'])">💾 <%= t.save %></button>
+
+            <!-- Pusat Koordinat Peta -->
+            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <h2 class="section-title">🗺 Pusat Koordinat Peta</h2>
+                <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+                    Titik tengah yang ditampilkan saat peta pertama kali dibuka. Klik tombol "Ambil Lokasi Saya" atau isi manual.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; margin-bottom:14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Latitude</label>
+                        <input type="text" id="map_center_lat" class="form-control" placeholder="-7.5766" value="<%= settings.map_center_lat||'' %>">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Longitude</label>
+                        <input type="text" id="map_center_lng" class="form-control" placeholder="110.8165" value="<%= settings.map_center_lng||'' %>">
+                    </div>
+                    <button type="button" class="btn" style="background:rgba(59,130,246,.1); color:var(--primary); border:1px solid rgba(59,130,246,.2); white-space:nowrap;" onclick="getMyLocation()">
+                        <i class="fas fa-crosshairs"></i> Ambil Lokasi
+                    </button>
+                </div>
+                <div style="display:grid; grid-template-columns:120px 1fr; gap:12px; align-items:center; margin-bottom:16px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Zoom Default</label>
+                        <input type="number" id="map_default_zoom" class="form-control" placeholder="13" min="5" max="20" value="<%= settings.map_default_zoom||13 %>">
+                    </div>
+                    <div style="font-size:12px; color:var(--muted);">5 = seluruh negara · 13 = level kota · 17 = detail jalan</div>
+                </div>
+                <!-- Mini preview map -->
+                <div id="miniMapWrap" style="height:220px; border-radius:12px; overflow:hidden; border:1px solid var(--border); margin-bottom:14px; position:relative;">
+                    <div id="miniMap" style="width:100%; height:100%;"></div>
+                    <div style="position:absolute; top:8px; right:8px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:5px 10px; font-size:11px; color:var(--muted); z-index:1000;">Klik peta untuk set koordinat</div>
+                </div>
+                <button class="btn btn-primary" onclick="save(['map_center_lat','map_center_lng','map_default_zoom'])">💾 Simpan Koordinat Peta</button>
+
+            <!-- Setting Presensi -->
+            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <h2 class="section-title">📍 Pengaturan Presensi</h2>
+                <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+                    Titik pusat presensi menggunakan koordinat peta di atas. Atur radius dan jam terlambat di sini.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Radius Maksimal (meter)</label>
+                        <input type="number" id="attendance_radius" class="form-control" placeholder="100" min="10" max="5000" value="<%= settings.attendance_radius||100 %>">
+                        <p style="font-size:11px; color:var(--muted); margin-top:4px;">Presensi ditolak jika jarak melebihi nilai ini</p>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Batas Jam Tepat Waktu</label>
+                        <input type="time" id="attendance_late_time" class="form-control" value="<%= settings.attendance_late_time||'08:30' %>">
+                        <p style="font-size:11px; color:var(--muted); margin-top:4px;">Setelah jam ini dianggap terlambat</p>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="save(['attendance_radius','attendance_late_time'])">💾 Simpan Pengaturan Presensi</button>
+            </div>
+            </div>
+        </div>
+
+        <!-- Tab: WhatsApp -->
+        <div id="tab-wa" class="tab-content card" style="display:none">
+            <h2 class="section-title">💬 <%= t.wa_gateway %></h2>
+            <div class="form-group"><label><%= t.provider %></label>
+                <select id="wa_provider" class="form-control" onchange="toggleWAFields()">
+                    <option value="local" <%=settings.wa_provider==='local'?'selected':''%>><%= t.local_session_qr %></option>
+                    <option value="fonnte" <%=settings.wa_provider==='fonnte'?'selected':''%>>Fonnte</option>
+                    <option value="mpwa" <%=settings.wa_provider==='mpwa'?'selected':''%>>MPWA</option>
+                    <option value="wablas" <%=settings.wa_provider==='wablas'?'selected':''%>>Wablas</option>
+                </select>
+            </div>
+
+            <!-- Local WA Section -->
+            <div id="wa_local_section" class="update-section" style="margin-bottom:20px; display:none">
+                <h3 style="font-size:14px; margin-bottom:12px"><%= t.local_session_connection %></h3>
+                <div style="display:flex; gap:20px; align-items:center">
+                    <div id="wa_qr_container" style="background:white; padding:10px; border-radius:8px; width:150px; height:150px; display:flex; align-items:center; justify-content:center; border:1px solid var(--border)">
+                        <span style="color:black; font-size:12px; text-align:center"><%= t.loading_qr %></span>
+                    </div>
+                    <div>
+                        <div id="wa_status_badge" class="badge" style="margin-bottom:8px"><%= t.checking_status %></div>
+                        <p style="font-size:12px; color:var(--muted); line-height:1.4">
+                            <%= t.scan_qr_instruction %><br>
+                            <%= t.powered_by %> <b>whatsapp-web.js</b>.
+                        </p>
+                        <button class="btn btn-sm" style="margin-top:8px; font-size:11px; background:rgba(239,68,68,.1); color:#EF4444; border:1px solid rgba(239,68,68,.2)" onclick="restartWA()">🔄 <%= t.restart_wa %></button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="wa_api_fields">
+                <div class="form-group"><label>API URL</label><input type="text" id="wa_api_url" class="form-control" value="<%=settings.wa_api_url||''%>" placeholder="https://api.fonnte.com/send"></div>
+                <div class="form-group"><label>API Key / Token</label><input type="text" id="wa_api_key" class="form-control" value="<%=settings.wa_api_key||''%>"></div>
+                <div class="form-group"><label><%= t.wa_sender %></label><input type="text" id="wa_sender" class="form-control" value="<%=settings.wa_sender||''%>" placeholder="6281xxxxxxxxxx"></div>
+            </div>
+            
+            <div class="form-row" style="margin-bottom:16px">
+                <div class="form-group"><label><%= t.message_delay %></label><input type="number" id="wa_delay" class="form-control" value="<%=settings.wa_delay||5%>" min="1" placeholder="Contoh: 5"></div>
+                <div class="form-group"><label><%= t.batch_limit %></label><input type="number" id="wa_limit" class="form-control" value="<%=settings.wa_limit||50%>" min="1" placeholder="Contoh: 50"></div>
+            </div>
+            
+            <div class="form-group"><label><%= t.admin_phone %></label><input type="text" id="wa_admin" class="form-control" value="<%=settings.wa_admin||''%>" placeholder="6281xxxxxxxxxx"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="save(['wa_provider','wa_api_url','wa_api_key','wa_sender','wa_delay','wa_limit','wa_admin'])">💾 <%= t.save %></button>
+                <button class="btn" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="testWA()">📤 <%= t.test_send_wa %></button>
+            </div>
+        </div>
+
+        <div id="tab-telegram" class="tab-content card" style="display:none">
+            <h2 class="section-title">✈️ <%= t.telegram %> Bot</h2>
+            <div class="form-group"><label>Bot Token</label><input type="text" id="telegram_bot_token" class="form-control" value="<%=settings.telegram_bot_token||''%>" placeholder="123456:ABC..."></div>
+            <div class="form-group"><label>Admin Chat ID</label><input type="text" id="telegram_chat_id" class="form-control" value="<%=settings.telegram_chat_id||''%>" placeholder="-100xxxxxxxxxx"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="save(['telegram_bot_token','telegram_chat_id'])">💾 <%= t.save %></button>
+                <button class="btn" style="background:rgba(0,136,204,.15);color:#0088cc;border:1px solid rgba(0,136,204,.3)" onclick="testTelegram()">✈️ Test Kirim Telegram</button>
+            </div>
+        </div>
+
+        <!-- Tab: Payment -->
+        <div id="tab-payment" class="tab-content card" style="display:none">
+            <h2 class="section-title">💳 <%= t.payment %> Gateway</h2>
+            <div class="form-group"><label>Default Gateway</label>
+                <select id="payment_gateway" class="form-control">
+                    <option value="manual" <%=settings.payment_gateway==='manual'?'selected':''%>>Manual (Transfer/Cash)</option>
+                    <option value="tripay" <%=settings.payment_gateway==='tripay'?'selected':''%>>Tripay</option>
+                    <option value="midtrans" <%=settings.payment_gateway==='midtrans'?'selected':''%>>Midtrans</option>
+                </select>
+            </div>
+            <hr style="border-color:var(--border);margin:16px 0">
+            <h3 style="font-size:14px;color:var(--muted);margin:0 0 12px">Transfer Manual</h3>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.bank_name %></label><input type="text" id="bank_name" class="form-control" value="<%=settings.bank_name||'BANK BCA'%>" placeholder="Contoh: BANK BCA"></div>
+                <div class="form-group"><label><%= t.account_number %></label><input type="text" id="bank_account" class="form-control" value="<%=settings.bank_account||'1234567890'%>" placeholder="1234567890"></div>
+            </div>
+            <div class="form-group"><label><%= t.account_holder %></label><input type="text" id="bank_holder" class="form-control" value="<%=settings.bank_holder||''%>" placeholder="Contoh: ITO SOLUTION"></div>
+            <div style="margin-bottom:20px"><button class="btn btn-primary" onclick="save(['bank_name','bank_account','bank_holder'])">💾 <%= t.save_bank_data %></button></div>
+            <hr style="border-color:var(--border);margin:16px 0">
+            <h3 style="font-size:14px;color:var(--muted);margin:0 0 12px">Tripay</h3>
+            <div class="form-row">
+                <div class="form-group"><label>API Key</label><input type="text" id="tripay_api_key" class="form-control" value="<%=settings.tripay_api_key||''%>"></div>
+                <div class="form-group"><label>Private Key</label><input type="text" id="tripay_private_key" class="form-control" value="<%=settings.tripay_private_key||''%>"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.merchant_code %></label><input type="text" id="tripay_merchant_code" class="form-control" value="<%=settings.tripay_merchant_code||''%>"></div>
+                <div class="form-group"><label><%= t.mode %></label>
+                    <select id="tripay_mode" class="form-control">
+                        <option value="sandbox" <%=settings.tripay_mode==='sandbox'?'selected':''%>>Sandbox</option>
+                        <option value="production" <%=settings.tripay_mode==='production'?'selected':''%>>Production</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Pilih Channel Pembayaran</label>
+                <div id="tripay_channel_list" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px; margin-top:10px; padding:15px; background:var(--sub-bg); border:1px solid var(--border); border-radius:12px; max-height:300px; overflow-y:auto;">
+                    <div style="color:var(--muted); font-size:12px; grid-column:1/-1; text-align:center;">Tekan tombol "Test & Muat Channel" di bawah untuk memuat daftar channel.</div>
+                </div>
+                <input type="hidden" id="tripay_channels" value="<%=settings.tripay_channels||''%>">
+                <p class="setting-desc" style="margin-top:8px">Pilih channel mana saja yang ingin Anda tampilkan di portal pelanggan.</p>
+            </div>
+            <div class="form-group">
+                <label><%= t.callback_url %></label>
+                <div style="display:flex;gap:10px">
+                    <input type="text" id="tripay_callback_url" class="form-control" readonly style="background:rgba(0,0,0,0.2);cursor:default" value="">
+                    <button class="btn btn-sm btn-info" onclick="copyCallback()"><%= t.copy %></button>
+                </div>
+                <p class="setting-desc" style="margin-top:8px"><%= t.callback_instruction %></p>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="save(['payment_gateway','tripay_api_key','tripay_private_key','tripay_merchant_code','tripay_mode','tripay_channels'])">💾 <%= t.save %></button>
+                <button class="btn" style="background:rgba(99,102,241,.15);color:#818CF8;border:1px solid rgba(99,102,241,.3)" onclick="testTripay()">💳 Test & Muat Channel</button>
+            </div>
+        </div>
+
+        <!-- Tab: Billing -->
+        <div id="tab-billing" class="tab-content card" style="display:none">
+            <h2 class="section-title">🗓 <%= t.billing_settings %></h2>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.invoice_prefix %></label><input type="text" id="invoice_prefix" class="form-control" value="<%=settings.invoice_prefix||'INV'%>"></div>
+                <div class="form-group"><label><%= t.default_due_day %></label><input type="number" id="default_due_day" class="form-control" value="<%=settings.default_due_day||20%>" min="1" max="28"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.auto_generate_invoice_day %></label><input type="number" id="auto_generate_day" class="form-control" value="<%=settings.auto_generate_day||1%>" min="1" max="28"></div>
+                <div class="form-group"><label><%= t.late_tolerance %></label><input type="number" id="late_tolerance_days" class="form-control" value="<%=settings.late_tolerance_days||0%>" min="0"></div>
+            </div>
+            <hr style="border-color:var(--border);margin:16px 0">
+            <h3 style="font-size:14px;color:var(--muted);margin:0 0 12px"><%= t.automation_cron %></h3>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.auto_billing_feature %></label>
+                    <select id="auto_billing_enabled" class="form-control">
+                        <option value="1" <%=settings.auto_billing_enabled==='1'?'selected':''%>><%= t.enabled_auto_invoice %></option>
+                        <option value="0" <%=settings.auto_billing_enabled==='0'?'selected':''%>><%= t.disabled_manual %></option>
+                    </select>
+                </div>
+                <div class="form-group"><label><%= t.auto_isolate_feature %></label>
+                    <select id="auto_isolate_enabled" class="form-control">
+                        <option value="1" <%=settings.auto_isolate_enabled==='1'?'selected':''%>><%= t.enabled_auto_isolate %></option>
+                        <option value="0" <%=settings.auto_isolate_enabled==='0'?'selected':''%>><%= t.disabled_manual %></option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group"><label><%= t.send_wa_reminder_days %></label>
+                <input type="number" id="reminder_days_before" class="form-control" value="<%=settings.reminder_days_before||3%>" min="1" max="7">
+            </div>
+            <button class="btn btn-primary" onclick="save(['invoice_prefix','default_due_day','auto_generate_day','late_tolerance_days','auto_billing_enabled','auto_isolate_enabled','reminder_days_before'])">💾 <%= t.save %></button>
+        </div>
+
+
+
+        <div id="tab-acs" class="tab-content card" style="display:none">
+            <h2 class="section-title">🌐 <%= t.genieacs_config %></h2>
+            <div class="form-group"><label><%= t.acs_api_url %></label><input type="text" id="acs_url" class="form-control" value="<%=settings.acs_url||''%>" placeholder="http://127.0.0.1:7557"></div>
+            <div class="form-row">
+                <div class="form-group"><label><%= t.api_username %></label><input type="text" id="acs_user" class="form-control" value="<%=settings.acs_user||''%>"></div>
+                <div class="form-group"><label><%= t.api_password %></label><input type="password" id="acs_pass" class="form-control" value="<%=settings.acs_pass||''%>"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label><%= t.pppoe_user_path %></label>
+                    <input type="text" id="acs_path_pppoe" class="form-control" value="<%=settings.acs_path_pppoe||''%>" placeholder="VirtualParameters.PPPoEUser">
+                </div>
+                <div class="form-group">
+                    <label><%= t.ip_wan_path %></label>
+                    <input type="text" id="acs_path_ip" class="form-control" value="<%=settings.acs_path_ip||''%>" placeholder="VirtualParameters.IPAddress">
+                </div>
+            </div>
+            <div class="form-group">
+                <label><%= t.additional_vparams %></label>
+                <p class="setting-desc"><%= t.vparams_instruction %><br>Contoh: <code>VirtualParameters.OpticalPower</code>, <code>VirtualParameters.Uptime</code></p>
+                <textarea id="acs_vparams" class="form-control" rows="4" placeholder="VirtualParameters.OpticalPower&#10;VirtualParameters.Uptime"><%=settings.acs_vparams||''%></textarea>
+            </div>
+            <div style="display:flex;gap:10px">
+                <button class="btn btn-primary" onclick="save(['acs_url','acs_user','acs_pass','acs_vparams','acs_path_pppoe','acs_path_ip'])">💾 <%= t.save %></button>
+                <button class="btn" style="background:rgba(139,92,246,.15);color:var(--secondary);border:1px solid rgba(139,92,246,.3)" onclick="testACS()">🌐 <%= t.test_acs_connection %></button>
+            </div>
+        </div>
+
+        <!-- Tab: Users -->
+        <div id="tab-users" class="tab-content card" style="display:none">
+            <h2 class="section-title">👥 <%= t.manage_system_users %></h2>
+            <div style="display:grid; grid-template-columns:1fr 1.5fr; gap:24px;">
+                <div>
+                    <h3 style="font-size:14px; margin-bottom:12px"><%= t.add_new_user %></h3>
+                    <div class="form-group"><label><%= t.username %></label><input type="text" id="u_user" class="form-control" placeholder="username"></div>
+                    <div class="form-group"><label><%= t.password %></label><input type="password" id="u_pass" class="form-control" placeholder="password"></div>
+                    <div class="form-group"><label><%= t.role_position %></label>
+                        <select id="u_role" class="form-control">
+                            <option value="admin"><%= t.admin_full_access %></option>
+                            <option value="technician"><%= t.technician_access %></option>
+                            <option value="sales"><%= t.sales_access %></option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>No. HP / WhatsApp (Opsional)</label><input type="text" id="u_phone" class="form-control" placeholder="628xxxxxxxxx"></div>
+                    <div class="form-group"><label>Telegram ID (Opsional)</label><input type="text" id="u_telegram" class="form-control" placeholder="-100xxxxxxxx atau ID Personal"></div>
+                    <button class="btn btn-primary" style="width:100%; justify-content:center" onclick="addUser()">➕ <%= t.add_user_btn %></button>
+                </div>
+                <div>
+                    <h3 style="font-size:14px; margin-bottom:12px"><%= t.active_user_list %></h3>
+                    <div id="userListContainer" style="max-height:400px; overflow-y:auto">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <thead><tr style="text-align:left; color:var(--muted); border-bottom:1px solid var(--border)">
+                                <th style="padding:8px"><%= t.user_col %></th><th style="padding:8px"><%= t.role_col %></th><th style="padding:8px">No. HP</th><th style="padding:8px">Telegram ID</th><th style="padding:8px"><%= t.action %></th>
+                            </tr></thead>
+                            <tbody id="userTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-wa_templates" class="tab-content card" style="display:none">
+            <h2 class="section-title">📝 <%= t.wa_message_templates %></h2>
+            <p class="setting-desc"><%= t.template_instruction %></p>
+            
+            <div class="setting-group">
+                <label class="setting-label"><%= t.new_invoice_template %></label>
+                <textarea id="msg_invoice_created" class="form-control" rows="5"><%=settings.msg_invoice_created||'📄 *Tagihan Baru*\n\nYth. {name},\nTagihan internet Anda telah diterbitkan.\n\n💰 Nominal: Rp {amount}\n📅 Jatuh Tempo: {due_date}\n\nSegera lakukan pembayaran sebelum jatuh tempo.\n\n{company}'%></textarea>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label"><%= t.payment_received_template %></label>
+                <textarea id="msg_payment_received" class="form-control" rows="5"><%=settings.msg_payment_received||'✅ *Pembayaran Diterima*\n\nYth. {name},\nPembayaran Anda senilai Rp {amount} telah kami terima.\n\nTerima kasih atas pembayaran Anda.\n\n{company}'%></textarea>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label"><%= t.isolation_template %></label>
+                <textarea id="msg_isolation" class="form-control" rows="5"><%=settings.msg_isolation||'⚠️ *Layanan Diisolir*\n\nYth. {name},\nLayanan internet Anda telah diisolir karena tagihan belum terbayar.\n\nSegera lakukan pembayaran untuk mengaktifkan kembali layanan.\n\n{company}'%></textarea>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label"><%= t.reminder_template %></label>
+                <textarea id="msg_reminder" class="form-control" rows="5"><%=settings.msg_reminder||'🔔 *Pengingat Tagihan*\n\nYth. {name},\nTagihan internet Anda senilai Rp {amount} akan segera jatuh tempo pada {due_date}.\n\nSegera lakukan pembayaran untuk menghindari pemutusan layanan.\n\n{company}'%></textarea>
+            </div>
+
+            <button class="btn btn-primary" onclick="save(['msg_invoice_created','msg_payment_received','msg_isolation','msg_reminder'])">💾 <%= t.save_templates %></button>
+        </div>
+
+        <div id="tab-import" class="tab-content card" style="display:none">
+            <h2 class="section-title">📤 <%= t.import_export_data %></h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div>
+                    <h3 style="font-size:14px;margin:0 0 12px">⬇️ Export</h3>
+                    <a href="/export/customers" class="btn" style="background:rgba(16,185,129,.15);color:var(--success);border:1px solid rgba(16,185,129,.3);display:block;text-align:center;text-decoration:none;margin-bottom:8px">📥 <%= t.export_customers_csv %></a>
+                    <a href="/export/invoices" class="btn" style="background:rgba(16,185,129,.15);color:var(--success);border:1px solid rgba(16,185,129,.3);display:block;text-align:center;text-decoration:none">📥 <%= t.export_invoices_csv %></a>
+                </div>
+                <div>
+                    <h3 style="font-size:14px;margin:0 0 12px">⬆️ <%= t.import_customers %></h3>
+                    <p style="font-size:12px;color:var(--muted);margin:0 0 8px"><%= t.csv_format_info %></p>
+                    <textarea id="csv_import" class="form-control" rows="6" placeholder="<%= t.paste_csv_placeholder %>"></textarea>
+                    <button class="btn btn-primary" onclick="importCSV()" style="margin-top:10px;width:100%;justify-content:center">⬆️ <%= t.import_now %></button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-system" class="tab-content card" style="display:none">
+            <h2 class="section-title">🔄 <%= t.system_update_github %></h2>
+            <div class="update-section">
+                <p style="color:var(--muted);font-size:14px;margin:0 0 16px"><%= t.update_instruction %></p>
+
+                <!-- Git Repository Settings -->
+                <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:18px;">
+                    <p style="font-size:12px;font-weight:700;color:var(--primary);margin:0 0 14px;text-transform:uppercase;letter-spacing:.5px;">
+                        <i class="fas fa-code-branch"></i> Konfigurasi Repository Git
+                    </p>
+                    <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+                        <div>
+                            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">URL Repository Git</label>
+                            <input type="text" id="gitRepoUrl" class="form-control"
+                                placeholder="https://github.com/username/repo.git"
+                                value="<%= settings.git_repo_url || '' %>"
+                                style="font-family:monospace;font-size:13px;">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">Branch</label>
+                            <input type="text" id="gitBranch" class="form-control"
+                                placeholder="main"
+                                value="<%= settings.git_branch || 'main' %>"
+                                style="font-family:monospace;font-size:13px;width:100px;">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn" style="background:rgba(16,185,129,.15);color:#10B981;border:1px solid rgba(16,185,129,.3);" onclick="saveGitSettings()">
+                            <i class="fas fa-save"></i> Simpan Pengaturan Git
+                        </button>
+                        <span id="gitSaveStatus" style="font-size:12px;color:var(--muted);"></span>
+                    </div>
+                    <p style="font-size:11px;color:var(--muted);margin:10px 0 0;">
+                        Kosongkan untuk menggunakan remote origin default. Gunakan format HTTPS agar tidak perlu SSH key.
+                        Contoh: <code style="background:rgba(255,255,255,.06);padding:2px 6px;border-radius:4px;font-size:11px;">https://github.com/username/Dino-Bill.git</code>
+                    </p>
+                </div>
+
+                <button class="btn" style="background:linear-gradient(135deg,#8B5CF6,#7C3AED);color:white" onclick="runUpdate()">🚀 <%= t.check_update_now %></button>
+                <div id="updateStatus" style="margin-top:14px;font-size:13px;color:var(--muted);display:none"></div>
+            </div>
+
+            <h2 class="section-title" style="margin-top:30px">💬 Bantuan & Dukungan</h2>
+            <div class="update-section" style="background:rgba(0,136,204,.08); border-color:rgba(0,136,204,.2)">
+                <p style="color:var(--muted);font-size:14px;margin:0 0 16px">Bergabunglah dengan grup Telegram kami untuk mendapatkan bantuan, info update, dan diskusi seputar Dino-Bill.</p>
+                <a href="https://t.me/dinosupports" target="_blank" class="btn" style="background:#0088cc; color:white; text-decoration:none">
+                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24" style="margin-right:8px"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.506-1.524 5.845-2.528 7.016-3.013 3.333-1.386 4.025-1.627 4.477-1.635z"/></svg>
+                    Gabung Grup Telegram
+                </a>
+            </div>
+        </div>
+    </div>
+</main>
+<div class="toast" id="toast"></div>
+<style>
+.tab-btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--muted);cursor:pointer;font-family:'Outfit',sans-serif;font-size:13px;transition:all .2s}
+.tab-btn.active{background:rgba(59,130,246,.15);color:var(--primary);border-color:rgba(59,130,246,.4)}
+.tab-btn:hover{color:var(--text)}
+</style>
+<script>
+function showTab(name){
+    document.querySelectorAll('.tab-content').forEach(t=>t.style.display='none');
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('tab-'+name).style.display='block';
+    event.target.classList.add('active');
+}
+async function save(keys){
+    const body={};
+    keys.forEach(k=>{const el=document.getElementById(k);if(el)body[k]=el.value;});
+    const res=await fetch('/settings/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+}
+async function testWA(){
+    const phone=prompt('Masukkan nomor HP tujuan test (format 628xxx):');
+    if(!phone)return;
+    const res=await fetch('/settings/api/test-wa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,message:'Test from Dino-Bill ✅'})});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+}
+async function importCSV(){
+    const csv=document.getElementById('csv_import').value;
+    if(!csv.trim()){return showToast('<%= t.paste_csv_placeholder %>','error');}
+    if(!confirm('<%= t.import_customers %>?'))return;
+    const res=await fetch('/import/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv_data:csv})});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+    if(d.success)document.getElementById('csv_import').value='';
+}
+async function testACS(){
+    const url=document.getElementById('acs_url').value;
+    if(!url)return alert('Masukkan URL ACS dulu');
+    showToast('⏳ Testing ACS connection...','success');
+    const res=await fetch('/settings/api/test-acs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+}
+
+async function testTelegram(){
+    showToast('⏳ Sending test Telegram...','success');
+    const res=await fetch('/settings/api/test-telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'✅ Test Telegram from Dino-Bill'})});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+}
+async function testTripay(silent = false){
+    if(!silent) showToast('⏳ Testing Tripay connection...','success');
+    const res=await fetch('/settings/api/test-tripay',{method:'POST',headers:{'Content-Type':'application/json'}});
+    const d=await res.json();
+    if(!silent) showToast(d.message,d.success?'success':'error');
+    if (d.success && d.channels) {
+        renderTripayChannels(d.channels);
+    }
+}
+
+function renderTripayChannels(channels) {
+    const container = document.getElementById('tripay_channel_list');
+    const hidden = document.getElementById('tripay_channels');
+    // If hidden is empty, it means "Select All"
+    const selected = hidden.value ? hidden.value.split(',').map(s => s.trim().toUpperCase()) : [];
+    
+    container.innerHTML = '';
+    if (channels.length === 0) {
+        container.innerHTML = '<div style="color:var(--muted); font-size:12px; grid-column:1/-1; text-align:center;">Tidak ada channel aktif di Tripay.</div>';
+        return;
+    }
+
+    channels.forEach(ch => {
+        // If nothing is selected yet (first time), check all. Otherwise check only selected.
+        const isChecked = selected.length === 0 || selected.includes(ch.code.toUpperCase());
+        container.innerHTML += `
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; padding:10px; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; transition: all 0.2s;" class="ch-label">
+                <input type="checkbox" class="tripay-ch-checkbox" value="${ch.code}" ${isChecked ? 'checked' : ''} onchange="updateSelectedChannels()">
+                <div style="display:flex; flex-direction:column; gap:2px">
+                    <span style="font-weight:600">${ch.code}</span>
+                    <span style="font-size:10px; color:var(--muted)">${ch.name}</span>
+                </div>
+            </label>
+        `;
+    });
+    updateSelectedChannels();
+}
+
+function updateSelectedChannels() {
+    const checkboxes = document.querySelectorAll('.tripay-ch-checkbox');
+    const selected = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) selected.push(cb.value);
+    });
+    document.getElementById('tripay_channels').value = selected.join(',');
+}
+async function saveGitSettings() {
+    const url    = document.getElementById('gitRepoUrl').value.trim();
+    const branch = document.getElementById('gitBranch').value.trim() || 'main';
+    const status = document.getElementById('gitSaveStatus');
+    status.textContent = 'Menyimpan...';
+    try {
+        const res = await fetch('/settings/api/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ git_repo_url: url, git_branch: branch })
+        });
+        const d = await res.json();
+        status.textContent = d.success ? '✅ Tersimpan' : '❌ ' + d.message;
+        status.style.color = d.success ? '#10B981' : '#EF4444';
+        setTimeout(() => status.textContent = '', 3000);
+    } catch(e) {
+        status.textContent = '❌ Error: ' + e.message;
+        status.style.color = '#EF4444';
+    }
+}
+
+async function runUpdate(){
+    const el=document.getElementById('updateStatus');
+    el.style.display='block';el.textContent='<%= t.fetching_update %>';
+    try{const res=await fetch('/api/system/update',{method:'POST'});const d=await res.json();el.textContent=d.success?'✅ '+d.message:'❌ '+d.message;}
+    catch(e){el.textContent='❌ Connection failed: '+e.message;}
+}
+
+async function loadUsers() {
+    const res = await fetch('/settings/api/users');
+    const d = await res.json();
+    if (d.success) {
+        const body = document.getElementById('userTableBody');
+        body.innerHTML = '';
+        const roleColors = {admin:'#EF4444',technician:'#3B82F6',sales:'#10B981'};
+        d.data.forEach(u => {
+            const rc = roleColors[u.role]||'#94A3B8';
+            body.innerHTML += `
+                <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:10px;font-weight:600;">${u.username}</td>
+                    <td style="padding:10px"><span style="background:${rc}22;color:${rc};border:1px solid ${rc}44;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">${u.role.toUpperCase()}</span></td>
+                    <td style="padding:10px;font-size:12px;color:var(--muted);">${u.phone || '-'}</td>
+                    <td style="padding:10px;font-size:11px;color:var(--muted);">${u.telegram_id || '-'}</td>
+                    <td style="padding:10px">
+                        <div style="display:flex;gap:5px;">
+                            <button onclick='openEditUser(${JSON.stringify(u)})' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">✏️</button>
+                            <button onclick="deleteUser(${u.id})" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">🗑</button>
+                        </div>
+                    </td>
+                </tr>`;
+        });
+    }
+}
+
+async function addUser() {
+    const username    = document.getElementById('u_user').value;
+    const password    = document.getElementById('u_pass').value;
+    const role        = document.getElementById('u_role').value;
+    const telegram_id = document.getElementById('u_telegram').value;
+    const phone       = document.getElementById('u_phone').value;
+    if (!username || !password) return showToast('Lengkapi username dan password!','error');
+    const res = await fetch('/settings/api/users', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username, password, role, telegram_id, phone })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) {
+        ['u_user','u_pass','u_telegram','u_phone'].forEach(id => document.getElementById(id).value='');
+        loadUsers();
+    }
+}
+
+function openEditUser(u) {
+    document.getElementById('eu_id').value         = u.id;
+    document.getElementById('eu_user').value       = u.username;
+    document.getElementById('eu_role').value       = u.role;
+    document.getElementById('eu_phone').value      = u.phone || '';
+    document.getElementById('eu_telegram').value   = u.telegram_id || '';
+    document.getElementById('eu_pass').value       = '';
+    document.getElementById('editUserModal').style.display = 'flex';
+}
+
+async function saveEditUser() {
+    const id = document.getElementById('eu_id').value;
+    const body = {
+        username:    document.getElementById('eu_user').value,
+        role:        document.getElementById('eu_role').value,
+        phone:       document.getElementById('eu_phone').value,
+        telegram_id: document.getElementById('eu_telegram').value,
+        password:    document.getElementById('eu_pass').value,
+    };
+    const res = await fetch(`/settings/api/users/${id}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if (d.success) { document.getElementById('editUserModal').style.display='none'; loadUsers(); }
+}
+
+async function deleteUser(id) {
+    if (!confirm('<%= t.confirm_delete_item %>')) return;
+    const res = await fetch(`/settings/api/users/${id}`, { method: 'DELETE' });
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) loadUsers();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadUsers();
+    const cbInput = document.getElementById('tripay_callback_url');
+    if (cbInput) cbInput.value = window.location.origin + '/api/tripay/callback';
+    
+    toggleWAFields();
+    setInterval(checkWAStatus, 5000);
+    checkWAStatus();
+    if(document.getElementById('tripay_api_key').value) testTripay(true);
+});
+
+function toggleWAFields() {
+    const provider = document.getElementById('wa_provider').value;
+    const apiFields = document.getElementById('wa_api_fields');
+    const localSection = document.getElementById('wa_local_section');
+    
+    if (provider === 'local') {
+        apiFields.style.display = 'none';
+        localSection.style.display = 'block';
+    } else {
+        apiFields.style.display = 'block';
+        localSection.style.display = 'none';
+    }
+}
+async function restartWA() {
+    if(!confirm('<%= t.restart_wa %>?')) return;
+    showToast('⏳ <%= t.restart_wa %>...', 'success');
+    try {
+        const res = await fetch('/settings/whatsapp-restart', { method: 'POST' });
+        const d = await res.json();
+        showToast(d.message, 'success');
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function checkWAStatus() {
+    const provider = document.getElementById('wa_provider').value;
+    if (provider !== 'local') return;
+
+    try {
+        const res = await fetch('/settings/whatsapp-status');
+        const d = await res.json();
+        
+        const badge = document.getElementById('wa_status_badge');
+        const qrContainer = document.getElementById('wa_qr_container');
+        
+        badge.textContent = d.status;
+        if (d.status === 'READY' || d.status === 'AUTHENTICATED') {
+            badge.style.background = 'rgba(16,185,129,.15)';
+            badge.style.color = '#10B981';
+            qrContainer.innerHTML = '✅ Connected';
+        } else if (d.status === 'INITIALIZING') {
+            badge.style.background = 'rgba(245,158,11,.15)';
+            badge.style.color = '#F59E0B';
+            qrContainer.innerHTML = '⏳ Booting...';
+        } else {
+            badge.style.background = 'rgba(239,68,68,.15)';
+            badge.style.color = '#EF4444';
+            if (d.qr) {
+                qrContainer.innerHTML = `<img src="${d.qr}" style="width:100%; height:100%; object-fit:contain">`;
+            } else {
+                qrContainer.innerHTML = 'Memuat QR...';
+            }
+        }
+    } catch (e) {
+        console.error('Failed to fetch WA status:', e);
+    }
+}
+
+function copyCallback() {
+    const el = document.getElementById('tripay_callback_url');
+    el.select();
+    document.execCommand('copy');
+    showToast('URL Callback copied', 'success');
+}
+
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+</script>
+<!-- Modal Edit User -->
+<div id="editUserModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center;z-index:3000;padding:16px;">
+    <div style="background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:460px;padding:28px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">✏️ Edit User</h3>
+            <button onclick="document.getElementById('editUserModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <input type="hidden" id="eu_id">
+        <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Username</label>
+            <input type="text" id="eu_user" class="form-control">
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Role</label>
+            <select id="eu_role" class="form-control">
+                <option value="admin">Admin</option>
+                <option value="technician">Teknisi</option>
+                <option value="sales">Sales</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">No. HP / WhatsApp</label>
+            <input type="text" id="eu_phone" class="form-control" placeholder="628xxxxxxxxx">
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Telegram ID</label>
+            <input type="text" id="eu_telegram" class="form-control" placeholder="-100xxxxxxxx">
+        </div>
+        <div class="form-group" style="margin-bottom:18px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Password Baru (kosongkan jika tidak diubah)</label>
+            <input type="password" id="eu_pass" class="form-control" placeholder="Isi untuk ganti password">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button onclick="document.getElementById('editUserModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="saveEditUser()" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Mini Map untuk settings koordinat ──
+let miniMap = null, miniMarker = null;
+
+function initMiniMap() {
+    if (miniMap) return;
+    const lat  = parseFloat(document.getElementById('map_center_lat').value) || -7.5;
+    const lng  = parseFloat(document.getElementById('map_center_lng').value) || 110.5;
+    const zoom = parseInt(document.getElementById('map_default_zoom').value) || 13;
+
+    miniMap = L.map('miniMap', { zoomControl: true, attributionControl: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(miniMap);
+    miniMap.setView([lat, lng], zoom);
+
+    miniMarker = L.marker([lat, lng], { draggable: true }).addTo(miniMap);
+    miniMarker.on('dragend', e => {
+        const pos = e.target.getLatLng();
+        document.getElementById('map_center_lat').value = pos.lat.toFixed(7);
+        document.getElementById('map_center_lng').value = pos.lng.toFixed(7);
+    });
+
+    miniMap.on('click', e => {
+        document.getElementById('map_center_lat').value = e.latlng.lat.toFixed(7);
+        document.getElementById('map_center_lng').value = e.latlng.lng.toFixed(7);
+        miniMarker.setLatLng(e.latlng);
+    });
+}
+
+// Init mini map saat tab General aktif & elemen visible
+const mapWrap = document.getElementById('miniMapWrap');
+if (mapWrap) {
+    const observer = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) { initMiniMap(); observer.disconnect(); }
+    });
+    observer.observe(mapWrap);
+}
+
+// Ambil lokasi GPS perangkat
+function getMyLocation() {
+    if (!navigator.geolocation) return alert('Geolocation tidak didukung browser ini');
+    navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        document.getElementById('map_center_lat').value = lat.toFixed(7);
+        document.getElementById('map_center_lng').value = lng.toFixed(7);
+        if (miniMap) {
+            miniMap.setView([lat, lng], 15);
+            miniMarker.setLatLng([lat, lng]);
+        } else {
+            initMiniMap();
+        }
+    }, () => alert('Gagal mendapatkan lokasi GPS'));
+}
+
+// Update zoom saat input berubah
+const zoomInput = document.getElementById('map_default_zoom');
+if (zoomInput) {
+    zoomInput.addEventListener('change', () => {
+        if (miniMap) miniMap.setZoom(parseInt(zoomInput.value) || 13);
+    });
+}
+</script>
+</body>
+</html>

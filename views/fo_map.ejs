@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .fo-layout { display:grid; grid-template-columns:300px 1fr; gap:0; height:calc(100vh - 140px); min-height:500px; border:1px solid var(--border); border-radius:18px; overflow:hidden; }
+        .fo-sidebar { background:var(--card-bg); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .fo-sidebar-header { padding:14px 16px; border-bottom:1px solid var(--border); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+        .fo-tabs { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+        .fo-tab { flex:1; padding:9px; text-align:center; font-size:11px; font-weight:600; cursor:pointer; color:var(--muted); border:none; background:none; font-family:'Outfit',sans-serif; transition:all .2s; }
+        .fo-tab.active { color:var(--primary); border-bottom:2px solid var(--primary); }
+        .fo-list { flex:1; overflow-y:auto; }
+        .fo-item { padding:11px 14px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s; display:flex; align-items:center; gap:10px; }
+        .fo-item:hover { background:var(--hover-bg); }
+        .fo-item.active { background:rgba(59,130,246,.08); border-left:3px solid var(--primary); }
+        .fo-item-icon { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; }
+        .fo-item-info { flex:1; min-width:0; }
+        .fo-item-name { font-weight:600; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .fo-item-sub  { font-size:10px; color:var(--muted); margin-top:2px; }
+        .fo-item-badge { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:700; white-space:nowrap; }
+
+        #foMap { width:100%; height:100%; }
+
+        .map-toolbar { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:1000; display:flex; gap:8px; background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:8px 12px; box-shadow:0 4px 20px rgba(0,0,0,.3); flex-wrap:wrap; justify-content:center; }
+        .map-btn { padding:7px 14px; border-radius:10px; border:1px solid var(--border); background:var(--sub-bg); color:var(--text); font-size:12px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; transition:all .2s; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+        .map-btn:hover { border-color:var(--primary); color:var(--primary); }
+        .map-btn.active { background:var(--primary); color:white; border-color:var(--primary); }
+
+        .map-stats { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); z-index:1000; display:flex; gap:10px; background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:10px 16px; box-shadow:0 4px 20px rgba(0,0,0,.3); }
+        .map-stat { text-align:center; min-width:60px; }
+        .map-stat-val { font-size:18px; font-weight:800; line-height:1; }
+        .map-stat-label { font-size:10px; color:var(--muted); margin-top:3px; }
+
+        /* Node popup */
+        .node-popup { min-width:220px; }
+        .node-popup h4 { margin:0 0 8px; font-size:14px; }
+        .node-popup .pp-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; }
+        .node-popup .pp-label { color:#94A3B8; }
+        .node-popup .pp-val { font-weight:600; }
+        .node-popup .pp-bar { height:6px; background:#1E293B; border-radius:3px; margin:8px 0 4px; overflow:hidden; }
+        .node-popup .pp-fill { height:100%; border-radius:3px; transition:width .3s; }
+        .node-popup .pp-actions { display:flex; gap:6px; margin-top:10px; }
+        .node-popup .pp-btn { flex:1; padding:6px; border-radius:8px; border:none; cursor:pointer; font-size:11px; font-weight:600; font-family:'Outfit',sans-serif; }
+
+        /* Modal */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:3000; padding:16px; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:560px; max-height:90vh; overflow-y:auto; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .modal-title { font-size:17px; font-weight:700; margin:0; }
+        .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .form-group { margin-bottom:14px; }
+        .form-group.full { grid-column:1/-1; }
+        .form-group label { display:block; margin-bottom:6px; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+
+        .port-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(70px,1fr)); gap:8px; margin-top:12px; }
+        .port-item { border:1px solid var(--border); border-radius:8px; padding:8px 6px; text-align:center; cursor:pointer; transition:all .2s; }
+        .port-item:hover { border-color:var(--primary); }
+        .port-item.used      { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.3); }
+        .port-item.available { background:rgba(16,185,129,.08); border-color:rgba(16,185,129,.2); }
+        .port-item.damaged   { background:rgba(245,158,11,.1); border-color:rgba(245,158,11,.3); }
+        .port-num  { font-size:12px; font-weight:700; }
+        .port-cust { font-size:9px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+        @media(max-width:900px) { .fo-layout { grid-template-columns:1fr; } .fo-sidebar { max-height:300px; } }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Infrastruktur Fiber Optik' }) %>
+    <div class="content" style="padding-bottom:0;">
+
+        <!-- Stats bar -->
+        <div style="display:flex; gap:12px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
+            <a href="/fo/nodes" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px;">📍 Kelola Node</a>
+            <a href="/fo/cables" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px;">🔌 Kelola Kabel</a>
+            <a href="/fo/assets" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px;">📦 Inventaris</a>
+            <div style="display:flex; gap:16px; margin-left:auto; flex-wrap:wrap;">
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#3B82F6;"><%= stats.total_odp||0 %></div><div style="font-size:10px; color:var(--muted);">ODP</div></div>
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#8B5CF6;"><%= stats.total_odc||0 %></div><div style="font-size:10px; color:var(--muted);">ODC</div></div>
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#10B981;"><%= stats.total_olt||0 %></div><div style="font-size:10px; color:var(--muted);">OLT</div></div>
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#F59E0B;"><%= stats.total_cables||0 %></div><div style="font-size:10px; color:var(--muted);">Kabel</div></div>
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#06B6D4;"><%= ((stats.total_length||0)/1000).toFixed(1) %> km</div><div style="font-size:10px; color:var(--muted);">Panjang</div></div>
+                <% if ((stats.damaged_nodes||0) > 0) { %>
+                <div style="text-align:center;"><div style="font-size:20px; font-weight:800; color:#EF4444;"><%= stats.damaged_nodes %></div><div style="font-size:10px; color:var(--muted);">Rusak ⚠</div></div>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Layout Peta + Sidebar -->
+        <div class="fo-layout">
+            <!-- Sidebar list node -->
+            <div class="fo-sidebar">
+                <div class="fo-sidebar-header">
+                    <span>📋 Daftar Jaringan</span>
+                    <button onclick="openAddNodeModal(null,null)" class="btn btn-primary" style="font-size:11px; padding:5px 10px;">+ Node</button>
+                </div>
+                <div class="fo-tabs">
+                    <button class="fo-tab active" onclick="switchSidebar('nodes',this)">Node (<%= nodes.length %>)</button>
+                    <button class="fo-tab" onclick="switchSidebar('cables',this)">Kabel (<%= cables.length %>)</button>
+                </div>
+                <!-- Nodes list -->
+                <div class="fo-list" id="sidebarNodes">
+                    <% if (nodes.length > 0) { %>
+                    <% nodes.forEach(n => {
+                        const typeConfig = {
+                            OLT:     { icon:'🏢', color:'#10B981', bg:'rgba(16,185,129,.15)' },
+                            ODC:     { icon:'📦', color:'#8B5CF6', bg:'rgba(139,92,246,.15)' },
+                            ODP:     { icon:'📍', color:'#3B82F6', bg:'rgba(59,130,246,.15)' },
+                            Splitter:{ icon:'🔀', color:'#F59E0B', bg:'rgba(245,158,11,.15)' },
+                            Tiang:   { icon:'🪝', color:'#94A3B8', bg:'rgba(148,163,184,.15)' },
+                            Closure: { icon:'🔒', color:'#06B6D4', bg:'rgba(6,182,212,.15)' },
+                            HandHole:{ icon:'🕳',  color:'#EF4444', bg:'rgba(239,68,68,.15)'  }
+                        };
+                        const cfg = typeConfig[n.type] || typeConfig.ODP;
+                        const pct = n.capacity > 0 ? Math.round((n.used_ports/n.capacity)*100) : 0;
+                    %>
+                    <div class="fo-item" data-id="<%= n.id %>" data-lat="<%= n.lat %>" data-lng="<%= n.lng %>" onclick="focusNode(<%= n.id %>, <%= n.lat||0 %>, <%= n.lng||0 %>)">
+                        <div class="fo-item-icon" style="background:<%= cfg.bg %>; color:<%= cfg.color %>;"><%= cfg.icon %></div>
+                        <div class="fo-item-info">
+                            <div class="fo-item-name"><%= n.name %></div>
+                            <div class="fo-item-sub">
+                                <%= n.type %><% if(n.capacity>0){ %> · <%= n.used_ports||0 %>/<%= n.capacity %> port<% } %>
+                                <% if(n.status==='damaged'){ %> ⚠️<% } %>
+                            </div>
+                        </div>
+                        <% if(n.capacity > 0) { %>
+                        <div style="width:36px; text-align:center;">
+                            <div style="font-size:10px; font-weight:700; color:<%= pct>=80 ? '#EF4444' : pct>=60 ? '#F59E0B' : '#10B981' %>"><%= pct %>%</div>
+                        </div>
+                        <% } %>
+                    </div>
+                    <% }) %>
+                    <% } else { %>
+                    <div style="text-align:center; color:var(--muted); padding:30px; font-size:13px;">
+                        <div style="font-size:32px; margin-bottom:8px;">📭</div>
+                        Belum ada node.<br>Klik peta untuk menambahkan.
+                    </div>
+                    <% } %>
+                </div>
+                <!-- Cables list -->
+                <div class="fo-list" id="sidebarCables" style="display:none;">
+                    <% if (cables.length > 0) { %>
+                    <% cables.forEach(c => { %>
+                    <div class="fo-item" onclick="focusCable(<%= c.id %>)">
+                        <div class="fo-item-icon" style="background:rgba(255,107,53,.15); color:#FF6B35;">🔌</div>
+                        <div class="fo-item-info">
+                            <div class="fo-item-name"><%= c.name %></div>
+                            <div class="fo-item-sub"><%= c.cable_type %> · <%= c.core_count %> core · <%= c.length_m >= 1000 ? (c.length_m/1000).toFixed(2)+'km' : c.length_m+'m' %></div>
+                        </div>
+                        <span class="fo-item-badge" style="background:rgba(16,185,129,.1); color:#10B981; border:1px solid rgba(16,185,129,.2);">
+                            <%= c.status === 'active' ? '✓' : '✗' %>
+                        </span>
+                    </div>
+                    <% }) %>
+                    <% } else { %>
+                    <div style="text-align:center; color:var(--muted); padding:30px; font-size:13px;">Belum ada kabel FO.</div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Peta -->
+            <div style="position:relative; overflow:hidden;">
+                <!-- Toolbar peta -->
+                <div class="map-toolbar">
+                    <button class="map-btn active" id="btnModeView" onclick="setMode('view',this)">👆 View</button>
+                    <% if (user && (user.role === 'admin' || user.role === 'technician')) { %>
+                    <button class="map-btn" id="btnModeNode" onclick="setMode('addNode',this)">📍 Tambah Node</button>
+                    <% } %>
+                    <% if (user && user.role === 'admin') { %>
+                    <button class="map-btn" id="btnModeCable" onclick="setMode('drawCable',this)">✏️ Gambar Kabel</button>
+                    <% } %>
+                    <button class="map-btn" id="btnFollowRoad" onclick="toggleFollowRoad()" style="display:none;">🛣 Ikuti Jalan</button>
+                    <button class="map-btn" id="btnFinishCable" onclick="finishCable()" style="display:none; background:#10B981; color:white; border-color:#10B981;">✓ Selesai</button>
+                    <button class="map-btn" id="btnCancelCable" onclick="cancelCable()" style="display:none; background:#EF4444; color:white; border-color:#EF4444;">✗ Batal</button>
+                    <div style="width:1px; background:var(--border);"></div>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                        <input type="checkbox" id="toggleCust" onchange="toggleCustomers()" checked> Pelanggan
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                        <input type="checkbox" id="toggleCables" onchange="toggleCablesLayer()" checked> Kabel
+                    </label>
+                </div>
+
+                <div id="foMap"></div>
+
+                <!-- Instruksi mode -->
+                <div id="modeHint" style="position:absolute; top:60px; left:50%; transform:translateX(-50%); z-index:1000; background:rgba(0,0,0,.7); color:white; padding:6px 14px; border-radius:20px; font-size:12px; display:none;"></div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Tambah/Edit Node -->
+<div class="modal-overlay" id="nodeModal" onclick="if(event.target===this)closeModal('nodeModal')">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="modal-title" id="nodeModalTitle">📍 Tambah Node FO</h3>
+            <button onclick="closeModal('nodeModal')" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="nodeForm">
+            <input type="hidden" id="nodeId">
+            <input type="hidden" id="nodeLat">
+            <input type="hidden" id="nodeLng">
+            <div class="form-grid">
+                <div class="form-group full">
+                    <label>Nama *</label>
+                    <input type="text" id="nodeName" class="form-control" required placeholder="Contoh: ODP-Jl.Merdeka-01">
+                </div>
+                <div class="form-group">
+                    <label>Tipe *</label>
+                    <select id="nodeType" class="form-control" onchange="updateCapacityHint()">
+                        <option value="OLT">OLT</option>
+                        <option value="ODC">ODC</option>
+                        <option value="ODP" selected>ODP</option>
+                        <option value="Splitter">Splitter</option>
+                        <option value="Tiang">Tiang</option>
+                        <option value="Closure">Closure</option>
+                        <option value="HandHole">Hand Hole</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Kapasitas Port <span id="capHint" style="font-size:10px; color:var(--muted);">(ODP: 8/16/32)</span></label>
+                    <input type="number" id="nodeCapacity" class="form-control" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Brand</label>
+                    <input type="text" id="nodeBrand" class="form-control" placeholder="Fiberhome, ZTE, dll">
+                </div>
+                <div class="form-group">
+                    <label>Model</label>
+                    <input type="text" id="nodeModel" class="form-control" placeholder="ODP-T08-SC">
+                </div>
+                <div class="form-group">
+                    <label>Parent Node</label>
+                    <select id="nodeParent" class="form-control">
+                        <option value="">-- Tidak ada --</option>
+                        <% nodes.forEach(n => { %>
+                        <option value="<%= n.id %>" data-type="<%= n.type %>"><%= n.type %>: <%= n.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="nodeStatus" class="form-control">
+                        <option value="active">Aktif</option>
+                        <option value="inactive">Tidak Aktif</option>
+                        <option value="damaged">Rusak</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal Pasang</label>
+                    <input type="date" id="nodeInstallDate" class="form-control">
+                </div>
+                <div class="form-group full">
+                    <label>Alamat/Lokasi</label>
+                    <input type="text" id="nodeAddress" class="form-control" placeholder="Jl. Merdeka No.10, RT 01">
+                </div>
+                <div class="form-group full">
+                    <label>Koordinat</label>
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                        <input type="text" id="nodeLatDisplay" class="form-control" placeholder="Latitude" style="flex:1;" onchange="updateCoordFromInput()">
+                        <input type="text" id="nodeLngDisplay" class="form-control" placeholder="Longitude" style="flex:1;" onchange="updateCoordFromInput()">
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" onclick="getGPSLocation()" id="btnGPS"
+                            style="flex:1; padding:9px 12px; border-radius:10px; border:1px solid rgba(16,185,129,.35); background:rgba(16,185,129,.1); color:#10B981; font-size:13px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; display:flex; align-items:center; justify-content:center; gap:7px;">
+                            <i class="fas fa-crosshairs"></i> Ambil Lokasi GPS
+                        </button>
+                        <button type="button" onclick="openMapPicker()"
+                            style="flex:1; padding:9px 12px; border-radius:10px; border:1px solid rgba(59,130,246,.35); background:rgba(59,130,246,.1); color:#3B82F6; font-size:13px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; display:flex; align-items:center; justify-content:center; gap:7px;">
+                            <i class="fas fa-map-marker-alt"></i> Pilih di Peta
+                        </button>
+                    </div>
+                    <div id="gpsStatus" style="font-size:11px; color:var(--muted); margin-top:6px; display:none;"></div>
+                </div>
+                <!-- ── Koneksi Kabel FO (penginduk) ── -->
+                <div class="form-group full" style="background:var(--sub-bg); border-radius:12px; padding:14px; border:1px solid var(--border);">
+                    <label style="color:var(--primary);">🔌 Kabel FO Penginduk (Opsional)</label>
+                    <p style="font-size:11px; color:var(--muted); margin:0 0 12px;">Pilih kabel → tube → core yang menginduk node ini</p>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                        <div>
+                            <label style="font-size:10px; color:var(--muted); display:block; margin-bottom:4px;">KABEL</label>
+                            <select id="nodeFeedCable" class="form-control" onchange="loadFeedTubes(this.value)">
+                                <option value="">-- Pilih Kabel --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:10px; color:var(--muted); display:block; margin-bottom:4px;">TUBE</label>
+                            <select id="nodeFeedTube" class="form-control" onchange="loadFeedCores(this.value)" disabled>
+                                <option value="">-- Pilih Tube --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:10px; color:var(--muted); display:block; margin-bottom:4px;">CORE</label>
+                            <select id="nodeFeedCore" class="form-control" disabled>
+                                <option value="">-- Pilih Core --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p style="font-size:11px; color:var(--muted); margin:8px 0 0;">
+                        💡 Satu core bisa digunakan oleh banyak node di titik berbeda sepanjang kabel.
+                    </p>
+                    <input type="hidden" id="nodeFeedCableId">
+                    <input type="hidden" id="nodeFeedTubeId">
+                    <input type="hidden" id="nodeFeedCoreId">
+                </div>
+                <div class="form-group full">
+                    <label>Catatan</label>
+                    <textarea id="nodeNotes" class="form-control" rows="2" style="resize:vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('nodeModal')" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan Node</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Kabel -->
+<div class="modal-overlay" id="cableModal" onclick="if(event.target===this)closeModal('cableModal')">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="modal-title">🔌 Simpan Kabel FO</h3>
+            <button onclick="closeModal('cableModal')" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="cableForm">
+            <div class="form-grid">
+                <div class="form-group full">
+                    <label>Nama Kabel *</label>
+                    <input type="text" id="cableName" class="form-control" required placeholder="Contoh: FO-ODC01-ODP05">
+                </div>
+                <div class="form-group">
+                    <label>Tipe Kabel</label>
+                    <select id="cableType" class="form-control">
+                        <option value="Single Mode">Single Mode</option>
+                        <option value="Multi Mode">Multi Mode</option>
+                        <option value="ADSS">ADSS</option>
+                        <option value="OPGW">OPGW</option>
+                        <option value="Drop Cable">Drop Cable</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Jumlah Core</label>
+                    <select id="cableCoreCount" class="form-control">
+                        <option value="2">2</option>
+                        <option value="4">4</option>
+                        <option value="6">6</option>
+                        <option value="8">8</option>
+                        <option value="12" selected>12</option>
+                        <option value="24">24</option>
+                        <option value="48">48</option>
+                        <option value="96">96</option>
+                        <option value="144">144</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Dari Node</label>
+                    <select id="cableFrom" class="form-control">
+                        <option value="">-- Pilih --</option>
+                        <% nodes.forEach(n => { %>
+                        <option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Ke Node</label>
+                    <select id="cableTo" class="form-control">
+                        <option value="">-- Pilih --</option>
+                        <% nodes.forEach(n => { %>
+                        <option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Panjang (meter) — auto hitung</label>
+                    <input type="number" id="cableLength" class="form-control" placeholder="0" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Warna di Peta</label>
+                    <div style="display:flex; gap:6px; margin-top:4px;" id="colorPicker"></div>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="cableStatus" class="form-control">
+                        <option value="active">Aktif</option>
+                        <option value="under_construction">Dalam Pemasangan</option>
+                        <option value="inactive">Tidak Aktif</option>
+                        <option value="damaged">Rusak</option>
+                    </select>
+                </div>
+                <div class="form-group full">
+                    <label>Catatan</label>
+                    <input type="text" id="cableNotes" class="form-control" placeholder="Opsional">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('cableModal')" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan Kabel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Port Detail -->
+<div class="modal-overlay" id="portModal" onclick="if(event.target===this)closeModal('portModal')">
+    <div class="modal-card" style="max-width:640px;">
+        <div class="modal-header">
+            <h3 class="modal-title" id="portModalTitle">🔌 Port Manager</h3>
+            <button onclick="closeModal('portModal')" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div style="display:flex; gap:14px; margin-bottom:14px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(16,185,129,.4);display:inline-block;"></span> Tersedia</div>
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(239,68,68,.4);display:inline-block;"></span> Dipakai</div>
+            <div style="display:flex; align-items:center; gap:6px; font-size:12px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(245,158,11,.4);display:inline-block;"></span> Rusak</div>
+        </div>
+        <div class="port-grid" id="portGrid"></div>
+    </div>
+</div>
+
+<!-- Modal Edit Port -->
+<div class="modal-overlay" id="editPortModal" onclick="if(event.target===this)closeModal('editPortModal')">
+    <div class="modal-card" style="max-width:400px;">
+        <div class="modal-header">
+            <h3 class="modal-title" id="editPortTitle">Edit Port</h3>
+            <button onclick="closeModal('editPortModal')" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="editPortForm">
+            <input type="hidden" id="editPortId">
+            <div class="form-group">
+                <label>Status Port</label>
+                <select id="editPortStatus" class="form-control">
+                    <option value="available">Tersedia</option>
+                    <option value="used">Dipakai</option>
+                    <option value="reserved">Reserved</option>
+                    <option value="damaged">Rusak</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Pelanggan (jika Dipakai)</label>
+                <input type="text" id="editPortCust" class="form-control" placeholder="Nama pelanggan">
+            </div>
+            <div class="form-group">
+                <label>Label Port</label>
+                <input type="text" id="editPortLabel" class="form-control" placeholder="Contoh: Core-01-Blue">
+            </div>
+            <div class="form-group">
+                <label>Catatan</label>
+                <input type="text" id="editPortNotes" class="form-control">
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('editPortModal')" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Data dari server ──
+// Peta warna tube & core standar ITU-T (global scope)
+const CMAP = {
+    Merah:'#EF4444', Hijau:'#22C55E', Biru:'#3B82F6', Kuning:'#EAB308',
+    Putih:'#CBD5E1', 'Abu-abu':'#94A3B8', Coklat:'#92400E', Ungu:'#8B5CF6',
+    Tosca:'#06B6D4', Hitam:'#334155', Oranye:'#F97316', Pink:'#EC4899'
+};
+
+let FO_NODES   = <%- JSON.stringify(nodes) %>;
+const IS_ADMIN = '<%= user && user.role === "admin" ? "1" : "0" %>' === '1';
+let FO_CABLES  = <%- JSON.stringify(cables) %>;
+const CUSTOMERS  = <%- JSON.stringify(customers) %>;
+
+// ── Peta ──
+const map = L.map('foMap', { zoomControl: true, attributionControl: false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+// Tentukan center map
+// Pusat koordinat dari pengaturan, fallback ke node/pelanggan pertama
+const CFG_LAT  = parseFloat('<%- (settings && settings.map_center_lat)  || "" %>') || null;
+const CFG_LNG  = parseFloat('<%- (settings && settings.map_center_lng)  || "" %>') || null;
+const CFG_ZOOM = parseInt('<%- (settings && settings.map_default_zoom) || "" %>') || 13;
+
+let initLat  = CFG_LAT  || (FO_NODES.length > 0 && FO_NODES[0].lat ? FO_NODES[0].lat : (CUSTOMERS.length > 0 && CUSTOMERS[0].lat ? CUSTOMERS[0].lat : -7.5));
+let initLng  = CFG_LNG  || (FO_NODES.length > 0 && FO_NODES[0].lng ? FO_NODES[0].lng : (CUSTOMERS.length > 0 && CUSTOMERS[0].lng ? CUSTOMERS[0].lng : 110.5));
+let initZoom = CFG_ZOOM;
+map.setView([initLat, initLng], initZoom);
+
+// ── Icon per tipe node ──
+const NODE_CONFIG = {
+    OLT:      { emoji:'🏢', color:'#10B981', label:'OLT' },
+    ODC:      { emoji:'📦', color:'#8B5CF6', label:'ODC' },
+    ODP:      { emoji:'📍', color:'#3B82F6', label:'ODP' },
+    Splitter: { emoji:'🔀', color:'#F59E0B', label:'SPL' },
+    Tiang:    { emoji:'🪝', color:'#94A3B8', label:'TNG' },
+    Closure:  { emoji:'🔒', color:'#06B6D4', label:'CLS' },
+    HandHole: { emoji:'🕳', color:'#EF4444', label:'HH'  }
+};
+
+function makeNodeIcon(type, status) {
+    const cfg = NODE_CONFIG[type] || NODE_CONFIG.ODP;
+    const color = status === 'damaged' ? '#EF4444' : cfg.color;
+    return L.divIcon({
+        className: '',
+        html: `<div style="background:${color};color:white;border:2px solid white;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">${cfg.emoji}</div>`,
+        iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -20]
+    });
+}
+
+// ── Layer Groups ──
+const nodeLayer   = L.layerGroup().addTo(map);
+const cableLayer  = L.layerGroup().addTo(map);
+const custLayer   = L.layerGroup().addTo(map);
+const drawLayer   = L.layerGroup().addTo(map);
+
+// ── Render nodes ──
+const markerMap = {};
+function buildFeedInfo(n) {
+    const tubeColor = CMAP[n.feed_tube_color] || '#94A3B8';
+    const coreColor = CMAP[n.feed_core_color] || '#94A3B8';
+    if (n.feed_cable_name) {
+        return `<div style="margin:8px 0 4px; border-top:1px solid rgba(255,255,255,.08); padding-top:8px;">
+            <div style="font-size:10px; color:#94A3B8; font-weight:700; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">🔌 Koneksi Kabel FO</div>
+            <div class="pp-row"><span class="pp-label">Kabel</span><span class="pp-val" style="font-size:11px; color:#60A5FA; font-weight:700;">${n.feed_cable_name}</span></div>
+            <div class="pp-row"><span class="pp-label">Tube</span><span class="pp-val" style="display:flex;align-items:center;gap:5px;">
+                <span style="width:10px;height:10px;border-radius:3px;background:${tubeColor};flex-shrink:0;"></span>Tube ${n.feed_tube_number||'-'} — ${n.feed_tube_color||'-'}
+            </span></div>
+            <div class="pp-row"><span class="pp-label">Core</span><span class="pp-val" style="display:flex;align-items:center;gap:5px;">
+                <span style="width:10px;height:10px;border-radius:3px;background:${coreColor};flex-shrink:0;"></span>Core ${n.feed_core_number||'-'} — ${n.feed_core_color||'-'}
+            </span></div>
+        </div>`;
+    }
+    return `<div style="margin:8px 0 4px; border-top:1px solid rgba(255,255,255,.08); padding-top:8px; font-size:11px; color:#94A3B8; font-style:italic;">🔌 Belum terhubung ke kabel FO</div>`;
+}
+
+function renderNodes() {
+    nodeLayer.clearLayers();
+    FO_NODES.forEach(n => {
+        try {
+        if (!n.lat || !n.lng) return;
+        const cfg = NODE_CONFIG[n.type] || NODE_CONFIG.ODP;
+        const marker = L.marker([n.lat, n.lng], { icon: makeNodeIcon(n.type, n.status), draggable: false });
+
+        const pct      = n.capacity > 0 ? Math.round((n.used_ports/n.capacity)*100) : 0;
+        const barColor = pct >= 80 ? '#EF4444' : pct >= 60 ? '#F59E0B' : '#10B981';
+        const fi       = buildFeedInfo(n); // per-node
+
+        marker.bindPopup(`
+            <div class="node-popup">
+                <h4>${cfg.emoji} ${n.name}</h4>
+                <div class="pp-row"><span class="pp-label">Tipe</span><span class="pp-val">${n.type}</span></div>
+                ${n.brand ? `<div class="pp-row"><span class="pp-label">Brand</span><span class="pp-val">${n.brand} ${n.model||''}</span></div>` : ''}
+                ${n.address ? `<div class="pp-row"><span class="pp-label">Alamat</span><span class="pp-val" style="max-width:130px;text-align:right;">${n.address}</span></div>` : ''}
+                ${n.capacity > 0 ? `
+                <div class="pp-bar"><div class="pp-fill" style="width:${pct}%;background:${barColor};"></div></div>
+                <div class="pp-row"><span class="pp-label">Port</span><span class="pp-val" style="color:${barColor};">${n.used_ports||0}/${n.capacity} (${pct}%)</span></div>` : ''}
+                <div class="pp-row"><span class="pp-label">Status</span><span class="pp-val" style="color:${n.status==='active'?'#10B981':n.status==='damaged'?'#EF4444':'#94A3B8'};">${n.status}</span></div>
+                ${fi}
+                <div class="pp-actions">
+                    ${n.capacity > 0 ? `<button class="pp-btn" style="background:rgba(59,130,246,.15);color:#60A5FA;" onclick="openPortManager(${n.id},'${n.name.replace(/'/g,"\\'")}')">🔌 Port</button>` : ''}
+                    <button class="pp-btn" style="background:rgba(245,158,11,.15);color:#F59E0B;" onclick="openEditNodeModal(${n.id})">✏️ Edit</button>
+                    ${IS_ADMIN ? `<button class="pp-btn" style="background:rgba(239,68,68,.15);color:#EF4444;" onclick="deleteNode(${n.id})">🗑 Hapus</button>` : ''}
+                </div>
+            </div>`, { maxWidth:300 });
+
+        marker.addTo(nodeLayer);
+        markerMap[n.id] = marker;
+        } catch(nodeErr) { console.warn('renderNode error for', n.name, nodeErr.message); }
+    });
+}
+
+// ── Render kabel ──
+function renderCables() {
+    cableLayer.clearLayers();
+    FO_CABLES.forEach(c => {
+        if (!c.path || c.path.length < 2) return;
+        const line = L.polyline(c.path, {
+            color: c.color || '#FF6B35',
+            weight: 3.5,
+            opacity: 0.85,
+            dashArray: c.status === 'under_construction' ? '8 6' : null
+        });
+        line.bindTooltip(`<b>${c.name}</b><br>${c.cable_type} · ${c.core_count} core · ${c.length_m >= 1000 ? (c.length_m/1000).toFixed(2)+'km' : c.length_m+'m'}`, { sticky:true });
+        line.addTo(cableLayer);
+    });
+}
+
+// ── Render pelanggan ──
+const custIcon = L.divIcon({ className:'', html:'<div style="width:10px;height:10px;border-radius:50%;background:#60A5FA;border:1.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>', iconSize:[10,10], iconAnchor:[5,5] });
+function renderCustomers() {
+    custLayer.clearLayers();
+    CUSTOMERS.forEach(c => {
+        if (!c.lat || !c.lng) return;
+        L.marker([c.lat, c.lng], { icon: custIcon }).bindTooltip(c.name, { sticky:true }).addTo(custLayer);
+    });
+}
+
+renderNodes();
+renderCables();
+renderCustomers();
+
+// map state dipertahankan via refreshMap API, tidak perlu sessionStorage
+
+// ── Mode & Drawing ──
+let currentMode = 'view';
+let drawPoints  = [];
+let drawMarkers = [];
+let drawLine    = null;
+let pendingLat  = null, pendingLng = null;
+let selectedCableColor = '#FF6B35';
+const CABLE_COLORS = ['#FF6B35','#3B82F6','#10B981','#F59E0B','#8B5CF6','#EF4444','#06B6D4','#94A3B8'];
+
+// Build color picker
+const cp = document.getElementById('colorPicker');
+CABLE_COLORS.forEach(c => {
+    const el = document.createElement('div');
+    el.style.cssText = `width:24px;height:24px;border-radius:6px;background:${c};cursor:pointer;border:2px solid transparent;transition:all .2s;`;
+    el.onclick = () => { selectedCableColor = c; document.getElementById('colorPicker').querySelectorAll('div').forEach(d=>d.style.borderColor='transparent'); el.style.borderColor='white'; };
+    cp.appendChild(el);
+});
+cp.children[0].style.borderColor = 'white';
+
+function setMode(mode, btn) {
+    currentMode = mode;
+    document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    document.getElementById('btnFollowRoad').style.display  = mode === 'drawCable' ? '' : 'none';
+    document.getElementById('btnFinishCable').style.display = mode === 'drawCable' ? '' : 'none';
+    document.getElementById('btnCancelCable').style.display = mode === 'drawCable' ? '' : 'none';
+    const hint = document.getElementById('modeHint');
+    if (mode === 'addNode') {
+        hint.textContent = '🖱 Klik di peta untuk meletakkan node baru';
+        hint.style.display = '';
+    } else if (mode === 'drawCable') {
+        hint.textContent = '✏️ Klik untuk menambah titik jalur kabel. Klik titik pertama/terakhir atau tombol Selesai untuk menyimpan.';
+        hint.style.display = '';
+        drawPoints = []; drawMarkers = [];
+    } else {
+        hint.style.display = 'none';
+        cancelCable();
+    }
+    map.getContainer().style.cursor = mode === 'view' ? '' : 'crosshair';
+}
+
+function toggleFollowRoad() {
+    showToast('Mode ikuti jalan: Klik titik-titik sepanjang jalan', 'info');
+}
+
+// Map click handler
+map.on('click', async (e) => {
+    if (currentMode === 'addNode') {
+        pendingLat = e.latlng.lat;
+        pendingLng = e.latlng.lng;
+        openAddNodeModal(pendingLat, pendingLng);
+    } else if (currentMode === 'drawCable') {
+        const pt = [e.latlng.lat, e.latlng.lng];
+        drawPoints.push(pt);
+
+        const dot = L.circleMarker(pt, { radius:5, color:'#FF6B35', fillColor:'#FF6B35', fillOpacity:1, weight:2 }).addTo(drawLayer);
+        drawMarkers.push(dot);
+
+        if (drawLine) drawLayer.removeLayer(drawLine);
+        if (drawPoints.length > 1) {
+            drawLine = L.polyline(drawPoints, { color: selectedCableColor, weight:3, opacity:.8, dashArray:'6 4' }).addTo(drawLayer);
+            // Auto hitung panjang
+            let totalM = 0;
+            for (let i = 1; i < drawPoints.length; i++) {
+                totalM += map.distance(drawPoints[i-1], drawPoints[i]);
+            }
+            document.getElementById('cableLength').value = Math.round(totalM);
+        }
+    }
+});
+
+function finishCable() {
+    if (drawPoints.length < 2) { showToast('Minimal 2 titik untuk menggambar kabel', 'error'); return; }
+    document.getElementById('cableModal').style.display = 'flex';
+}
+
+function cancelCable() {
+    drawPoints = [];
+    drawMarkers.forEach(m => drawLayer.removeLayer(m));
+    drawMarkers = [];
+    if (drawLine) { drawLayer.removeLayer(drawLine); drawLine = null; }
+}
+
+// ── Node forms ──
+function openAddNodeModal(lat, lng) {
+    document.getElementById('nodeModalTitle').textContent = '📍 Tambah Node FO';
+    document.getElementById('nodeId').value   = '';
+    document.getElementById('nodeName').value = '';
+    document.getElementById('nodeType').value = 'ODP';
+    document.getElementById('nodeCapacity').value = '';
+    document.getElementById('nodeBrand').value = '';
+    document.getElementById('nodeModel').value = '';
+    document.getElementById('nodeParent').value = '';
+    document.getElementById('nodeStatus').value = 'active';
+    document.getElementById('nodeInstallDate').value = '';
+    document.getElementById('nodeAddress').value = '';
+    document.getElementById('nodeNotes').value = '';
+    ['nodeFeedTube','nodeFeedCore'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.innerHTML='<option value="">-- Pilih --</option>'; el.disabled=true; }
+    });
+    document.getElementById('nodeFeedCable').value = '';
+    ['nodeFeedCableId','nodeFeedTubeId','nodeFeedCoreId'].forEach(id => {
+        const el = document.getElementById(id); if(el) el.value='';
+    });
+    if (lat && lng) {
+        document.getElementById('nodeLat').value = lat;
+        document.getElementById('nodeLng').value = lng;
+        document.getElementById('nodeLatDisplay').value = lat.toFixed(7);
+        document.getElementById('nodeLngDisplay').value = lng.toFixed(7);
+    } else {
+        document.getElementById('nodeLat').value = '';
+        document.getElementById('nodeLng').value = '';
+        document.getElementById('nodeLatDisplay').value = '';
+        document.getElementById('nodeLngDisplay').value = '';
+    }
+    document.getElementById('nodeModal').style.display = 'flex';
+}
+
+async function openEditNodeModal(id) {
+    const res = await fetch('/fo/api/nodes/' + id);
+    const d   = await res.json();
+    if (!d.success) return showToast('Gagal load data node', 'error');
+    const n = d.node;
+    document.getElementById('nodeModalTitle').textContent = '✏️ Edit Node: ' + n.name;
+    document.getElementById('nodeId').value = n.id;
+    document.getElementById('nodeName').value = n.name;
+    document.getElementById('nodeType').value = n.type;
+    document.getElementById('nodeCapacity').value = n.capacity || '';
+    document.getElementById('nodeBrand').value = n.brand || '';
+    document.getElementById('nodeModel').value = n.model || '';
+    document.getElementById('nodeParent').value = n.parent_id || '';
+    document.getElementById('nodeStatus').value = n.status || 'active';
+    document.getElementById('nodeInstallDate').value = n.install_date ? n.install_date.split('T')[0] : '';
+    document.getElementById('nodeAddress').value = n.address || '';
+    document.getElementById('nodeNotes').value = n.notes || '';
+    document.getElementById('nodeLat').value = n.lat || '';
+    document.getElementById('nodeLng').value = n.lng || '';
+    document.getElementById('nodeLatDisplay').value = n.lat || '';
+    document.getElementById('nodeLngDisplay').value = n.lng || '';
+    document.getElementById('nodeModal').style.display = 'flex';
+}
+
+// ── Cascade dropdown: Kabel → Tube → Core ──
+const EM = {Merah:'🔴',Hijau:'🟢',Biru:'🔵',Kuning:'🟡',Putih:'⚪','Abu-abu':'🩶',Coklat:'🟤',Ungu:'🟣',Tosca:'🩵',Hitam:'⚫',Oranye:'🟠',Pink:'🩷'};
+
+async function loadFOCables() {
+    const res  = await fetch('/fo/api/cables');
+    const data = await res.json();
+    if (!data.success) return;
+    const sel = document.getElementById('nodeFeedCable');
+    sel.innerHTML = '<option value="">-- Pilih Kabel --</option>';
+    data.cables.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.name} (${c.core_count} core)</option>`);
+}
+
+async function loadFeedTubes(cableId) {
+    const tubeEl = document.getElementById('nodeFeedTube');
+    const coreEl = document.getElementById('nodeFeedCore');
+    tubeEl.innerHTML = '<option value="">-- Pilih Tube --</option>';
+    coreEl.innerHTML = '<option value="">-- Pilih Core --</option>';
+    coreEl.disabled = true;
+    document.getElementById('nodeFeedCableId').value = cableId;
+    document.getElementById('nodeFeedTubeId').value  = '';
+    document.getElementById('nodeFeedCoreId').value  = '';
+    if (!cableId) { tubeEl.disabled = true; return; }
+    const res  = await fetch(`/fo/api/cables/${cableId}/tubes-list`);
+    const data = await res.json();
+    if (!data.success || !data.tubes.length) {
+        tubeEl.innerHTML = '<option value="">Belum ada tube — generate dulu di halaman Splice</option>';
+        return;
+    }
+    data.tubes.forEach(t => tubeEl.innerHTML += `<option value="${t.id}">${EM[t.tube_color]||''} Tube ${t.tube_number} — ${t.tube_color} (${t.core_count} core)</option>`);
+    tubeEl.disabled = false;
+}
+
+async function loadFeedCores(tubeId) {
+    const coreEl = document.getElementById('nodeFeedCore');
+    coreEl.innerHTML = '<option value="">-- Pilih Core --</option>';
+    document.getElementById('nodeFeedTubeId').value = tubeId;
+    document.getElementById('nodeFeedCoreId').value = '';
+    if (!tubeId) { coreEl.disabled = true; return; }
+    const res  = await fetch(`/fo/api/tubes/${tubeId}/cores-list`);
+    const data = await res.json();
+    if (!data.success) return;
+    data.cores.forEach(c => {
+        const info = c.assignment_count > 0 ? ` [dipakai: ${c.assigned_to}]` : '';
+        // Core TIDAK pernah disabled — bisa dipakai banyak node
+        coreEl.innerHTML += `<option value="${c.id}" ${c.status==='broken'?'disabled':''}>${EM[c.core_color]||''} Core ${c.core_number} — ${c.core_color}${info}</option>`;
+    });
+    coreEl.disabled = false;
+    coreEl.onchange = () => document.getElementById('nodeFeedCoreId').value = coreEl.value;
+}
+
+loadFOCables();
+
+// ── Refresh peta tanpa reload halaman ──
+async function refreshMap(focusLat, focusLng, focusZoom, openNodeId) {
+    // Fetch nodes & cables paralel
+    let rn = null, rc = null;
+    try {
+        [rn, rc] = await Promise.all([
+            fetch('/fo/api/nodes').then(r => r.json()).catch(() => null),
+            fetch('/fo/api/cables').then(r => r.json()).catch(() => null)
+        ]);
+    } catch(e) { console.error('refreshMap fetch error:', e); }
+
+    // Render nodes — error tidak blok renderCables
+    if (rn && rn.success) {
+        FO_NODES.length = 0;
+        rn.nodes.forEach(n => FO_NODES.push({
+            ...n,
+            lat: parseFloat(n.lat||0),
+            lng: parseFloat(n.lng||0)
+        }));
+        try { renderNodes(); } catch(e) { console.error('renderNodes error:', e); }
+    }
+
+    // Render cables — selalu dijalankan terlepas dari hasil renderNodes
+    if (rc && rc.success) {
+        FO_CABLES.length = 0;
+        rc.cables.forEach(c => FO_CABLES.push(c));
+        try { renderCables(); } catch(e) { console.error('renderCables error:', e); }
+    }
+
+    // Focus ke lokasi baru
+    if (focusLat && focusLng && !isNaN(focusLat) && !isNaN(focusLng)) {
+        map.flyTo([focusLat, focusLng], focusZoom||17, {animate:true, duration:0.8});
+        if (openNodeId) {
+            setTimeout(() => {
+                if (markerMap[openNodeId]) markerMap[openNodeId].openPopup();
+            }, 900);
+        }
+    }
+}
+
+function updateCoordFromInput() {
+    document.getElementById('nodeLat').value = document.getElementById('nodeLatDisplay').value;
+    document.getElementById('nodeLng').value = document.getElementById('nodeLngDisplay').value;
+}
+
+// ── Ambil koordinat GPS dari perangkat ──
+function getGPSLocation() {
+    const btn    = document.getElementById('btnGPS');
+    const status = document.getElementById('gpsStatus');
+    if (!navigator.geolocation) {
+        status.textContent = '⚠ Browser tidak mendukung GPS';
+        status.style.color = '#EF4444';
+        status.style.display = '';
+        return;
+    }
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengambil lokasi...';
+    btn.disabled  = true;
+    status.textContent = '📡 Mengakses GPS, harap tunggu...';
+    status.style.color = '#F59E0B';
+    status.style.display = '';
+
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            const lat = pos.coords.latitude.toFixed(7);
+            const lng = pos.coords.longitude.toFixed(7);
+            const acc = Math.round(pos.coords.accuracy);
+            document.getElementById('nodeLatDisplay').value = lat;
+            document.getElementById('nodeLngDisplay').value = lng;
+            document.getElementById('nodeLat').value = lat;
+            document.getElementById('nodeLng').value = lng;
+            // Gerakkan peta ke lokasi
+            map.flyTo([parseFloat(lat), parseFloat(lng)], 18, { animate:true, duration:0.8 });
+            if (window._gpsMarker) map.removeLayer(window._gpsMarker);
+            window._gpsMarker = L.circleMarker([parseFloat(lat), parseFloat(lng)], {
+                radius:10, color:'#10B981', fillColor:'#10B981', fillOpacity:0.4, weight:2
+            }).addTo(map).bindPopup('📍 Lokasi Anda (akurasi ±' + acc + 'm)').openPopup();
+
+            status.textContent = '✅ Koordinat berhasil diambil — Akurasi ±' + acc + ' meter';
+            status.style.color = '#10B981';
+            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Ambil Lokasi GPS';
+            btn.disabled  = false;
+        },
+        (err) => {
+            const msgs = {
+                1: 'GPS ditolak',
+                2: 'Sinyal GPS lemah, coba keluar ruangan.',
+                3: 'Waktu habis, coba lagi.'
+            };
+            status.textContent = '⚠ ' + (msgs[err.code] || err.message);
+            if (err.code === 1) {
+                status.innerHTML = '⚠ GPS ditolak — <b>Cara izinkan:</b> tap ikon 🔒 di address bar → Lokasi → Izinkan → refresh halaman.';
+            }
+            status.style.color = '#EF4444';
+            btn.innerHTML = '<i class="fas fa-crosshairs"></i> Ambil Lokasi GPS';
+            btn.disabled  = false;
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+}
+
+// ── Pilih koordinat dengan klik di peta ──
+function openMapPicker() {
+    document.getElementById('nodeModal').style.display = 'none';
+    showToast('Klik lokasi di peta untuk mengambil koordinat', 'info');
+    setMode('addNode', null);
+    // Override click handler sementara untuk pilih koordinat saja
+    map.once('click', (e) => {
+        const lat = e.latlng.lat.toFixed(7);
+        const lng = e.latlng.lng.toFixed(7);
+        document.getElementById('nodeLatDisplay').value = lat;
+        document.getElementById('nodeLngDisplay').value = lng;
+        document.getElementById('nodeLat').value = lat;
+        document.getElementById('nodeLng').value = lng;
+        document.getElementById('nodeModal').style.display = 'flex';
+        document.getElementById('gpsStatus').textContent = '📍 Koordinat dipilih dari peta';
+        document.getElementById('gpsStatus').style.color = '#3B82F6';
+        document.getElementById('gpsStatus').style.display = '';
+        setMode('view', document.getElementById('btnModeView'));
+    });
+}
+function updateCapacityHint() {
+    const hints = { ODP:'8/16/32', ODC:'1:4, 1:8, 1:16', OLT:'jumlah port PON', Splitter:'1:2~1:32' };
+    const t = document.getElementById('nodeType').value;
+    document.getElementById('capHint').textContent = hints[t] ? `(${hints[t]})` : '';
+}
+
+document.getElementById('nodeForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id   = document.getElementById('nodeId').value;
+    const body = {
+        name:          document.getElementById('nodeName').value,
+        type:          document.getElementById('nodeType').value,
+        lat:           document.getElementById('nodeLat').value || document.getElementById('nodeLatDisplay').value,
+        lng:           document.getElementById('nodeLng').value || document.getElementById('nodeLngDisplay').value,
+        address:       document.getElementById('nodeAddress').value,
+        capacity:      document.getElementById('nodeCapacity').value,
+        parent_id:     document.getElementById('nodeParent').value,
+        brand:         document.getElementById('nodeBrand').value,
+        model:         document.getElementById('nodeModel').value,
+        install_date:  document.getElementById('nodeInstallDate').value,
+        status:        document.getElementById('nodeStatus').value,
+        feed_cable_id: document.getElementById('nodeFeedCableId').value || null,
+        feed_tube_id:  document.getElementById('nodeFeedTubeId').value  || null,
+        feed_core_id:  document.getElementById('nodeFeedCoreId').value  || null,
+        notes:         document.getElementById('nodeNotes').value
+    };
+    const res = await fetch(id ? '/fo/api/nodes/'+id : '/fo/api/nodes', {
+        method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) {
+        closeModal('nodeModal');
+        setMode('view', document.getElementById('btnModeView'));
+        const lat = parseFloat(document.getElementById('nodeLat').value || document.getElementById('nodeLatDisplay').value);
+        const lng = parseFloat(document.getElementById('nodeLng').value || document.getElementById('nodeLngDisplay').value);
+        showToast(d.message || 'Node berhasil disimpan', 'success');
+        await refreshMap(lat || null, lng || null, 17, d.id);
+    }
+});
+
+// ── Cable form ──
+document.getElementById('cableForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    // Simpan drawPoints sebelum cancelCable() menghapusnya
+    const savedPath = [...drawPoints];
+    const body = {
+        name:         document.getElementById('cableName').value,
+        from_node_id: document.getElementById('cableFrom').value,
+        to_node_id:   document.getElementById('cableTo').value,
+        cable_type:   document.getElementById('cableType').value,
+        core_count:   document.getElementById('cableCoreCount').value,
+        length_m:     document.getElementById('cableLength').value,
+        path:         savedPath,
+        color:        selectedCableColor,
+        status:       document.getElementById('cableStatus').value,
+        notes:        document.getElementById('cableNotes').value
+    };
+    if (savedPath.length < 2) {
+        showToast('Gambar jalur kabel di peta dulu (minimal 2 titik)', 'error');
+        return;
+    }
+    const res = await fetch('/fo/api/cables', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) {
+        closeModal('cableModal');
+        cancelCable();
+        setMode('view', document.getElementById('btnModeView'));
+        showToast(d.message || 'Kabel berhasil disimpan', 'success');
+        const mid = savedPath.length > 0 ? savedPath[Math.floor(savedPath.length/2)] : null;
+        await refreshMap(mid ? mid[0] : null, mid ? mid[1] : null, 15, null);
+    }
+});
+
+// ── Port Manager ──
+async function openPortManager(nodeId, nodeName) {
+    document.getElementById('portModalTitle').textContent = `🔌 ${nodeName} — Port Manager`;
+    const res = await fetch('/fo/api/nodes/' + nodeId);
+    const d   = await res.json();
+    const grid = document.getElementById('portGrid');
+    if (!d.success || !d.ports.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:20px;">Tidak ada port terdaftar</div>';
+    } else {
+        grid.innerHTML = d.ports.map(p => `
+            <div class="port-item ${p.status}" onclick="openEditPort(${p.id},'${p.port_label||'Port-'+p.port_number}','${p.status}','${p.customer_name||''}','${p.notes||''}')">
+                <div class="port-num">${p.port_label || 'P-'+p.port_number}</div>
+                <div class="port-cust">${p.customer_name || (p.status === 'available' ? '✓' : p.status)}</div>
+            </div>`).join('');
+    }
+    document.getElementById('portModal').style.display = 'flex';
+}
+
+function openEditPort(id, label, status, custName, notes) {
+    document.getElementById('editPortId').value     = id;
+    document.getElementById('editPortTitle').textContent = 'Edit: ' + label;
+    document.getElementById('editPortStatus').value = status;
+    document.getElementById('editPortCust').value   = custName;
+    document.getElementById('editPortLabel').value  = label;
+    document.getElementById('editPortNotes').value  = notes;
+    document.getElementById('editPortModal').style.display = 'flex';
+}
+
+document.getElementById('editPortForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const id   = document.getElementById('editPortId').value;
+    const body = {
+        status:       document.getElementById('editPortStatus').value,
+        customer_name:document.getElementById('editPortCust').value,
+        port_label:   document.getElementById('editPortLabel').value,
+        notes:        document.getElementById('editPortNotes').value
+    };
+    const res = await fetch('/fo/api/ports/'+id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) closeModal('editPortModal');
+});
+
+// ── Delete node ──
+async function deleteNode(id) {
+    if (!confirm('Hapus node ini? Semua port akan ikut terhapus.')) return;
+    const res = await fetch('/fo/api/nodes/'+id, { method:'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { showToast(d.message, 'success'); await refreshMap(); }
+}
+
+// ── Focus ke node di peta ──
+function focusNode(id, lat, lng) {
+    if (!lat || !lng) return;
+    map.flyTo([lat, lng], 17, { animate: true, duration: 0.8 });
+    if (markerMap[id]) markerMap[id].openPopup();
+    document.querySelectorAll('.fo-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`.fo-item[data-id="${id}"]`);
+    if (el) el.classList.add('active');
+}
+
+function focusCable(id) {
+    const cable = FO_CABLES.find(c => c.id == id);
+    if (!cable || !cable.path || cable.path.length === 0) return;
+    map.fitBounds(cable.path, { padding:[40,40], animate:true });
+}
+
+// ── Sidebar tabs ──
+function switchSidebar(tab, btn) {
+    document.querySelectorAll('.fo-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sidebarNodes').style.display = tab === 'nodes' ? '' : 'none';
+    document.getElementById('sidebarCables').style.display = tab === 'cables' ? '' : 'none';
+}
+
+// ── Layer toggles ──
+function toggleCustomers() { document.getElementById('toggleCust').checked ? custLayer.addTo(map) : map.removeLayer(custLayer); }
+function toggleCablesLayer() { document.getElementById('toggleCables').checked ? cableLayer.addTo(map) : map.removeLayer(cableLayer); }
+
+// ── Helpers ──
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    const colors = { success:['rgba(16,185,129,.4)','#10B981'], error:['rgba(239,68,68,.4)','#EF4444'], info:['rgba(59,130,246,.4)','#60A5FA'] };
+    const [border, color] = colors[type] || colors.info;
+    t.style.borderColor = border; t.style.color = color;
+    t.classList.add('show');
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

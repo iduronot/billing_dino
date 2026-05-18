@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        /* ── Layout ── */
+        .splice-wrap { background:var(--card-bg); border:1px solid var(--border); border-radius:18px; padding:24px; }
+
+        /* ── Tube Card ── */
+        .tube-section { margin-bottom:24px; border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+        .tube-header { display:flex; align-items:center; gap:12px; padding:13px 18px; font-weight:700; font-size:14px; }
+        .tube-dot { width:20px; height:20px; border-radius:50%; border:3px solid rgba(255,255,255,.3); flex-shrink:0; }
+
+        /* ── Core Grid ── */
+        .core-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; padding:14px 18px; background:var(--sub-bg); }
+        .core-item { border:1px solid var(--border); border-radius:10px; padding:10px 8px; text-align:center; cursor:pointer; transition:all .2s; position:relative; }
+        .core-item:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.2); }
+        .core-item.available { border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.06); }
+        .core-item.spliced   { border-color:rgba(59,130,246,.3); background:rgba(59,130,246,.06); }
+        .core-item.used      { border-color:rgba(139,92,246,.3); background:rgba(139,92,246,.06); }
+        .core-item.broken    { border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.06); opacity:.6; }
+        .core-num    { font-size:12px; font-weight:800; }
+        .core-color-bar { height:6px; border-radius:3px; margin:5px auto; width:70%; }
+        .core-status { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-top:4px; }
+        .core-target { font-size:9px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+        /* ── Stats row ── */
+        .stats-row { display:flex; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
+        .stat-pill { background:var(--sub-bg); border:1px solid var(--border); border-radius:10px; padding:10px 18px; display:flex; align-items:center; gap:10px; }
+        .stat-pill-val { font-size:20px; font-weight:800; }
+        .stat-pill-label { font-size:11px; color:var(--muted); }
+
+        /* ── Modal ── */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; padding:16px; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:480px; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:6px; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+
+        /* Warna core standar */
+        .c-merah { background:#EF4444; }
+        .c-hijau { background:#22C55E; }
+        .c-biru { background:#3B82F6; }
+        .c-kuning { background:#EAB308; }
+        .c-putih { background:#E2E8F0; }
+        .c-abu-abu { background:#94A3B8; }
+        .c-coklat { background:#A16207; }
+        .c-ungu { background:#8B5CF6; }
+        .c-tosca { background:#06B6D4; }
+        .c-hitam { background:#1E293B; border:1px solid #475569; }
+        .c-oranye { background:#F97316; }
+        .c-pink { background:#EC4899; }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Diagram Splice FO' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">🔌 <%= cable.name %></h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">
+                    <%= cable.cable_type %> · <%= cable.core_count %> core ·
+                    <%= cable.length_m >= 1000 ? (cable.length_m/1000).toFixed(2)+'km' : cable.length_m+'m' %>
+                </p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="/fo/cables" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px;">← Kembali</a>
+                <% if (tubes.length === 0) { %>
+                <button class="btn" style="background:rgba(245,158,11,.15); color:#F59E0B; border:1px solid rgba(245,158,11,.3);" onclick="openGenerateModal()">
+                    <i class="fas fa-magic"></i> Generate Tube & Core
+                </button>
+                <% } else { %>
+                <button class="btn" style="background:rgba(245,158,11,.15); color:#F59E0B; border:1px solid rgba(245,158,11,.3);" onclick="openGenerateModal()">
+                    <i class="fas fa-redo"></i> Regenerate
+                </button>
+                <% } %>
+            </div>
+        </div>
+
+        <% if (tubes.length === 0) { %>
+        <div style="text-align:center; padding:80px 20px; color:var(--muted);">
+            <div style="font-size:48px; margin-bottom:16px; opacity:.3;">🔌</div>
+            <p style="font-size:15px; margin:0 0 16px;">Tube dan core belum digenerate.</p>
+            <button class="btn btn-primary" onclick="openGenerateModal()"><i class="fas fa-magic"></i> Generate Tube & Core Sekarang</button>
+        </div>
+        <% } else { %>
+
+        <!-- Stats -->
+        <%
+            let totalAvail = 0, totalSpliced = 0, totalUsed = 0, totalBroken = 0;
+            tubes.forEach(t => t.cores.forEach(c => {
+                if (c.status==='available') totalAvail++;
+                else if (c.status==='spliced') totalSpliced++;
+                else if (c.status==='used') totalUsed++;
+                else if (c.status==='broken') totalBroken++;
+            }));
+        %>
+        <div class="stats-row">
+            <div class="stat-pill">
+                <div style="width:10px;height:10px;border-radius:50%;background:#94A3B8;"></div>
+                <div><div class="stat-pill-val"><%= tubes.length %></div><div class="stat-pill-label">Tube</div></div>
+            </div>
+            <div class="stat-pill">
+                <div style="width:10px;height:10px;border-radius:50%;background:#10B981;"></div>
+                <div><div class="stat-pill-val"><%= totalAvail %></div><div class="stat-pill-label">Available</div></div>
+            </div>
+            <div class="stat-pill">
+                <div style="width:10px;height:10px;border-radius:50%;background:#3B82F6;"></div>
+                <div><div class="stat-pill-val"><%= totalSpliced %></div><div class="stat-pill-label">Spliced</div></div>
+            </div>
+            <div class="stat-pill">
+                <div style="width:10px;height:10px;border-radius:50%;background:#8B5CF6;"></div>
+                <div><div class="stat-pill-val"><%= totalUsed %></div><div class="stat-pill-label">Drop/Dipakai</div></div>
+            </div>
+            <% if (totalBroken > 0) { %>
+            <div class="stat-pill">
+                <div style="width:10px;height:10px;border-radius:50%;background:#EF4444;"></div>
+                <div><div class="stat-pill-val"><%= totalBroken %></div><div class="stat-pill-label">Putus</div></div>
+            </div>
+            <% } %>
+        </div>
+
+        <!-- Diagram Splice -->
+        <div class="splice-wrap">
+            <% tubes.forEach(tube => {
+                const tubeColorMap = {
+                    'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
+                    'Putih':'#E2E8F0','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
+                    'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+                };
+                const tColor = tubeColorMap[tube.tube_color] || '#94A3B8';
+                const tDark  = tube.tube_color === 'Putih' || tube.tube_color === 'Kuning';
+            %>
+            <div class="tube-section">
+                <div class="tube-header" style="background:<%= tColor %>22; border-bottom:1px solid <%= tColor %>44;">
+                    <div class="tube-dot" style="background:<%= tColor %>;"></div>
+                    <span style="color:<%= tDark ? '#1E293B' : 'var(--text)' %>;">
+                        Tube <%= tube.tube_number %> — <strong><%= tube.tube_color %></strong>
+                    </span>
+                    <span style="margin-left:auto; font-size:12px; color:var(--muted); font-weight:400;">
+                        <%= tube.cores.filter(c=>c.status==='available').length %> available /
+                        <%= tube.core_count %> core
+                    </span>
+                </div>
+                <div class="core-grid">
+                    <% tube.cores.forEach(core => {
+                        const cColorMap = {
+                            'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
+                            'Putih':'#CBD5E1','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
+                            'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+                        };
+                        const cColor = cColorMap[core.core_color] || '#94A3B8';
+                        const statusLabel = { available:'Bebas', spliced:'Splice', used:'Drop', broken:'Putus' };
+                        const statusTextColor = { available:'#10B981', spliced:'#60A5FA', used:'#A78BFA', broken:'#EF4444' };
+                        let target = '';
+                        if (core.status==='spliced' && core.splice_core_number) target = `→ Core ${core.splice_core_number} ${core.splice_tube_color||''}`;
+                        if (core.status==='used' && core.drop_node_name) target = `↓ ${core.drop_node_name}`;
+                    %>
+                    <div class="core-item <%= core.status %>"
+                         onclick="openCoreModal(<%= JSON.stringify(core).replace(/</g,'&lt;').replace(/>/g,'&gt;') %>)"
+                         title="Core <%= core.core_number %> — <%= core.core_color %> | <%= core.status %>">
+                        <div class="core-num" style="color:<%= statusTextColor[core.status] || '#94A3B8' %>;">
+                            #<%= core.core_number %>
+                        </div>
+                        <div class="core-color-bar" style="background:<%= cColor %>;"></div>
+                        <div class="core-status" style="color:<%= statusTextColor[core.status] %>;">
+                            <%= core.core_color %>
+                        </div>
+                        <div class="core-target"><%= target || statusLabel[core.status] || '-' %></div>
+                    </div>
+                    <% }) %>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+
+    </div>
+</main>
+
+<!-- Modal Generate -->
+<div class="modal-overlay" id="generateModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">⚙️ Generate Tube & Core</h3>
+            <button onclick="document.getElementById('generateModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div style="background:var(--sub-bg); border-radius:12px; padding:16px; margin-bottom:16px; font-size:13px; color:var(--muted);">
+            <strong style="color:var(--text);">Kabel:</strong> <%= cable.name %><br>
+            <strong style="color:var(--text);">Total Core:</strong> <%= cable.core_count %> core<br>
+            Warna tube dan core mengikuti standar ITU-T (Merah, Hijau, Biru, Kuning, Putih, Abu, Coklat, Ungu, Tosca, Hitam, Oranye, Pink)
+        </div>
+        <div class="form-group">
+            <label>Core per Tube</label>
+            <select id="coresPerTube" class="form-control">
+                <option value="12" selected>12 core/tube (standar)</option>
+                <option value="6">6 core/tube</option>
+                <option value="8">8 core/tube</option>
+                <option value="24">24 core/tube</option>
+            </select>
+            <p style="font-size:11px; color:var(--muted); margin-top:6px;">
+                <%= cable.core_count %> core ÷ 12 = <b><%= Math.ceil(cable.core_count/12) %> tube</b>
+            </p>
+        </div>
+        <% if (tubes.length > 0) { %>
+        <div style="background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.2); border-radius:10px; padding:12px; font-size:12px; color:#EF4444; margin-bottom:14px;">
+            ⚠ Regenerate akan menghapus semua data splice/drop yang sudah ada.
+        </div>
+        <% } %>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('generateModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="generateTubes()" class="btn btn-primary"><i class="fas fa-magic"></i> Generate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Edit Core -->
+<div class="modal-overlay" id="coreModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="coreModalTitle" style="font-size:17px;font-weight:700;margin:0;">Edit Core</h3>
+            <button onclick="document.getElementById('coreModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <input type="hidden" id="editCoreId">
+        <div id="coreBadge" style="margin-bottom:16px; display:flex; align-items:center; gap:10px;"></div>
+        <div class="form-group">
+            <label>Status Core</label>
+            <select id="coreStatus" class="form-control" onchange="updateCoreStatusUI()">
+                <option value="available">Available — Bebas digunakan</option>
+                <option value="spliced">Spliced — Disambung ke core lain</option>
+                <option value="used">Used/Drop — Turun ke ODC/ODP</option>
+                <option value="broken">Broken — Core putus</option>
+            </select>
+        </div>
+        <div id="spliceSection" style="display:none;">
+            <div class="form-group">
+                <label>Splice ke Core</label>
+                <select id="spliceTarget" class="form-control">
+                    <option value="">-- Pilih Core Tujuan --</option>
+                    <% allCores.forEach(c => { %>
+                    <option value="<%= c.id %>">
+                        [<%= c.cable_name %>] Tube <%= c.tube_number %> (<%= c.tube_color %>) · Core <%= c.core_number %> (<%= c.core_color %>)
+                        <% if(c.status==='spliced') { %>[sudah splice]<% } %>
+                    </option>
+                    <% }) %>
+                </select>
+            </div>
+        </div>
+        <div id="dropSection" style="display:none;">
+            <div class="form-group">
+                <label>Drop ke Node (ODC/ODP)</label>
+                <select id="dropTarget" class="form-control">
+                    <option value="">-- Pilih Node --</option>
+                    <% nodes.forEach(n => { %>
+                    <option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Catatan</label>
+            <input type="text" id="coreNotes" class="form-control" placeholder="Opsional">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px;">
+            <button onclick="document.getElementById('coreModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="saveCore()" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CABLE_ID = <%= cable.id %>;
+
+function openGenerateModal() {
+    document.getElementById('generateModal').style.display = 'flex';
+}
+
+async function generateTubes() {
+    const cpt = document.getElementById('coresPerTube').value;
+    showToast('Generating tube & core...', 'info');
+    const res = await fetch(`/fo/api/cables/${CABLE_ID}/generate-tubes`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ cores_per_tube: cpt })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { document.getElementById('generateModal').style.display = 'none'; setTimeout(() => location.reload(), 800); }
+}
+
+function openCoreModal(core) {
+    document.getElementById('editCoreId').value  = core.id;
+    document.getElementById('coreStatus').value  = core.status;
+    document.getElementById('coreNotes').value   = core.notes || '';
+    document.getElementById('spliceTarget').value = core.splice_to_core_id || '';
+    document.getElementById('dropTarget').value   = core.drop_to_node_id || '';
+
+    const colorMap = {
+        'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
+        'Putih':'#CBD5E1','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
+        'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+    };
+    const cColor = colorMap[core.core_color] || '#94A3B8';
+    document.getElementById('coreModalTitle').textContent = `Core #${core.core_number} — ${core.core_color}`;
+    document.getElementById('coreBadge').innerHTML = `
+        <div style="width:24px;height:24px;border-radius:6px;background:${cColor};border:2px solid rgba(255,255,255,.2);"></div>
+        <div>
+            <div style="font-weight:700;">Core #${core.core_number}</div>
+            <div style="font-size:12px;color:var(--muted);">${core.core_color} · Tube ${core.tube_id}</div>
+        </div>`;
+    updateCoreStatusUI();
+    document.getElementById('coreModal').style.display = 'flex';
+}
+
+function updateCoreStatusUI() {
+    const s = document.getElementById('coreStatus').value;
+    document.getElementById('spliceSection').style.display = s === 'spliced' ? '' : 'none';
+    document.getElementById('dropSection').style.display   = s === 'used'    ? '' : 'none';
+}
+
+async function saveCore() {
+    const id     = document.getElementById('editCoreId').value;
+    const status = document.getElementById('coreStatus').value;
+    const body   = {
+        status,
+        splice_to_core_id: status === 'spliced' ? document.getElementById('spliceTarget').value : null,
+        drop_to_node_id:   status === 'used'    ? document.getElementById('dropTarget').value   : null,
+        notes: document.getElementById('coreNotes').value
+    };
+    const res = await fetch(`/fo/api/cores/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { document.getElementById('coreModal').style.display='none'; setTimeout(() => location.reload(), 600); }
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    const colors = { success:['rgba(16,185,129,.4)','#10B981'], error:['rgba(239,68,68,.4)','#EF4444'], info:['rgba(59,130,246,.4)','#60A5FA'] };
+    const [border, color] = colors[type] || colors.info;
+    t.style.borderColor = border; t.style.color = color;
+    t.classList.add('show');
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

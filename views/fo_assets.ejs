@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px;}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+        .stat-card.blue::before{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+        .stat-card.green::before{background:linear-gradient(90deg,#10B981,#34D399);}
+        .stat-card.amber::before{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+        .stat-card.red::before{background:linear-gradient(90deg,#EF4444,#F87171);}
+        .stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+        .stat-val{font-size:22px;font-weight:800;}
+        .tbl-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;padding:11px 14px;text-align:left;white-space:nowrap;}
+        td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}tr:hover td{background:var(--hover-bg);}
+        .filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+        .filter-bar input,.filter-bar select{background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;font-family:'Outfit',sans-serif;outline:none;}
+        .filter-bar select option{background:#1E293B;color:#F8FAFC;}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:2000;padding:16px;}
+        .modal-card{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:540px;padding:28px;max-height:90vh;overflow-y:auto;}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .form-group{margin-bottom:12px;}.form-group.full{grid-column:1/-1;}
+        .form-group label{display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}.toast.show{display:block;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Inventaris FO' }) %>
+    <div class="content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+            <div><h1 class="page-title" style="margin:0;">📦 Inventaris & Aset FO</h1><p style="margin:4px 0 0;font-size:13px;color:var(--muted);">Kelola perangkat, kabel, dan perlengkapan jaringan FO</p></div>
+            <div style="display:flex;gap:8px;"><a href="/fo" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;">🗺 Peta FO</a><button class="btn btn-primary" onclick="openAddModal()">+ Tambah Aset</button></div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card blue"><div class="stat-label">Total Item</div><div class="stat-val"><%= astats.total_items||0 %></div></div>
+            <div class="stat-card green"><div class="stat-label">Total Qty</div><div class="stat-val"><%= (astats.total_qty||0).toLocaleString('id-ID') %></div></div>
+            <div class="stat-card amber"><div class="stat-label">Nilai Total</div><div class="stat-val" style="font-size:16px;">Rp <%= Math.floor(astats.total_value||0).toLocaleString('id-ID') %></div></div>
+            <div class="stat-card red"><div class="stat-label">Perlu Perhatian</div><div class="stat-val"><%= astats.need_attention||0 %></div></div>
+        </div>
+
+        <form method="GET" action="/fo/assets" class="filter-bar">
+            <input type="text" name="search" value="<%= search %>" placeholder="Cari nama, brand...">
+            <select name="category">
+                <option value="">Semua Kategori</option>
+                <% ['Kabel FO','Splitter','ODP Box','ODC','Closure','Konektor','Tool','Lain-lain'].forEach(cat=>{%><option value="<%= cat %>" <%=catFilter===cat?'selected':''%>><%= cat %></option><%})%>
+            </select>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
+            <%if(search||catFilter){%><a href="/fo/assets" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);">✕</a><%}%>
+        </form>
+
+        <div class="tbl-card">
+            <table>
+                <thead><tr><th>Nama Aset</th><th>Kategori</th><th>Brand/Model</th><th>Qty</th><th>Kondisi</th><th>Lokasi</th><th>Harga Beli</th><th>Aksi</th></tr></thead>
+                <tbody>
+                <%if(assets.length>0){%><%assets.forEach(a=>{
+                    const condColor=a.condition_status==='baik'?'#10B981':a.condition_status==='perlu_ganti'?'#F59E0B':'#EF4444';
+                %>
+                <tr>
+                    <td style="font-weight:600;">📦 <%= a.name %></td>
+                    <td style="font-size:12px;"><span style="background:rgba(59,130,246,.1);color:#60A5FA;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;"><%= a.category %></span></td>
+                    <td style="font-size:12px;color:var(--muted);"><%= a.brand||'-' %> <%= a.model||'' %></td>
+                    <td style="font-weight:700;"><%= a.quantity %> <span style="color:var(--muted);font-size:11px;"><%= a.unit %></span></td>
+                    <td><span style="padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;background:<%=condColor%>22;color:<%=condColor%>;"><%= a.condition_status.replace('_',' ') %></span></td>
+                    <td style="font-size:12px;color:var(--muted);"><%= a.node_name||'-' %></td>
+                    <td style="font-size:12px;"><%= a.purchase_price?'Rp '+parseFloat(a.purchase_price).toLocaleString('id-ID'):'-' %></td>
+                    <td><div style="display:flex;gap:5px;">
+                        <button onclick='openEditModal(<%- JSON.stringify(a) %>)' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-edit"></i></button>
+                        <% if (user && user.role === 'admin') { %><button onclick="deleteAsset(<%= a.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-trash"></i></button><% } %>
+                    </div></td>
+                </tr>
+                <%})%><%}else{%>
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:50px;">Belum ada aset terdaftar.</td></tr>
+                <%}%>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+<div class="modal-overlay" id="assetModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="aModalTitle" style="font-size:17px;font-weight:700;margin:0;">Tambah Aset FO</h3>
+            <button onclick="document.getElementById('assetModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="assetForm">
+            <input type="hidden" id="aId">
+            <div class="form-grid">
+                <div class="form-group full"><label>Nama Aset *</label><input type="text" id="aName" class="form-control" required placeholder="Kabel SM G657A 12 Core"></div>
+                <div class="form-group"><label>Kategori</label><select id="aCat" class="form-control"><%['Kabel FO','Splitter','ODP Box','ODC','Closure','Konektor','Tool','Lain-lain'].forEach(c=>{%><option value="<%= c %>"><%= c %></option><%})%></select></div>
+                <div class="form-group"><label>Kondisi</label><select id="aCond" class="form-control"><option value="baik">Baik</option><option value="perlu_ganti">Perlu Ganti</option><option value="rusak">Rusak</option></select></div>
+                <div class="form-group"><label>Brand</label><input type="text" id="aBrand" class="form-control" placeholder="Corning, Fiberhome"></div>
+                <div class="form-group"><label>Model</label><input type="text" id="aModel" class="form-control" placeholder="SMF-28"></div>
+                <div class="form-group"><label>Jumlah</label><input type="number" id="aQty" class="form-control" value="1" min="0"></div>
+                <div class="form-group"><label>Satuan</label><select id="aUnit" class="form-control"><option value="pcs">pcs</option><option value="meter">meter</option><option value="roll">roll</option><option value="box">box</option><option value="set">set</option></select></div>
+                <div class="form-group"><label>Lokasi Node</label><select id="aNode" class="form-control"><option value="">-</option><%nodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%></select></div>
+                <div class="form-group"><label>Tgl Beli</label><input type="date" id="aDate" class="form-control"></div>
+                <div class="form-group"><label>Harga Beli (Rp)</label><input type="number" id="aPrice" class="form-control" placeholder="0" min="0"></div>
+                <div class="form-group full"><label>Catatan</label><textarea id="aNotes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+                <button type="button" onclick="document.getElementById('assetModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+function openAddModal(){document.getElementById('aModalTitle').textContent='Tambah Aset FO';document.getElementById('aId').value='';['aName','aBrand','aModel','aNotes','aPrice'].forEach(id=>document.getElementById(id).value='');document.getElementById('aCat').value='Lain-lain';document.getElementById('aCond').value='baik';document.getElementById('aQty').value='1';document.getElementById('aUnit').value='pcs';document.getElementById('aNode').value='';document.getElementById('aDate').value='';document.getElementById('assetModal').style.display='flex';}
+function openEditModal(a){document.getElementById('aModalTitle').textContent='Edit: '+a.name;document.getElementById('aId').value=a.id;document.getElementById('aName').value=a.name;document.getElementById('aCat').value=a.category;document.getElementById('aCond').value=a.condition_status;document.getElementById('aBrand').value=a.brand||'';document.getElementById('aModel').value=a.model||'';document.getElementById('aQty').value=a.quantity;document.getElementById('aUnit').value=a.unit;document.getElementById('aNode').value=a.location_node_id||'';document.getElementById('aDate').value=a.purchase_date?a.purchase_date.split('T')[0]:'';document.getElementById('aPrice').value=a.purchase_price||'';document.getElementById('aNotes').value=a.notes||'';document.getElementById('assetModal').style.display='flex';}
+document.getElementById('assetForm').addEventListener('submit',async ev=>{ev.preventDefault();const id=document.getElementById('aId').value;const body={name:document.getElementById('aName').value,category:document.getElementById('aCat').value,condition_status:document.getElementById('aCond').value,brand:document.getElementById('aBrand').value,model:document.getElementById('aModel').value,quantity:document.getElementById('aQty').value,unit:document.getElementById('aUnit').value,location_node_id:document.getElementById('aNode').value,purchase_date:document.getElementById('aDate').value,purchase_price:document.getElementById('aPrice').value,notes:document.getElementById('aNotes').value};const res=await fetch(id?'/fo/api/assets/'+id:'/fo/api/assets',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success){document.getElementById('assetModal').style.display='none';setTimeout(()=>location.reload(),800);}});
+async function deleteAsset(id){if(!confirm('Hapus aset ini?'))return;const res=await fetch('/fo/api/assets/'+id,{method:'DELETE'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),800);}
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+</script>
+</body>
+</html>

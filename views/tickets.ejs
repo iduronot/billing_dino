@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+        .stat-card.red::before{background:linear-gradient(90deg,#EF4444,#F87171);}
+        .stat-card.orange::before{background:linear-gradient(90deg,#F97316,#FB923C);}
+        .stat-card.blue::before{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+        .stat-card.green::before{background:linear-gradient(90deg,#10B981,#34D399);}
+        .stat-card.amber::before{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+        .stat-card.gray::before{background:linear-gradient(90deg,#94A3B8,#CBD5E1);}
+        .stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+        .stat-val{font-size:26px;font-weight:800;line-height:1;}
+
+        .filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+        .filter-bar select,.filter-bar input{background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;font-family:'Outfit',sans-serif;outline:none;}
+        .filter-bar select option{background:#1E293B;color:#F8FAFC;}
+
+        .tbl-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;padding:11px 14px;text-align:left;white-space:nowrap;}
+        td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}tr:hover td{background:var(--hover-bg);}
+
+        .badge-priority{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+        .badge-priority.critical{background:rgba(239,68,68,.15);color:#EF4444;border:1px solid rgba(239,68,68,.3);}
+        .badge-priority.high{background:rgba(249,115,22,.15);color:#F97316;border:1px solid rgba(249,115,22,.3);}
+        .badge-priority.normal{background:rgba(59,130,246,.15);color:#60A5FA;border:1px solid rgba(59,130,246,.3);}
+        .badge-priority.low{background:rgba(148,163,184,.15);color:#94A3B8;border:1px solid rgba(148,163,184,.3);}
+
+        .badge-status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+        .badge-status.open{background:rgba(245,158,11,.15);color:#F59E0B;border:1px solid rgba(245,158,11,.3);}
+        .badge-status.in_progress{background:rgba(59,130,246,.15);color:#3B82F6;border:1px solid rgba(59,130,246,.3);}
+        .badge-status.closed{background:rgba(16,185,129,.15);color:#10B981;border:1px solid rgba(16,185,129,.3);}
+
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:2000;padding:16px;}
+        .modal-card{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:580px;padding:28px;max-height:90vh;overflow-y:auto;}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .form-group{margin-bottom:14px;}
+        .form-group label{display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .form-group.full{grid-column:1/-1;}
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}
+        .toast.show{display:block;}
+        .age-chip{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--sub-bg);}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Tiket Komplain' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">🎫 <%= isTechnician ? 'Tiket Saya' : 'Manajemen Tiket Komplain' %></h1>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">
+                    <%= isTechnician ? 'Tiket yang ditugaskan kepada Anda' : 'Kelola keluhan dan gangguan pelanggan' %>
+                </p>
+                <div id="liveClock" style="margin-top:8px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+                    <i class="fas fa-calendar-alt" style="color:var(--primary);"></i>
+                    <span id="dateDisplay"></span>
+                    <span style="color:var(--border);">|</span>
+                    <i class="fas fa-clock" style="color:var(--primary);"></i>
+                    <span id="timeDisplay"></span>
+                </div>
+            </div>
+            <% if (!isTechnician) { %>
+            <a href="/tickets/report" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;"><i class="fas fa-chart-bar"></i> Laporan</a>
+            <button class="btn btn-primary" onclick="openCreateModal()">+ Buat Tiket</button>
+            <% } %>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+            <div class="stat-card red">
+                <div class="stat-label">🚨 Critical</div>
+                <div class="stat-val" style="color:#EF4444;"><%= stats.critical_count||0 %></div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-label">⚡ Terbuka</div>
+                <div class="stat-val"><%= stats.open_count||0 %></div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-label">🔧 Dalam Proses</div>
+                <div class="stat-val"><%= stats.inprogress_count||0 %></div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-label">✅ Selesai</div>
+                <div class="stat-val"><%= stats.closed_count||0 %></div>
+            </div>
+            <% if (!isTechnician) { %>
+            <div class="stat-card amber">
+                <div class="stat-label">👤 Belum Ditugaskan</div>
+                <div class="stat-val"><%= stats.unassigned_count||0 %></div>
+            </div>
+            <% } %>
+            <div class="stat-card gray">
+                <div class="stat-label">⏱ Rata-rata Selesai</div>
+                <div class="stat-val" style="font-size:18px;"><%= stats.avg_resolve_hours ? Math.round(stats.avg_resolve_hours)+'j' : '-' %></div>
+            </div>
+        </div>
+
+        <!-- Filter -->
+        <form method="GET" action="/tickets" class="filter-bar">
+            <input type="text" name="search" value="<%= search %>" placeholder="🔍 Cari tiket, pelanggan..." style="flex:1;max-width:250px;">
+            <select name="status" onchange="this.form.submit()">
+                <option value="all" <%=statusFilter==='all'?'selected':''%>>Semua Status</option>
+                <option value="open" <%=statusFilter==='open'?'selected':''%>>🟡 Terbuka</option>
+                <option value="in_progress" <%=statusFilter==='in_progress'?'selected':''%>>🔵 Proses</option>
+                <option value="closed" <%=statusFilter==='closed'?'selected':''%>>🟢 Selesai</option>
+            </select>
+            <select name="priority">
+                <option value="">Semua Prioritas</option>
+                <option value="critical" <%=priorityFilter==='critical'?'selected':''%>>🚨 Critical</option>
+                <option value="high" <%=priorityFilter==='high'?'selected':''%>>⚡ Tinggi</option>
+                <option value="normal" <%=priorityFilter==='normal'?'selected':''%>>Normal</option>
+                <option value="low" <%=priorityFilter==='low'?'selected':''%>>Rendah</option>
+            </select>
+            <select name="category">
+                <option value="">Semua Kategori</option>
+                <% categories.forEach(c => { %>
+                <option value="<%= c %>" <%=catFilter===c?'selected':''%>><%= c.replace('_',' ') %></option>
+                <% }) %>
+            </select>
+            <% if (!isTechnician) { %>
+            <select name="tech">
+                <option value="">Semua Teknisi</option>
+                <% technicians.forEach(t => { %>
+                <option value="<%= t.id %>" <%=techFilter==t.id?'selected':''%>><%= t.username %></option>
+                <% }) %>
+            </select>
+            <% } %>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i></button>
+            <%if(search||statusFilter!=='open'||priorityFilter||catFilter||techFilter){%>
+            <a href="/tickets" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);">✕</a>
+            <%}%>
+        </form>
+
+        <!-- Table -->
+        <div class="tbl-card">
+            <table>
+                <thead><tr>
+                    <th>#</th><th>Pelanggan</th><th>Judul & Kategori</th>
+                    <th>Prioritas</th><th>Status</th><th>Teknisi</th>
+                    <th>Dibuat</th><th>Umur</th><th>Komentar</th><th>Aksi</th>
+                </tr></thead>
+                <tbody>
+                <% if(tickets.length>0){ %>
+                <% tickets.forEach(t => {
+                    const ageH = t.age_hours || 0;
+                    const ageLabel = ageH < 1 ? 'Baru' : ageH < 24 ? Math.round(ageH)+'j' : Math.floor(ageH/24)+'h';
+                    const ageColor = t.status==='closed' ? '#10B981' : ageH > 48 ? '#EF4444' : ageH > 24 ? '#F59E0B' : 'var(--muted)';
+                    const catLabel = {gangguan:'📡 Gangguan',no_signal:'📵 No Signal',lambat:'🐌 Lambat',billing:'💳 Billing',pasang_baru:'🆕 Pasang Baru',relokasi:'🚚 Relokasi','lain-lain':'📝 Lain-lain'}[t.category]||t.category;
+                %>
+                <tr>
+                    <td style="font-size:11px;color:var(--muted);">#<%= t.id %></td>
+                    <td>
+                        <% if(t.source==='infrastruktur'){ %>
+                        <span style="background:rgba(245,158,11,.1);color:#F59E0B;border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;">📡 Infrastruktur</span>
+                        <% } else { %>
+                        <div style="font-weight:600;"><%= t.customer_name||'Umum' %></div>
+                        <% if(t.customer_phone){ %><div style="font-size:11px;color:var(--muted);"><%= t.customer_phone %></div><% } %>
+                        <% } %>
+                    </td>
+                    <td>
+                        <a href="/tickets/<%= t.id %>" style="font-weight:600;color:var(--text);text-decoration:none;display:block;"><%= t.title %></a>
+                        <span style="font-size:11px;color:var(--muted);"><%= catLabel %></span>
+                    </td>
+                    <td><span class="badge-priority <%= t.priority %>"><%= t.priority %></span></td>
+                    <td><span class="badge-status <%= t.status %>"><%= t.status.replace('_',' ') %></span></td>
+                    <td style="font-size:12px;">
+                        <% const techNames = t.technician_names ? t.technician_names.split(',').filter(n=>n) : []; %>
+                        <% if(techNames.length > 0){ %>
+                        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
+                        <% techNames.forEach(name => { %>
+                            <span style="background:rgba(139,92,246,.1);color:#A78BFA;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;border:1px solid rgba(139,92,246,.2);">👷 <%= name %></span>
+                        <% }) %>
+                        </div>
+                        <% } %>
+                        <% if (!isTechnician) { %>
+                        <button onclick="openAssignModal(<%= t.id %>)" style="background:none;border:1px dashed var(--border);color:var(--muted);font-size:11px;cursor:pointer;padding:2px 8px;border-radius:8px;font-family:'Outfit',sans-serif;">
+                            <%= techNames.length > 0 ? '+ Tambah' : '+ Tugaskan' %>
+                        </button>
+                        <% } %>
+                    </td>
+                    <td style="font-size:11px; color:var(--muted); white-space:nowrap;">
+                        <div><%= new Date(t.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></div>
+                        <div style="font-size:10px;"><%= new Date(t.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) %></div>
+                    </td>
+                    <td><span class="age-chip" style="color:<%= ageColor %>;"><%= ageLabel %></span></td>
+                    <td style="text-align:center;font-size:12px;"><%= t.comment_count||0 %></td>
+                    <td>
+                        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                            <a href="/tickets/<%= t.id %>" style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:12px;" title="Detail"><i class="fas fa-eye"></i></a>
+                            <% if(t.status!=='closed'){ %>
+                            <button onclick="quickClose(<%= t.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08);color:#10B981;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="Tutup"><i class="fas fa-check"></i></button>
+                            <% } else { %>
+                            <button onclick="reopenTicket(<%= t.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.08);color:#F59E0B;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="Buka Kembali"><i class="fas fa-redo"></i></button>
+                            <% } %>
+                            <% if(user && user.role==='admin'){ %>
+                            <button onclick="deleteTicket(<%= t.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;" title="Hapus"><i class="fas fa-trash"></i></button>
+                            <% } %>
+                        </div>
+                    </td>
+                </tr>
+                <% }) %>
+                <% } else { %>
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:60px;">
+                    <i class="fas fa-ticket-alt" style="font-size:36px;opacity:.2;display:block;margin-bottom:12px;"></i>
+                    Tidak ada tiket <%= statusFilter!=='all'?'dengan status '+statusFilter:'' %>
+                </td></tr>
+                <% } %>
+                </tbody>
+            </table>
+            <!-- Pagination -->
+            <% if(pagination.totalPages>1){ %>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;">
+                <div style="font-size:13px;color:var(--muted);">
+                    Total <b style="color:var(--text);"><%= pagination.total %></b> tiket
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <% for(let p=1;p<=pagination.totalPages;p++){ %>
+                    <a href="?page=<%= p %>&status=<%= statusFilter %>&priority=<%= priorityFilter %>&category=<%= catFilter %>&search=<%= search %>"
+                       style="width:34px;height:34px;border-radius:8px;border:1px solid <%=p===pagination.page?'var(--primary)':'var(--border)'%>;background:<%=p===pagination.page?'var(--primary)':'var(--sub-bg)'%>;color:<%=p===pagination.page?'white':'var(--muted)'%>;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-size:13px;"><%= p %></a>
+                    <% } %>
+                </div>
+            </div>
+            <% } %>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Buat Tiket -->
+<div class="modal-overlay" id="createModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">🎫 Buat Tiket Baru</h3>
+            <button onclick="document.getElementById('createModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="createForm">
+            <div class="form-grid">
+                <!-- Tipe Tiket -->
+                <div class="form-group full">
+                    <label>Tipe Tiket</label>
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" id="typePelanggan" onclick="setTicketType('pelanggan')"
+                            style="flex:1;padding:10px;border-radius:10px;border:2px solid var(--primary);background:rgba(59,130,246,.1);color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;">
+                            👤 Pelanggan
+                        </button>
+                        <button type="button" id="typeInfra" onclick="setTicketType('infrastruktur')"
+                            style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;">
+                            📡 Infrastruktur
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Seksi Pelanggan (dengan search) -->
+                <div class="form-group full" id="sectionPelanggan">
+                    <label>Cari Pelanggan</label>
+                    <input type="text" id="c_search" class="form-control" placeholder="Ketik nama pelanggan..."
+                        oninput="filterCustomers(this.value)" autocomplete="off"
+                        style="margin-bottom:6px;">
+                    <div id="c_dropdown" style="border:1px solid var(--border);border-radius:10px;max-height:160px;overflow-y:auto;display:none;background:var(--sidebar-bg);">
+                        <!-- diisi JS -->
+                    </div>
+                    <input type="hidden" id="c_customer" value="">
+                    <div id="c_selected" style="display:none;padding:8px 12px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;font-size:13px;display:flex;align-items:center;justify-content:space-between;">
+                        <span id="c_selected_name"></span>
+                        <button type="button" onclick="clearCustomer()" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:14px;">×</button>
+                    </div>
+                </div>
+
+                <!-- Seksi Infrastruktur -->
+                <div class="form-group full" id="sectionInfra" style="display:none;">
+                    <label>Lokasi / Titik Gangguan</label>
+                    <input type="text" id="c_infra_location" class="form-control" placeholder="Contoh: ODC-Jl.Merdeka, Tiang km-5, Splitter Gedung A">
+                    <p style="font-size:11px;color:var(--muted);margin-top:6px;">Tiket infrastruktur tidak terkait pelanggan — untuk kerusakan transmisi, kabel putus, ODC, ODP, dsb.</p>
+                </div>
+
+                <div class="form-group full">
+                    <label>Judul Keluhan *</label>
+                    <input type="text" id="c_title" class="form-control" required placeholder="Contoh: Kabel fiber putus di tiang km-5">
+                </div>
+                <div class="form-group">
+                    <label>Kategori</label>
+                    <select id="c_category" class="form-control">
+                        <% categories.forEach(cat => { %><option value="<%= cat %>"><%= cat.replace('_',' ') %></option><% }) %>
+                        <option value="transmisi">📡 Transmisi</option>
+                        <option value="kabel_putus">🔌 Kabel Putus</option>
+                        <option value="perangkat_rusak">⚙️ Perangkat Rusak</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Prioritas</label>
+                    <select id="c_priority" class="form-control">
+                        <option value="normal">Normal</option>
+                        <option value="high">Tinggi</option>
+                        <option value="critical">Critical 🚨</option>
+                        <option value="low">Rendah</option>
+                    </select>
+                </div>
+                <div class="form-group full">
+                    <label>Deskripsi</label>
+                    <textarea id="c_desc" class="form-control" rows="3" style="resize:vertical;" placeholder="Jelaskan detail masalah..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tugaskan ke Teknisi</label>
+                    <select id="c_tech" class="form-control">
+                        <option value="">-- Belum ditugaskan --</option>
+                        <% technicians.forEach(t => { %><option value="<%= t.id %>"><%= t.username %></option><% }) %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Lokasi Tambahan</label>
+                    <input type="text" id="c_location" class="form-control" placeholder="Jl. Merdeka, RT 02">
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px;">
+                <button type="button" onclick="document.getElementById('createModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Buat Tiket</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Tugaskan Teknisi -->
+<div class="modal-overlay" id="assignModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card" style="max-width:420px;">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">👷 Penugasan Teknisi</h3>
+            <button onclick="document.getElementById('assignModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <input type="hidden" id="assignTicketId">
+        <div id="assignedTechList" style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:6px;min-height:24px;"></div>
+        <div class="form-group">
+            <label>Tambah Teknisi</label>
+            <div style="display:flex;gap:8px;">
+                <select id="assignTechId" class="form-control" style="flex:1;">
+                    <option value="">-- Pilih --</option>
+                    <% technicians.forEach(t => { %><option value="<%= t.id %>" data-name="<%= t.username %>"><%= t.username %></option><% }) %>
+                </select>
+                <button onclick="saveAssign()" class="btn btn-primary" style="white-space:nowrap;">+ Tambah</button>
+            </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:4px;">
+            <button onclick="document.getElementById('assignModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Data pelanggan untuk search
+const CUSTOMERS_DATA = <%- JSON.stringify(customers) %>;
+let ticketType = 'pelanggan';
+
+function setTicketType(type) {
+    ticketType = type;
+    const isPelanggan = type === 'pelanggan';
+    document.getElementById('sectionPelanggan').style.display = isPelanggan ? '' : 'none';
+    document.getElementById('sectionInfra').style.display     = isPelanggan ? 'none' : '';
+    document.getElementById('typePelanggan').style.cssText = isPelanggan
+        ? 'flex:1;padding:10px;border-radius:10px;border:2px solid var(--primary);background:rgba(59,130,246,.1);color:var(--primary);font-size:13px;font-weight:600;cursor:pointer;font-family:Outfit,sans-serif;'
+        : 'flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:Outfit,sans-serif;';
+    document.getElementById('typeInfra').style.cssText = !isPelanggan
+        ? 'flex:1;padding:10px;border-radius:10px;border:2px solid #F59E0B;background:rgba(245,158,11,.1);color:#F59E0B;font-size:13px;font-weight:600;cursor:pointer;font-family:Outfit,sans-serif;'
+        : 'flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:Outfit,sans-serif;';
+    // Auto-set kategori
+    if (!isPelanggan) document.getElementById('c_category').value = 'transmisi';
+    else document.getElementById('c_category').value = 'gangguan';
+}
+
+function filterCustomers(q) {
+    const dd = document.getElementById('c_dropdown');
+    if (!q.trim()) { dd.style.display='none'; return; }
+    const filtered = CUSTOMERS_DATA.filter(c =>
+        c.name.toLowerCase().includes(q.toLowerCase()) ||
+        (c.phone && c.phone.includes(q))
+    ).slice(0, 15);
+    if (!filtered.length) { dd.innerHTML='<div style="padding:12px;color:var(--muted);font-size:13px;">Pelanggan tidak ditemukan</div>'; dd.style.display=''; return; }
+    dd.innerHTML = filtered.map(c => `
+        <div onclick="selectCustomer(${c.id}, '${c.name.replace(/'/g,"\'")}', '${(c.phone||'').replace(/'/g,"\'")}' )"
+            style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;"
+            onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background=''">
+            <div>
+                <div style="font-weight:600;">${c.name}</div>
+                ${c.phone ? `<div style="font-size:11px;color:var(--muted);">${c.phone}</div>` : ''}
+            </div>
+            <i class="fas fa-check" style="color:var(--primary);display:none;" class="check-icon"></i>
+        </div>`).join('');
+    dd.style.display = '';
+}
+
+function selectCustomer(id, name, phone) {
+    document.getElementById('c_customer').value = id;
+    document.getElementById('c_search').value   = '';
+    document.getElementById('c_dropdown').style.display = 'none';
+    document.getElementById('c_selected_name').textContent = name + (phone ? ' — ' + phone : '');
+    document.getElementById('c_selected').style.display = 'flex';
+}
+
+function clearCustomer() {
+    document.getElementById('c_customer').value = '';
+    document.getElementById('c_search').value   = '';
+    document.getElementById('c_selected').style.display = 'none';
+}
+
+// Tutup dropdown saat klik di luar
+document.addEventListener('click', e => {
+    if (!e.target.closest('#sectionPelanggan')) {
+        document.getElementById('c_dropdown').style.display = 'none';
+    }
+});
+
+// ── Live clock ──
+function updateClock() {
+    const now  = new Date();
+    const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    const months = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const dateEl = document.getElementById('dateDisplay');
+    const timeEl = document.getElementById('timeDisplay');
+    if (dateEl) dateEl.textContent = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    if (timeEl) timeEl.textContent = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+function openCreateModal() {
+    // Reset form
+    document.getElementById('createModal').style.display='flex';
+    setTicketType('pelanggan');
+    clearCustomer();
+    ['c_title','c_desc','c_location','c_infra_location'].forEach(id => {
+        const el = document.getElementById(id); if(el) el.value='';
+    });
+    document.getElementById('c_priority').value = 'normal';
+    document.getElementById('c_tech').value = '';
+}
+
+document.getElementById('createForm').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const techId = document.getElementById('c_tech').value;
+    const isInfra = ticketType === 'infrastruktur';
+    const loc = isInfra
+        ? (document.getElementById('c_infra_location').value || document.getElementById('c_location').value)
+        : document.getElementById('c_location').value;
+    const res = await fetch('/tickets/api/create', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+            customer_id: isInfra ? null : (document.getElementById('c_customer').value||null),
+            title:       document.getElementById('c_title').value,
+            description: document.getElementById('c_desc').value,
+            priority:    document.getElementById('c_priority').value,
+            category:    document.getElementById('c_category').value,
+            location:    loc,
+            source:      isInfra ? 'infrastruktur' : 'admin',
+        })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if (d.success) {
+        document.getElementById('createModal').style.display='none';
+        // Auto-assign jika dipilih
+        if (techId && d.id) {
+            await fetch(`/tickets/api/${d.id}/assign`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ technician_id: techId })
+            });
+        }
+        setTimeout(() => location.reload(), 800);
+    }
+});
+
+let _assignCurrentTicket = null;
+let _assignedTechIds = [];
+
+async function openAssignModal(id) {
+    _assignCurrentTicket = id;
+    _assignedTechIds = [];
+    document.getElementById('assignTicketId').value = id;
+    document.getElementById('assignTechId').value = '';
+    // Load teknisi yang sudah ditugaskan via API detail
+    const res = await fetch(`/tickets/api/${id}`);
+    const d   = await res.json();
+    if (d.success && d.data) {
+        const names = d.data.technician_names ? d.data.technician_names.split(',') : [];
+        const ids   = d.data.technician_ids   ? d.data.technician_ids.split(',')   : [];
+        _assignedTechIds = ids;
+        renderAssignedList(names, ids);
+    } else {
+        renderAssignedList([], []);
+    }
+    document.getElementById('assignModal').style.display = 'flex';
+}
+
+function renderAssignedList(names, ids) {
+    const el = document.getElementById('assignedTechList');
+    if (!names.length) {
+        el.innerHTML = '<span style="font-size:12px;color:var(--muted);">Belum ada teknisi ditugaskan</span>';
+        return;
+    }
+    el.innerHTML = names.map((n,i) => `
+        <span style="background:rgba(139,92,246,.1);color:#A78BFA;border:1px solid rgba(139,92,246,.2);padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;">
+            👷 ${n}
+            <button onclick="removeTech(${ids[i]},'${n}')" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:13px;line-height:1;padding:0;" title="Lepas">×</button>
+        </span>`).join('');
+}
+
+async function saveAssign() {
+    const id = _assignCurrentTicket;
+    const techId = document.getElementById('assignTechId').value;
+    if (!techId) return showToast('Pilih teknisi dulu','error');
+    const res = await fetch(`/tickets/api/${id}/assign`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ technician_id: techId })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if (d.success) {
+        // Reload list di modal
+        await openAssignModal(id);
+        // Update chip di tabel tanpa reload full
+        setTimeout(() => location.reload(), 1200);
+    }
+}
+
+async function removeTech(techId, techName) {
+    if (!confirm(`Lepas ${techName} dari tiket ini?`)) return;
+    const id = _assignCurrentTicket;
+    const res = await fetch(`/tickets/api/${id}/assign/${techId}`, { method:'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if (d.success) await openAssignModal(id);
+}
+async function quickClose(id) {
+    if(!confirm('Tutup tiket ini?')) return;
+    const res = await fetch(`/tickets/api/${id}/close`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({}) });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),800);
+}
+async function reopenTicket(id) {
+    const res = await fetch(`/tickets/api/${id}/reopen`, { method:'POST' });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),800);
+}
+async function deleteTicket(id) {
+    if(!confirm('Hapus tiket ini permanen?')) return;
+    const res = await fetch(`/tickets/api/${id}`, { method:'DELETE' });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),800);
+}
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    const C = {success:['rgba(16,185,129,.4)','#10B981'],error:['rgba(239,68,68,.4)','#EF4444']};
+    const [b,c] = C[type]||C.error;
+    t.style.borderColor=b; t.style.color=c;
+    t.classList.add('show'); clearTimeout(t._t);
+    t._t = setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>

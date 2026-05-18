@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ── Stat Cards ── */
+        .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; margin-bottom:22px; }
+        .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:18px 20px; position:relative; overflow:hidden; }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:2px 2px 0 0; }
+        .stat-card.c-blue::before   { background:linear-gradient(90deg,#3B82F6,#60A5FA); }
+        .stat-card.c-green::before  { background:linear-gradient(90deg,#10B981,#34D399); }
+        .stat-card.c-amber::before  { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+        .stat-card.c-purple::before { background:linear-gradient(90deg,#8B5CF6,#A78BFA); }
+        .stat-card.c-red::before    { background:linear-gradient(90deg,#EF4444,#F87171); }
+        .stat-card.c-cyan::before   { background:linear-gradient(90deg,#06B6D4,#22D3EE); }
+        .stat-card.c-rose::before   { background:linear-gradient(90deg,#F43F5E,#FB7185); }
+        .stat-label { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+        .stat-val   { font-size:28px; font-weight:800; line-height:1; }
+        .stat-sub   { font-size:11px; color:var(--muted); margin-top:6px; }
+
+        /* ── Fix dropdown option background (browser native) ── */
+        .filter-bar select option {
+            background: #1E293B;
+            color: #F8FAFC;
+        }
+        .light-theme .filter-bar select option {
+            background: #FFFFFF;
+            color: #1E293B;
+        }
+        /* Paksa warna background select saat diklik/focus di semua browser */
+        .filter-bar select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 32px !important;
+        }
+
+        /* ── Charts Row ── */
+        .charts-row { display:grid; grid-template-columns:220px 1fr 1fr; gap:16px; margin-bottom:20px; }
+        .chart-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; }
+        .chart-title { font-size:13px; font-weight:700; margin:0 0 14px; color:var(--text); }
+
+        /* ── Router Bar List ── */
+        .router-bar { margin-bottom:10px; }
+        .router-bar-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; }
+        .router-bar-label span:first-child { font-weight:600; color:var(--text); max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .router-bar-label span:last-child { color:var(--muted); }
+        .bar-track { height:7px; background:var(--sub-bg); border-radius:4px; overflow:hidden; }
+        .bar-fill { height:100%; border-radius:4px; background:linear-gradient(90deg,#3B82F6,#60A5FA); transition:width .5s ease; }
+
+        /* ── Uptime legend ── */
+        .uptime-legend { display:flex; flex-direction:column; gap:7px; margin-top:12px; }
+        .ul-item { display:flex; align-items:center; gap:8px; font-size:12px; }
+        .ul-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+
+        /* ── Progress bar ── */
+        #loadBar { height:3px; background:var(--primary); width:0; transition:width .3s; border-radius:2px; margin-bottom:16px; }
+
+        /* ── Filter bar ── */
+        .filter-bar { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+        .filter-bar input, .filter-bar select { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:8px 13px; font-size:13px; font-family:'Outfit',sans-serif; outline:none; transition:border-color .2s; }
+        .filter-bar input:focus, .filter-bar select:focus { border-color:var(--primary); }
+        .filter-bar input { min-width:240px; flex:1; max-width:320px; }
+        .filter-bar .btn-reset { background:var(--sub-bg); border:1px solid var(--border); color:var(--muted); border-radius:10px; padding:8px 13px; font-size:12px; cursor:pointer; font-family:'Outfit',sans-serif; }
+
+        /* ── Table ── */
+        .tbl-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+        table { width:100%; border-collapse:collapse; }
+        th { background:var(--sub-bg); color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; padding:11px 16px; text-align:left; white-space:nowrap; }
+        td { padding:11px 16px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:var(--hover-bg); }
+
+        /* ── Badges ── */
+        .badge-uptime { background:rgba(59,130,246,.1); color:var(--primary); border:1px solid rgba(59,130,246,.2); padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+        .badge-uptime.long  { background:rgba(16,185,129,.1); color:#10B981; border-color:rgba(16,185,129,.2); }
+        .badge-uptime.warn  { background:rgba(245,158,11,.1); color:#F59E0B; border-color:rgba(245,158,11,.2); }
+        .badge-router { background:rgba(139,92,246,.1); color:#8B5CF6; border:1px solid rgba(139,92,246,.2); padding:3px 9px; border-radius:20px; font-size:11px; }
+        .badge-linked   { background:rgba(16,185,129,.1); color:#10B981; border:1px solid rgba(16,185,129,.2); padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+        .badge-unlinked { background:rgba(245,158,11,.1); color:#F59E0B; border:1px solid rgba(245,158,11,.2); padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
+
+        .empty-row td, .loading-row td { text-align:center; color:var(--muted); padding:50px; }
+
+        @media(max-width:1100px) { .charts-row { grid-template-columns:1fr 1fr; } }
+        @media(max-width:768px)  { .charts-row { grid-template-columns:1fr; } .stats-row { grid-template-columns:repeat(2,1fr); } }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'PPPoE Active Connections' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">PPPoE Active Users</h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">
+                    <span id="lastUpdate">Belum dimuat</span>
+                </p>
+            </div>
+            <button class="btn btn-primary" onclick="loadAll()" id="btnRefresh">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+
+        <!-- Progress bar -->
+        <div id="loadBar"></div>
+
+        <!-- ── STAT CARDS ── -->
+        <div class="stats-row">
+            <div class="stat-card c-cyan">
+                <div class="stat-label">Total PPPoE User</div>
+                <div class="stat-val" id="sTotalUser">-</div>
+                <div class="stat-sub">semua secret di router</div>
+            </div>
+            <div class="stat-card c-green">
+                <div class="stat-label">User Online</div>
+                <div class="stat-val" id="sTotalOnline">-</div>
+                <div class="stat-sub" id="sTotalOnlinePct">-</div>
+            </div>
+            <div class="stat-card c-rose">
+                <div class="stat-label">User Offline</div>
+                <div class="stat-val" id="sTotalOffline">-</div>
+                <div class="stat-sub" id="sTotalOfflinePct">-</div>
+            </div>
+            <div class="stat-card c-blue">
+                <div class="stat-label">Aktif Sekarang</div>
+                <div class="stat-val" id="sTotal">-</div>
+                <div class="stat-sub">koneksi aktif terdeteksi</div>
+            </div>
+            <div class="stat-card c-green">
+                <div class="stat-label">Terdaftar di DB</div>
+                <div class="stat-val" id="sLinked">-</div>
+                <div class="stat-sub" id="sLinkedPct">-</div>
+            </div>
+            <div class="stat-card c-amber">
+                <div class="stat-label">Tidak di DB</div>
+                <div class="stat-val" id="sUnlinked">-</div>
+                <div class="stat-sub">perlu diidentifikasi</div>
+            </div>
+            <div class="stat-card c-purple">
+                <div class="stat-label">Uptime > 7 Hari</div>
+                <div class="stat-val" id="sLongUptime">-</div>
+                <div class="stat-sub">koneksi stabil</div>
+            </div>
+            <div class="stat-card c-red">
+                <div class="stat-label">Uptime < 1 Jam</div>
+                <div class="stat-val" id="sNewConn">-</div>
+                <div class="stat-sub">baru konek / reconnect</div>
+            </div>
+        </div>
+
+        <!-- ── CHARTS ROW ── -->
+        <div class="charts-row">
+
+            <!-- Donut: Linked vs Unlinked -->
+            <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
+                <p class="chart-title" style="align-self:flex-start;">🔗 Status Registrasi</p>
+                <canvas id="chartLinked" width="170" height="170"></canvas>
+                <div style="display:flex; gap:14px; margin-top:12px; font-size:12px;">
+                    <span><span style="color:#10B981;">●</span> Terdaftar: <b id="lgLinked">-</b></span>
+                    <span><span style="color:#F59E0B;">●</span> Tidak: <b id="lgUnlinked">-</b></span>
+                </div>
+            </div>
+
+            <!-- Bar: Per Router -->
+            <div class="chart-card">
+                <p class="chart-title">🔌 Distribusi per Router</p>
+                <div id="routerBars" style="max-height:200px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- Donut: Uptime Distribution -->
+            <div class="chart-card">
+                <p class="chart-title">⏱ Distribusi Uptime</p>
+                <canvas id="chartUptime" height="140"></canvas>
+                <div class="uptime-legend" id="uptimeLegend"></div>
+            </div>
+
+        </div>
+
+        <!-- ── FILTER BAR ── -->
+        <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="🔍  Cari username, IP, nama pelanggan..." oninput="filterTable()">
+            <select id="routerFilter" onchange="filterTable()">
+                <option value="">Semua Router</option>
+                <% routers.forEach(r => { %>
+                    <option value="<%= r.id %>"><%= r.name %></option>
+                <% }) %>
+            </select>
+            <select id="linkFilter" onchange="filterTable()">
+                <option value="">Semua Status</option>
+                <option value="linked">Terdaftar di DB</option>
+                <option value="unlinked">Tidak di DB</option>
+            </select>
+            <select id="uptimeFilter" onchange="filterTable()">
+                <option value="">Semua Uptime</option>
+                <option value="new">Baru (< 1 jam)</option>
+                <option value="short">Pendek (1 jam – 1 hari)</option>
+                <option value="medium">Sedang (1–7 hari)</option>
+                <option value="long">Panjang (> 7 hari)</option>
+            </select>
+            <button class="btn-reset" onclick="resetFilter()">✕ Reset</button>
+            <span id="filteredCount" style="font-size:13px; color:var(--muted); margin-left:4px;"></span>
+        </div>
+
+        <!-- ── TABLE ── -->
+        <div class="tbl-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Username PPPoE</th>
+                        <th>IP Address</th>
+                        <th>Uptime</th>
+                        <th>Caller ID</th>
+                        <th>Status Registrasi</th>
+                        <th>Nama Pelanggan</th>
+                        <th>Router</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr class="loading-row">
+                        <td colspan="8"><i class="fas fa-spinner fa-spin"></i> Menghubungi router, harap tunggu...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</main>
+
+<script>
+const ROUTERS = <%- JSON.stringify(routers) %>;
+let allConnections = [];
+let chartLinked = null, chartUptime = null;
+
+// ── Parse uptime string ke detik ──
+function uptimeToSeconds(str) {
+    if (!str) return 0;
+    let s = 0;
+    const w = str.match(/(\d+)w/); if (w) s += parseInt(w[1]) * 604800;
+    const d = str.match(/(\d+)d/); if (d) s += parseInt(d[1]) * 86400;
+    const h = str.match(/(\d+)h/); if (h) s += parseInt(h[1]) * 3600;
+    const m = str.match(/(\d+)m/); if (m) s += parseInt(m[1]) * 60;
+    const sc= str.match(/(\d+)s/); if (sc) s += parseInt(sc[1]);
+    return s;
+}
+
+function uptimeCategory(str) {
+    const s = uptimeToSeconds(str);
+    if (s < 3600)         return 'new';
+    if (s < 86400)        return 'short';
+    if (s < 7 * 86400)   return 'medium';
+    return 'long';
+}
+
+// ── Load semua router paralel ──
+async function loadAll() {
+    const btn = document.getElementById('btnRefresh');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    allConnections = [];
+
+    const bar = document.getElementById('tableBody');
+    bar.innerHTML = `<tr class="loading-row"><td colspan="8"><i class="fas fa-spinner fa-spin"></i> Menghubungi ${ROUTERS.length} router secara paralel...</td></tr>`;
+
+    const lb = document.getElementById('loadBar');
+    lb.style.width = '5%';
+
+    const promises = ROUTERS.map(r =>
+        fetch(`/mikrotik/api/pppoe-active/${r.id}`)
+            .then(res => res.json())
+            .catch(() => ({ success: false, data: [] }))
+    );
+
+    let done = 0;
+    const results = await Promise.allSettled(promises);
+    results.forEach(res => {
+        done++;
+        lb.style.width = Math.round((done / ROUTERS.length) * 100) + '%';
+        if (res.status === 'fulfilled' && res.value.success) {
+            allConnections = allConnections.concat(res.value.data);
+        }
+    });
+
+    lb.style.width = '100%';
+    setTimeout(() => lb.style.width = '0', 800);
+
+    // Fetch total PPPoE secrets dari semua router (paralel)
+    let pppoeTotal = 0;
+    try {
+        const secretPromises = ROUTERS.map(r =>
+            fetch(`/api/mikrotik/pppoe-count/${r.id}`)
+                .then(res => res.json())
+                .catch(() => ({ success: false, count: 0 }))
+        );
+        const secretResults = await Promise.allSettled(secretPromises);
+        secretResults.forEach(r => {
+            if (r.status === 'fulfilled' && r.value.success) {
+                pppoeTotal += (r.value.count || 0);
+            }
+        });
+    } catch(e) {}
+
+    renderAll(allConnections, pppoeTotal > 0 ? pppoeTotal : null);
+
+    const now = new Date().toLocaleString('id-ID', { dateStyle:'medium', timeStyle:'short' });
+    document.getElementById('lastUpdate').textContent = `Terakhir diperbarui: ${now}`;
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
+}
+
+// ── Render semua: stats + charts + table ──
+function renderAll(data, pppoeTotal = null) {
+    updateStats(data, pppoeTotal);
+    updateChartLinked(data);
+    updateRouterBars(data);
+    updateChartUptime(data);
+    renderTable(data);
+}
+
+// ── Stats ──
+function updateStats(data, pppoeSecretTotal = null) {
+    const total    = data.length;
+    const linked   = data.filter(c => c.customerName).length;
+    const unlinked = total - linked;
+    const longUp   = data.filter(c => uptimeToSeconds(c.uptime) >= 7*86400).length;
+    const newConn  = data.filter(c => uptimeToSeconds(c.uptime) < 3600).length;
+    const pct      = total > 0 ? Math.round((linked/total)*100) : 0;
+
+    // Kartu lama
+    document.getElementById('sTotal').textContent      = total;
+    document.getElementById('sLinked').textContent     = linked;
+    document.getElementById('sLinkedPct').textContent  = `${pct}% dari total`;
+    document.getElementById('sUnlinked').textContent   = unlinked;
+    document.getElementById('sLongUptime').textContent = longUp;
+    document.getElementById('sNewConn').textContent    = newConn;
+    document.getElementById('lgLinked').textContent    = linked;
+    document.getElementById('lgUnlinked').textContent  = unlinked;
+
+    // Kartu baru: Total PPPoE User, Online, Offline
+    if (pppoeSecretTotal !== null) {
+        const offline = pppoeSecretTotal - total;
+        const onPct   = pppoeSecretTotal > 0 ? Math.round((total / pppoeSecretTotal) * 100) : 0;
+        const offPct  = 100 - onPct;
+        document.getElementById('sTotalUser').textContent    = pppoeSecretTotal;
+        document.getElementById('sTotalOnline').textContent  = total;
+        document.getElementById('sTotalOnlinePct').textContent = `${onPct}% dari total user`;
+        document.getElementById('sTotalOffline').textContent = offline >= 0 ? offline : '-';
+        document.getElementById('sTotalOfflinePct').textContent = offline >= 0 ? `${offPct}% dari total user` : 'data belum tersedia';
+    } else {
+        document.getElementById('sTotalUser').textContent    = '-';
+        document.getElementById('sTotalOnline').textContent  = total;
+        document.getElementById('sTotalOnlinePct').textContent = 'koneksi aktif';
+        document.getElementById('sTotalOffline').textContent = '-';
+        document.getElementById('sTotalOfflinePct').textContent = 'perlu sync secrets';
+    }
+}
+
+// ── Donut: Linked vs Unlinked ──
+function updateChartLinked(data) {
+    const linked   = data.filter(c => c.customerName).length;
+    const unlinked = data.length - linked;
+    const ctx = document.getElementById('chartLinked').getContext('2d');
+    if (chartLinked) chartLinked.destroy();
+    chartLinked = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Terdaftar', 'Tidak di DB'],
+            datasets: [{
+                data: [linked, unlinked],
+                backgroundColor: ['#10B981','#F59E0B'],
+                borderColor: document.documentElement.classList.contains('light-theme') ? '#fff' : '#111827',
+                borderWidth: 3, hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: false, cutout: '68%',
+            plugins: { legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} (${data.length > 0 ? Math.round(ctx.parsed/data.length*100) : 0}%)` } }
+            }
+        }
+    });
+}
+
+// ── Bar chart per router (custom HTML) ──
+function updateRouterBars(data) {
+    const routerCount = {};
+    data.forEach(c => {
+        const key = c.routerName || 'Unknown';
+        if (!routerCount[key]) routerCount[key] = { total:0, linked:0, routerId: c.routerId };
+        routerCount[key].total++;
+        if (c.customerName) routerCount[key].linked++;
+    });
+
+    const sorted = Object.entries(routerCount).sort((a,b) => b[1].total - a[1].total);
+    const max = sorted[0] ? sorted[0][1].total : 1;
+    const container = document.getElementById('routerBars');
+
+    if (sorted.length === 0) {
+        container.innerHTML = '<p style="color:var(--muted); font-size:13px; text-align:center; margin-top:20px;">Tidak ada data</p>';
+        return;
+    }
+
+    container.innerHTML = sorted.map(([name, d]) => {
+        const pct = Math.round((d.total / max) * 100);
+        const lPct = d.total > 0 ? Math.round((d.linked/d.total)*100) : 0;
+        return `
+        <div class="router-bar">
+            <div class="router-bar-label">
+                <span title="${name}">${name}</span>
+                <span>${d.total} user (${lPct}% di DB)</span>
+            </div>
+            <div class="bar-track">
+                <div class="bar-fill" style="width:${pct}%;"></div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Donut: Uptime distribution ──
+function updateChartUptime(data) {
+    const cats = { new:0, short:0, medium:0, long:0 };
+    data.forEach(c => cats[uptimeCategory(c.uptime)]++);
+
+    const labels  = ['Baru < 1 jam', '1 jam – 1 hari', '1 – 7 hari', '> 7 hari'];
+    const values  = [cats.new, cats.short, cats.medium, cats.long];
+    const colors  = ['#EF4444','#F59E0B','#3B82F6','#10B981'];
+
+    const ctx = document.getElementById('chartUptime').getContext('2d');
+    if (chartUptime) chartUptime.destroy();
+    chartUptime = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: values, backgroundColor: colors,
+                borderRadius: 6, borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true, indexAxis: 'y',
+            plugins: { legend: { display:false },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.x} user` } }
+            },
+            scales: {
+                x: { beginAtZero:true, grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ color:'#94A3B8', stepSize:1 } },
+                y: { grid:{ display:false }, ticks:{ color:'#94A3B8', font:{ size:11 } } }
+            }
+        }
+    });
+
+    // Legend
+    document.getElementById('uptimeLegend').innerHTML = labels.map((l,i) => `
+        <div class="ul-item">
+            <span class="ul-dot" style="background:${colors[i]};"></span>
+            <span style="flex:1; color:var(--muted);">${l}</span>
+            <span style="font-weight:700; color:var(--text);">${values[i]}</span>
+        </div>`).join('');
+}
+
+// ── Render table ──
+function renderTable(data) {
+    const tbody = document.getElementById('tableBody');
+    if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr class="empty-row"><td colspan="8"><i class="fas fa-satellite-dish"></i><br>Tidak ada koneksi aktif</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.map((c, i) => {
+        const uCat = uptimeCategory(c.uptime);
+        const uClass = uCat === 'long' ? 'long' : uCat === 'new' ? 'warn' : '';
+        return `
+        <tr data-router="${c.routerId||''}" data-linked="${c.customerName?'linked':'unlinked'}" data-uptime="${uCat}">
+            <td style="color:var(--muted); font-size:12px;">${i+1}</td>
+            <td style="font-weight:700; font-family:monospace; font-size:13px;">${c.name||'-'}</td>
+            <td style="font-family:monospace; font-size:12px; color:var(--muted);">${c.address||'-'}</td>
+            <td><span class="badge-uptime ${uClass}">${c.uptime||'0s'}</span></td>
+            <td style="font-size:11px; color:var(--muted);">${c.callerid||'-'}</td>
+            <td>
+                ${c.customerName
+                    ? `<span class="badge-linked"><i class="fas fa-check-circle"></i> Terdaftar</span>`
+                    : `<span class="badge-unlinked"><i class="fas fa-exclamation-triangle"></i> Tidak di DB</span>`}
+            </td>
+            <td>
+                ${c.customerName
+                    ? `<span style="font-weight:500;">${c.customerName}</span>${c.customerPhone ? `<br><span style="font-size:11px;color:var(--muted);">${c.customerPhone}</span>` : ''}`
+                    : `<span style="color:var(--muted); font-size:12px;">-</span>`}
+            </td>
+            <td><span class="badge-router">${c.routerName||'-'}</span></td>
+        </tr>`;
+    }).join('');
+    filterTable();
+}
+
+// ── Filter ──
+function filterTable() {
+    const q   = document.getElementById('searchInput').value.toLowerCase();
+    const rId = document.getElementById('routerFilter').value;
+    const lk  = document.getElementById('linkFilter').value;
+    const up  = document.getElementById('uptimeFilter').value;
+    const rows = document.querySelectorAll('#tableBody tr[data-router]');
+    let visible = 0;
+
+    rows.forEach((row, idx) => {
+        const matchQ = !q  || row.textContent.toLowerCase().includes(q);
+        const matchR = !rId || row.dataset.router === rId;
+        const matchL = !lk  || row.dataset.linked === lk;
+        const matchU = !up  || row.dataset.uptime === up;
+        const show = matchQ && matchR && matchL && matchU;
+        row.style.display = show ? '' : 'none';
+        // Re-number visible rows
+        if (show) { row.cells[0].textContent = ++visible; }
+    });
+
+    const active = q || rId || lk || up;
+    document.getElementById('filteredCount').textContent =
+        active ? `Menampilkan ${visible} dari ${allConnections.length} user` : `${allConnections.length} user`;
+}
+
+function resetFilter() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('routerFilter').value = '';
+    document.getElementById('linkFilter').value = '';
+    document.getElementById('uptimeFilter').value = '';
+    filterTable();
+}
+
+// Auto-load
+loadAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+        .stat-card.blue::before{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+        .stat-card.green::before{background:linear-gradient(90deg,#10B981,#34D399);}
+        .stat-card.purple::before{background:linear-gradient(90deg,#8B5CF6,#A78BFA);}
+        .stat-card.red::before{background:linear-gradient(90deg,#EF4444,#F87171);}
+        .stat-card.amber::before{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+        .stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+        .stat-val{font-size:24px;font-weight:800;}
+        .tbl-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;padding:11px 14px;text-align:left;white-space:nowrap;}
+        td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}tr:hover td{background:var(--hover-bg);}
+        .type-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+        .port-bar{height:6px;background:var(--sub-bg);border-radius:3px;overflow:hidden;margin-top:4px;min-width:60px;}
+        .port-bar-fill{height:100%;border-radius:3px;}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:2000;padding:16px;}
+        .modal-card{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:540px;padding:28px;max-height:90vh;overflow-y:auto;}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .form-group{margin-bottom:12px;} .form-group.full{grid-column:1/-1;}
+        .form-group label{display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}
+        .toast.show{display:block;}
+        .filter-bar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+        .filter-bar input,.filter-bar select{background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;font-family:'Outfit',sans-serif;outline:none;}
+        .filter-bar select option{background:#1E293B;color:#F8FAFC;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Node FO' }) %>
+    <div class="content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">📍 Manajemen Node FO</h1>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">OLT, ODC, ODP, Splitter, Tiang, Closure</p>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <a href="/fo" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;">🗺 Kembali ke Peta</a>
+                <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Node</button>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card blue"><div class="stat-label">Total Node</div><div class="stat-val"><%= nstats.total||0 %></div></div>
+            <div class="stat-card green"><div class="stat-label">ODP</div><div class="stat-val"><%= nstats.odp||0 %></div></div>
+            <div class="stat-card purple"><div class="stat-label">ODC</div><div class="stat-val"><%= nstats.odc||0 %></div></div>
+            <div class="stat-card amber"><div class="stat-label">OLT</div><div class="stat-val"><%= nstats.olt||0 %></div></div>
+            <div class="stat-card" style="border-top:3px solid #94A3B8;"><div class="stat-label">Tiang</div><div class="stat-val"><%= nstats.tiang||0 %></div></div>
+            <div class="stat-card red">
+                <div class="stat-label">⚠ Rusak / Perlu Ganti</div>
+                <div class="stat-val" style="color:<%= (nstats.damaged||0)>0?'#EF4444':'inherit' %>"><%= nstats.damaged||0 %></div>
+                <% if((nstats.damaged||0) > 0) { %>
+                <div style="font-size:11px; color:#EF4444; margin-top:4px;">Segera tindak lanjuti!</div>
+                <% } else { %>
+                <div style="font-size:11px; color:#10B981; margin-top:4px;">✓ Semua normal</div>
+                <% } %>
+            </div>
+        </div>
+
+        <form method="GET" action="/fo/nodes" class="filter-bar">
+            <input type="text" name="search" value="<%= search %>" placeholder="Cari nama, alamat...">
+            <select name="type">
+                <option value="">Semua Tipe</option>
+                <% ['OLT','ODC','ODP','Splitter','Tiang','Closure','HandHole'].forEach(t => { %>
+                <option value="<%= t %>" <%= typeFilter===t?'selected':'' %>><%= t %></option>
+                <% }) %>
+            </select>
+            <select name="status">
+                <option value="">Semua Status</option>
+                <option value="active" <%= statusFilter==='active'?'selected':'' %>>Aktif</option>
+                <option value="damaged" <%= statusFilter==='damaged'?'selected':'' %>>Rusak</option>
+                <option value="inactive" <%= statusFilter==='inactive'?'selected':'' %>>Tidak Aktif</option>
+            </select>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
+            <% if(search||typeFilter||statusFilter){%><a href="/fo/nodes" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);">✕</a><%}%>
+        </form>
+
+        <div class="tbl-card">
+            <table>
+                <thead><tr>
+                    <th>Nama</th><th>Tipe</th><th>Alamat</th><th>Parent</th>
+                    <th>Kabel Induk</th><th>Kapasitas Port</th><th>Brand/Model</th><th>Status</th><th>Aksi</th>
+                </tr></thead>
+                <tbody>
+                <% if(nodes.length > 0){ %><% nodes.forEach(n => {
+                    const typeColors={OLT:'#10B981',ODC:'#8B5CF6',ODP:'#3B82F6',Splitter:'#F59E0B',Tiang:'#94A3B8',Closure:'#06B6D4',HandHole:'#EF4444'};
+                    const pct=n.capacity>0?Math.round((n.used_ports_count/n.capacity)*100):0;
+                    const barColor=pct>=80?'#EF4444':pct>=60?'#F59E0B':'#10B981';
+                    const emojis={OLT:'🏢',ODC:'📦',ODP:'📍',Splitter:'🔀',Tiang:'🪝',Closure:'🔒',HandHole:'🕳'};
+                %><tr>
+                    <td style="font-weight:600;"><%= emojis[n.type]||'📍' %> <%= n.name %></td>
+                    <td><span class="type-badge" style="background:<%=typeColors[n.type]||'#94A3B8'%>22;color:<%=typeColors[n.type]||'#94A3B8'%>;border:1px solid <%=typeColors[n.type]||'#94A3B8'%>44;"><%= n.type %></span></td>
+                    <td style="font-size:12px;color:var(--muted);max-width:160px;"><%= n.address||'-' %></td>
+                    <td style="font-size:12px;color:var(--muted);"><%= n.parent_name||'-' %></td>
+                    <td>
+                        <% if (n.feed_cable_name) { %>
+                        <div style="font-size:11px; font-weight:600;"><%= n.feed_cable_name %></div>
+                        <div style="font-size:10px; color:var(--muted);">Tube <%= n.feed_tube_number||'-' %> · Core <%= n.feed_core_number||'-' %></div>
+                        <% } else { %>
+                        <span style="color:var(--muted); font-size:11px;">-</span>
+                        <% } %>
+                    </td>
+                    <td>
+                        <% if(n.capacity>0){ %>
+                        <div style="font-size:12px;"><%= n.used_ports_count||0 %> / <%= n.capacity %> (<%= pct %>%)</div>
+                        <div class="port-bar"><div class="port-bar-fill" style="width:<%=pct%>%;background:<%=barColor%>;"></div></div>
+                        <% }else{ %><span style="color:var(--muted);font-size:12px;">-</span><% } %>
+                    </td>
+                    <td style="font-size:12px;color:var(--muted);"><%= n.brand||'-' %> <%= n.model||'' %></td>
+                    <td><span style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:<%=n.status==='active'?'rgba(16,185,129,.1)':n.status==='damaged'?'rgba(239,68,68,.1)':'rgba(148,163,184,.1)'%>;color:<%=n.status==='active'?'#10B981':n.status==='damaged'?'#EF4444':'#94A3B8'%>;"><%= n.status %></span></td>
+                    <td>
+                        <div style="display:flex;gap:5px;">
+                            <button onclick='openEditModal(<%- JSON.stringify(n) %>)' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-edit"></i></button>
+                            <% if (user && user.role === 'admin') { %><button onclick="deleteNode(<%= n.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-trash"></i></button><% } %>
+                            <a href="/fo?focus=<%= n.id %>" style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:11px;"><i class="fas fa-map-marker-alt"></i></a>
+                        </div>
+                    </td>
+                </tr><% }) %>
+                <% }else{ %>
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:50px;">Belum ada node. <a href="/fo" style="color:var(--primary);">Tambah via peta</a></td></tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="nodeModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="modalTitle" style="font-size:17px;font-weight:700;margin:0;">Tambah Node</h3>
+            <button onclick="document.getElementById('nodeModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="nodeForm">
+            <input type="hidden" id="nId">
+            <div class="form-grid">
+                <div class="form-group full"><label>Nama *</label><input type="text" id="nName" class="form-control" required placeholder="ODP-JlMerdeka-01"></div>
+                <div class="form-group"><label>Tipe *</label><select id="nType" class="form-control"><% ['OLT','ODC','ODP','Splitter','Tiang','Closure','HandHole'].forEach(t=>{%><option value="<%= t %>"><%= t %></option><%})%></select></div>
+                <div class="form-group"><label>Kapasitas Port</label><input type="number" id="nCap" class="form-control" placeholder="0" min="0"></div>
+                <div class="form-group"><label>Brand</label><input type="text" id="nBrand" class="form-control" placeholder="Fiberhome"></div>
+                <div class="form-group"><label>Model</label><input type="text" id="nModel" class="form-control" placeholder="ODP-T08"></div>
+                <div class="form-group"><label>Parent</label><select id="nParent" class="form-control"><option value="">-</option><% allNodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%></select></div>
+                <div class="form-group"><label>Status</label><select id="nStatus" class="form-control"><option value="active">Aktif</option><option value="inactive">Tidak Aktif</option><option value="damaged">Rusak</option></select></div>
+                <div class="form-group"><label>Tgl Pasang</label><input type="date" id="nDate" class="form-control"></div>
+                <div class="form-group full">
+                    <label>Koordinat</label>
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
+                        <input type="text" id="nLat" class="form-control" placeholder="Latitude">
+                        <input type="text" id="nLng" class="form-control" placeholder="Longitude">
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" onclick="getNodeGPS()" id="btnNodeGPS"
+                            style="flex:1;padding:9px 12px;border-radius:10px;border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.1);color:#10B981;font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px;">
+                            <i class="fas fa-crosshairs"></i> Ambil Lokasi GPS
+                        </button>
+                    </div>
+                    <div id="nodeGpsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;display:none;"></div>
+                </div>
+                <div class="form-group full"><label>Alamat</label><input type="text" id="nAddr" class="form-control" placeholder="Jl. Merdeka No.1"></div>
+                <div class="form-group full"><label>Catatan</label><textarea id="nNotes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+                <button type="button" onclick="document.getElementById('nodeModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+function openAddModal(){
+    document.getElementById('modalTitle').textContent='Tambah Node';
+    document.getElementById('nId').value='';
+    ['nName','nBrand','nModel','nLat','nLng','nAddr','nNotes','nCap'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('nType').value='ODP'; document.getElementById('nStatus').value='active'; document.getElementById('nDate').value='';
+    document.getElementById('nodeModal').style.display='flex';
+}
+function openEditModal(n){
+    document.getElementById('modalTitle').textContent='Edit: '+n.name;
+    document.getElementById('nId').value=n.id; document.getElementById('nName').value=n.name;
+    document.getElementById('nType').value=n.type; document.getElementById('nCap').value=n.capacity||'';
+    document.getElementById('nBrand').value=n.brand||''; document.getElementById('nModel').value=n.model||'';
+    document.getElementById('nParent').value=n.parent_id||''; document.getElementById('nStatus').value=n.status||'active';
+    document.getElementById('nDate').value=n.install_date?n.install_date.split('T')[0]:'';
+    document.getElementById('nLat').value=n.lat||''; document.getElementById('nLng').value=n.lng||'';
+    document.getElementById('nAddr').value=n.address||''; document.getElementById('nNotes').value=n.notes||'';
+    document.getElementById('nodeModal').style.display='flex';
+}
+document.getElementById('nodeForm').addEventListener('submit', async ev=>{
+    ev.preventDefault();
+    const id=document.getElementById('nId').value;
+    const body={name:document.getElementById('nName').value,type:document.getElementById('nType').value,lat:document.getElementById('nLat').value,lng:document.getElementById('nLng').value,address:document.getElementById('nAddr').value,capacity:document.getElementById('nCap').value,parent_id:document.getElementById('nParent').value,brand:document.getElementById('nBrand').value,model:document.getElementById('nModel').value,install_date:document.getElementById('nDate').value,status:document.getElementById('nStatus').value,notes:document.getElementById('nNotes').value};
+    const res=await fetch(id?'/fo/api/nodes/'+id:'/fo/api/nodes',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await res.json();
+    showToast(d.message,d.success?'success':'error');
+    if(d.success){document.getElementById('nodeModal').style.display='none';setTimeout(()=>location.reload(),800);}
+});
+async function deleteNode(id){if(!confirm('Hapus node ini?'))return;const res=await fetch('/fo/api/nodes/'+id,{method:'DELETE'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),800);}
+function getNodeGPS() {
+    const btn    = document.getElementById('btnNodeGPS');
+    const status = document.getElementById('nodeGpsStatus');
+    if (!navigator.geolocation) {
+        status.textContent='⚠ GPS tidak didukung browser ini'; status.style.color='#EF4444'; status.style.display=''; return;
+    }
+    btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Mengambil...';
+    btn.disabled=true;
+    status.textContent='📡 Mengakses GPS...'; status.style.color='#F59E0B'; status.style.display='';
+    navigator.geolocation.getCurrentPosition(
+        (pos) => {
+            document.getElementById('nLat').value = pos.coords.latitude.toFixed(7);
+            document.getElementById('nLng').value = pos.coords.longitude.toFixed(7);
+            const acc = Math.round(pos.coords.accuracy);
+            status.textContent='✅ Koordinat diambil — Akurasi ±'+acc+' meter';
+            status.style.color='#10B981';
+            btn.innerHTML='<i class="fas fa-crosshairs"></i> Ambil Lokasi GPS';
+            btn.disabled=false;
+        },
+        (err) => {
+            const msgs={
+                1:'GPS ditolak. Buka Pengaturan Chrome → Privasi → Izin Situs → Lokasi → izinkan '+window.location.hostname,
+                2:'Sinyal GPS lemah, coba keluar ruangan.',
+                3:'Waktu habis, coba lagi.'
+            };
+            status.textContent='⚠ '+(msgs[err.code]||err.message);
+            if (err.code===1) {
+                status.innerHTML='⚠ GPS ditolak — <b>Cara izinkan:</b> di Chrome tap ikon 🔒 di address bar → Lokasi → Izinkan, lalu refresh halaman.';
+            }
+            status.style.color='#EF4444';
+            btn.innerHTML='<i class="fas fa-crosshairs"></i> Ambil Lokasi GPS';
+            btn.disabled=false;
+        },
+        {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+    );
+}
+
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+</script>
+</body>
+</html>

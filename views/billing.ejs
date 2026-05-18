@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        /* ── Date Banner ── */
+        .date-banner { background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(139,92,246,.1)); border:1px solid rgba(59,130,246,.2); border-radius:16px; padding:18px 24px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+        .date-left { display:flex; align-items:center; gap:20px; }
+        .date-clock { font-size:34px; font-weight:800; font-variant-numeric:tabular-nums; background:linear-gradient(135deg,#60A5FA,#A78BFA); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; }
+        .date-detail { display:flex; flex-direction:column; gap:2px; }
+        .date-day  { font-size:18px; font-weight:700; }
+        .date-full { font-size:12px; color:var(--muted); }
+
+        /* ── Date Filter ── */
+        .date-filter { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .date-filter label { font-size:11px; color:var(--muted); font-weight:600; }
+        .date-filter input[type=date],
+        .date-filter select.df-select { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 10px; font-size:12px; font-family:'Outfit',sans-serif; outline:none; }
+        .date-filter input[type=date]:focus,
+        .date-filter select.df-select:focus { border-color:var(--primary); }
+        .date-filter select.df-select option { background:#1E293B; color:#F8FAFC; }
+        .date-filter .df-btn { background:var(--primary); color:white; border:none; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; }
+        .date-filter .df-reset { background:var(--sub-bg); border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:7px 12px; font-size:12px; cursor:pointer; font-family:'Outfit',sans-serif; text-decoration:none; display:inline-flex; align-items:center; gap:4px; }
+
+        /* ── Stats ── */
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:20px; }
+        .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:20px; position:relative; overflow:hidden; }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .stat-card.green::before  { background:linear-gradient(90deg,#10B981,#34D399); }
+        .stat-card.orange::before { background:linear-gradient(90deg,#F59E0B,#FCD34D); }
+        .stat-card.red::before    { background:linear-gradient(90deg,#EF4444,#F87171); }
+        .stat-card.blue::before   { background:linear-gradient(90deg,#3B82F6,#6366F1); }
+        .stat-card.purple::before { background:linear-gradient(90deg,#8B5CF6,#A78BFA); }
+        .stat-label { font-size:12px; color:var(--muted); margin-bottom:8px; font-weight:500; }
+        .stat-value { font-size:24px; font-weight:700; line-height:1; }
+        .stat-sub   { font-size:11px; color:var(--muted); margin-top:6px; }
+        .stat-badge { font-size:10px; padding:2px 7px; border-radius:10px; margin-left:6px; background:rgba(59,130,246,.15); color:var(--primary); font-weight:600; }
+
+        /* ── Filter Stats (saat filter aktif) ── */
+        .filter-stats { background:rgba(59,130,246,.06); border:1px solid rgba(59,130,246,.2); border-radius:12px; padding:14px 18px; margin-bottom:18px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+        .filter-stats-title { font-size:12px; color:var(--primary); font-weight:700; }
+        .filter-stats-item { font-size:13px; }
+        .filter-stats-item b { color:var(--text); }
+
+        /* ── Toolbar ── */
+        .toolbar { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+        .toolbar input, .toolbar select { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:8px 12px; font-size:13px; font-family:'Outfit',sans-serif; outline:none; }
+        .toolbar select option { background:#1E293B; color:#F8FAFC; }
+        .light-theme .toolbar select option { background:#fff; color:#1E293B; }
+
+        /* ── Table & Pagination ── */
+        .card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:20px; }
+        table { width:100%; border-collapse:collapse; }
+        th { background:var(--sub-bg); color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; padding:11px 14px; text-align:left; white-space:nowrap; }
+        td { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:var(--hover-bg); }
+        .pagination { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-top:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+        .page-info { font-size:13px; color:var(--muted); }
+        .page-info b { color:var(--text); }
+        .page-btns { display:flex; gap:6px; }
+        .page-btn { padding:6px 14px; border-radius:8px; border:1px solid var(--border); background:var(--sub-bg); color:var(--muted); text-decoration:none; font-size:13px; transition:all .2s; }
+        .page-btn:hover, .page-btn.active { background:var(--primary); color:white; border-color:var(--primary); }
+
+        /* ── Modal ── */
+        .overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:var(--overlay-bg); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; z-index:999; }
+        .modal { background:var(--modal-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:480px; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .modal-title { font-size:18px; font-weight:600; margin:0; }
+        .close-btn { background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; }
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:6px; font-size:13px; color:var(--muted); }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,.5); }
+        .toast.show { display:block; }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: t.billing_invoice }) %>
+    <div class="content">
+
+        <!-- ── DATE BANNER ── -->
+        <div class="date-banner">
+            <div class="date-left">
+                <div class="date-clock" id="liveClock">--:--</div>
+                <div class="date-detail">
+                    <div class="date-day"  id="liveDay">--</div>
+                    <div class="date-full" id="liveDate">-- --- ----</div>
+                </div>
+            </div>
+            <!-- Date Filter -->
+            <form method="GET" action="/billing" class="date-filter" id="dateForm">
+                <input type="hidden" name="status"  value="<%= statusFilter %>">
+                <input type="hidden" name="search"  value="<%= search %>">
+                <input type="hidden" name="page"    value="1">
+                <label>Kolom</label>
+                <select name="dateField" class="df-select">
+                    <option value="created_at" <%= dateField==='created_at'?'selected':'' %>>Tgl Buat</option>
+                    <option value="due_date"   <%= dateField==='due_date'  ?'selected':'' %>>Jatuh Tempo</option>
+                    <option value="paid_at"    <%= dateField==='paid_at'   ?'selected':'' %>>Tgl Bayar</option>
+                </select>
+                <label>Dari</label>
+                <input type="date" name="dateFrom" value="<%= dateFrom %>">
+                <label>Sampai</label>
+                <input type="date" name="dateTo"   value="<%= dateTo %>">
+                <button type="submit" class="df-btn"><i class="fas fa-filter"></i> Filter</button>
+                <% if (useDate) { %>
+                <a href="/billing?status=<%= statusFilter %>&search=<%= search %>" class="df-reset">
+                    <i class="fas fa-times"></i> Reset
+                </a>
+                <% } %>
+            </form>
+        </div>
+
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title"><%= t.invoice_list %></h1>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+                <button class="btn btn-warning" onclick="generateBulk()">⚡ <%= t.generate_bulk %></button>
+                <button class="btn" style="background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.3)" onclick="runIsolir()">🔒 <%= t.auto_isolir %></button>
+                <button class="btn" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="sendReminders()">📱 <%= t.send_wa_reminder %></button>
+                <a href="/export/invoices" class="btn" style="background:rgba(16,185,129,.15);color:var(--success);border:1px solid rgba(16,185,129,.3)">📥 <%= t.export_csv %></a>
+                <button class="btn btn-primary" onclick="document.getElementById('addModal').style.display='flex'">+ <%= t.add_invoice %></button>
+            </div>
+        </div>
+
+        <!-- ── STAT CARDS ── -->
+        <div class="stats-grid">
+            <div class="stat-card green">
+                <div class="stat-label"><%= t.paid %> (Global)</div>
+                <div class="stat-value"><%= stats.paid || 0 %></div>
+                <div class="stat-sub">semua invoice lunas</div>
+            </div>
+            <div class="stat-card orange">
+                <div class="stat-label"><%= t.unpaid %> (Global)</div>
+                <div class="stat-value"><%= stats.unpaid || 0 %></div>
+                <div class="stat-sub">belum terbayar</div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-label"><%= t.overdue %></div>
+                <div class="stat-value"><%= stats.overdue || 0 %></div>
+                <div class="stat-sub">lewat jatuh tempo</div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-label"><%= t.monthly_revenue %></div>
+                <div class="stat-value" style="font-size:18px;">Rp <%= Math.floor(stats.totalRevenue||0).toLocaleString('id-ID') %></div>
+                <div class="stat-sub">bulan ini</div>
+            </div>
+        </div>
+
+        <!-- ── STATS FILTER (muncul hanya jika filter aktif) ── -->
+        <% if (useDate && filteredStats) { %>
+        <div class="filter-stats">
+            <span class="filter-stats-title">
+                <i class="fas fa-filter"></i>
+                Hasil Filter:
+                <%= dateField === 'created_at' ? 'Tgl Buat' : dateField === 'due_date' ? 'Jatuh Tempo' : 'Tgl Bayar' %>
+                <% if (dateFrom) { %> dari <b><%= new Date(dateFrom).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></b><% } %>
+                <% if (dateTo)   { %> s/d <b><%= new Date(dateTo).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></b><% } %>
+            </span>
+            <span class="filter-stats-item">💰 Pendapatan: <b>Rp <%= Math.floor(filteredStats.revenue||0).toLocaleString('id-ID') %></b></span>
+            <span class="filter-stats-item">✅ Lunas: <b><%= filteredStats.paid || 0 %></b></span>
+            <span class="filter-stats-item">⏳ Belum: <b><%= filteredStats.unpaid || 0 %></b></span>
+            <span class="filter-stats-item" style="color:var(--muted);">📋 Total tampil: <b><%= pagination.total %></b> invoice</span>
+        </div>
+        <% } %>
+
+        <!-- ── TOOLBAR ── -->
+        <form method="GET" action="/billing" style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:nowrap;">
+            <input type="hidden" name="dateFrom"  value="<%= dateFrom %>">
+            <input type="hidden" name="dateTo"    value="<%= dateTo %>">
+            <input type="hidden" name="dateField" value="<%= dateField %>">
+            <input type="hidden" name="page"      value="1">
+            <input type="text" name="search" class="form-control" placeholder="<%= t.search_customer %>" value="<%= search %>" style="flex:1;min-width:180px;max-width:280px;">
+            <select name="status" class="form-control" style="width:150px;flex-shrink:0;">
+                <option value="all"    <%= statusFilter==='all'   ?'selected':'' %>><%= t.all_status %></option>
+                <option value="paid"   <%= statusFilter==='paid'  ?'selected':'' %>><%= t.paid %></option>
+                <option value="unpaid" <%= statusFilter==='unpaid'?'selected':'' %>><%= t.unpaid %></option>
+            </select>
+            <button type="submit" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;"><i class="fas fa-search"></i> <%= t.search_btn %></button>
+            <% if (search || statusFilter !== 'all') { %>
+            <a href="/billing?dateFrom=<%= dateFrom %>&dateTo=<%= dateTo %>&dateField=<%= dateField %>" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);flex-shrink:0;white-space:nowrap;">✕ Reset</a>
+            <% } %>
+        </form>
+
+        <!-- ── TABLE ── -->
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th><%= t.customer %></th>
+                        <th>Paket</th>
+                        <th><%= t.amount %></th>
+                        <th><%= t.due_date %></th>
+                        <th>Dibuat</th>
+                        <th><%= t.status %></th>
+                        <th><%= t.action %></th>
+                    </tr>
+                </thead>
+                <tbody>
+                <% if (invoices && invoices.length > 0) { %>
+                    <% invoices.forEach(i => { %>
+                    <tr>
+                        <td style="color:var(--muted);font-size:11px;">#<%= i.id %></td>
+                        <td>
+                            <div style="font-weight:600;"><%= i.customer_name || '-' %></div>
+                            <div style="font-size:11px;color:var(--muted);"><%= i.pppoe_username || '' %></div>
+                            <% if(i.customer_status === 'isolated') { %>
+                            <span class="badge" style="background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.2);font-size:10px;"><%= t.isolated %></span>
+                            <% } %>
+                        </td>
+                        <td style="font-size:12px;color:var(--muted);"><%= i.package_name || '-' %></td>
+                        <td style="font-weight:700;">Rp <%= parseFloat(i.amount).toLocaleString('id-ID') %></td>
+                        <td>
+                            <div style="color:var(--text);">
+                                <%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-' %>
+                            </div>
+                            <% if(i.status === 'unpaid' && i.due_date && new Date(i.due_date) < new Date()) { %>
+                            <div style="color:var(--danger);font-size:11px;font-weight:600;">⚠ <%= t.late %></div>
+                            <% } %>
+                        </td>
+                        <td style="font-size:12px;color:var(--muted);">
+                            <%= i.created_at ? new Date(i.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-' %>
+                        </td>
+                        <td>
+                            <span class="badge badge-<%= i.status %>"><%= i.status === 'paid' ? '✓ ' + t.paid : t.unpaid %></span>
+                            <% if(i.status === 'paid' && i.paid_at) { %>
+                            <div style="font-size:11px;color:var(--muted);margin-top:3px;">
+                                <%= new Date(i.paid_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %>
+                            </div>
+                            <% } %>
+                        </td>
+                        <td>
+                            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                                <% if(i.status !== 'paid') { %>
+                                <button class="btn btn-sm btn-success" title="<%= t.pay %>" onclick="payInvoice(<%= i.id %>)">✓</button>
+                                <button class="btn btn-sm" title="<%= t.unisolate %>" style="background:rgba(139,92,246,.15);color:#A78BFA;border:1px solid rgba(139,92,246,.3)" onclick="unisolateOnly(<%= i.id %>)">🔓</button>
+                                <button class="btn btn-sm" title="<%= t.defer %>" style="background:rgba(245,158,11,.15);color:var(--warning);border:1px solid rgba(245,158,11,.3)" onclick="deferInvoice(<%= i.id %>)">📅</button>
+                                <% } %>
+                                <button class="btn btn-sm btn-info" title="<%= t.edit %>" onclick="openEditById(<%= i.id %>)">✏</button>
+                                <a href="/print/invoice?ids=<%= i.id %>" target="_blank" class="btn btn-sm" title="<%= t.print %>" style="background:rgba(96,165,250,.15);color:#60A5FA;border:1px solid rgba(96,165,250,.3)">🖨</a>
+                                <button class="btn btn-sm" title="<%= t.send_wa %>" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">💬</button>
+                                <% if(i.status !== 'paid') { %>
+                                <button class="btn btn-sm btn-danger" title="<%= t.delete %>" onclick="deleteItem('/billing/api/<%= i.id %>','<%= t.delete_confirm %>')">🗑</button>
+                                <% } %>
+                            </div>
+                        </td>
+                    </tr>
+                    <% }); %>
+                <% } else { %>
+                    <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:50px;">
+                        <i class="fas fa-file-invoice" style="font-size:32px;opacity:.3;display:block;margin-bottom:12px;"></i>
+                        <%= t.no_customer_data %>
+                    </td></tr>
+                <% } %>
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <% if (pagination.totalPages >= 1) { %>
+            <%
+                const buildUrl = (p) => {
+                    const q = new URLSearchParams();
+                    if (search)                  q.set('search', search);
+                    if (statusFilter !== 'all')  q.set('status', statusFilter);
+                    if (dateFrom)                q.set('dateFrom', dateFrom);
+                    if (dateTo)                  q.set('dateTo', dateTo);
+                    if (dateField)               q.set('dateField', dateField);
+                    q.set('page', p);
+                    return '/billing?' + q.toString();
+                };
+            %>
+            <div class="pagination">
+                <div class="page-info">
+                    Menampilkan <b><%= Math.min((pagination.page-1)*pagination.perPage+1, pagination.total) %>–<%= Math.min(pagination.page*pagination.perPage, pagination.total) %></b>
+                    dari <b><%= pagination.total %></b> invoice
+                </div>
+                <div class="page-btns">
+                    <a href="<%= buildUrl(pagination.page-1) %>" class="page-btn <%= pagination.page <= 1 ? 'disabled' : '' %>" style="<%= pagination.page <= 1 ? 'pointer-events:none;opacity:.4;' : '' %>">← Prev</a>
+                    <span class="page-btn active"><%= pagination.page %> / <%= pagination.totalPages %></span>
+                    <a href="<%= buildUrl(pagination.page+1) %>" class="page-btn <%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>" style="<%= pagination.page >= pagination.totalPages ? 'pointer-events:none;opacity:.4;' : '' %>">Next →</a>
+                </div>
+            </div>
+            <% } %>
+        </div>
+
+    </div>
+</main>
+
+<!-- Add Invoice Modal -->
+<div class="overlay" id="addModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2 class="modal-title"><%= t.add_invoice %></h2><button class="close-btn" onclick="document.getElementById('addModal').style.display='none'">×</button></div>
+        <form id="addInvoiceForm">
+            <div class="form-group"><label><%= t.customer %></label>
+                <select id="invCustomer" class="form-control" required>
+                    <option value=""><%= t.select_package %></option>
+                    <% customers.forEach(c => { %><option value="<%= c.id %>"><%= c.name %></option><% }); %>
+                </select>
+            </div>
+            <div class="form-group"><label><%= t.amount %> (Rp)</label><input type="number" id="invAmount" class="form-control" placeholder="Otomatis dari paket jika kosong"></div>
+            <div class="form-group"><label><%= t.due_date %></label><input type="date" id="invDue" class="form-control"></div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;margin-top:6px;"><%= t.save %></button>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Invoice Modal -->
+<div class="overlay" id="editModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2 class="modal-title"><%= t.edit_invoice %></h2><button class="close-btn" onclick="document.getElementById('editModal').style.display='none'">×</button></div>
+        <form id="editInvForm">
+            <input type="hidden" id="editInvId">
+            <div class="form-group"><label>Invoice #</label><input type="text" id="editInvNum" class="form-control" readonly style="opacity:.6"></div>
+            <div class="form-group"><label><%= t.amount %> (Rp)</label><input type="number" id="editInvAmount" class="form-control" required></div>
+            <div class="form-group"><label><%= t.due_date %></label><input type="date" id="editInvDue" class="form-control" required></div>
+            <div class="form-group"><label><%= t.status_label %></label>
+                <select id="editInvStatus" class="form-control">
+                    <option value="unpaid"><%= t.unpaid %></option>
+                    <option value="paid"><%= t.paid %></option>
+                    <option value="cancelled"><%= t.cancelled %></option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;margin-top:6px;"><%= t.save_changes %></button>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<textarea id="invoicesData" style="display:none;"><%= JSON.stringify(invoices) %></textarea>
+
+<script>
+// ── Live Clock ──
+const HARI  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+function updateClock() {
+    const now = new Date();
+    const hh  = String(now.getHours()).padStart(2,'0');
+    const mm  = String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('liveClock').textContent = `${hh}:${mm}`;
+    document.getElementById('liveDay').textContent   = HARI[now.getDay()];
+    document.getElementById('liveDate').textContent  = `${now.getDate()} ${BULAN[now.getMonth()]} ${now.getFullYear()}`;
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── Invoice actions ──
+let allInvoices = [];
+try { allInvoices = JSON.parse(document.getElementById('invoicesData').value); } catch(e) {}
+
+document.getElementById('addInvoiceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const res = await fetch('/billing/api/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ customer_id: document.getElementById('invCustomer').value, amount: document.getElementById('invAmount').value||null, due_date: document.getElementById('invDue').value||null }) });
+    const data = await res.json();
+    showToast(data.message, data.success?'success':'error');
+    if(data.success){ document.getElementById('addModal').style.display='none'; setTimeout(()=>location.reload(),1000); }
+});
+
+document.getElementById('editInvForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('editInvId').value;
+    const body = { amount: document.getElementById('editInvAmount').value, due_date: document.getElementById('editInvDue').value, status: document.getElementById('editInvStatus').value };
+    const res = await fetch('/billing/api/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){ document.getElementById('editModal').style.display='none'; setTimeout(()=>location.reload(),1000); }
+});
+
+function openEditModal(inv) {
+    document.getElementById('editInvId').value     = inv.id;
+    document.getElementById('editInvNum').value    = '#' + inv.id;
+    document.getElementById('editInvAmount').value = inv.amount;
+    document.getElementById('editInvDue').value    = inv.due_date ? new Date(inv.due_date).toISOString().split('T')[0] : '';
+    document.getElementById('editInvStatus').value = inv.status;
+    document.getElementById('editModal').style.display = 'flex';
+}
+function openEditById(id) { const inv = allInvoices.find(x => x.id == id); if(inv) openEditModal(inv); }
+
+async function payInvoice(id){if(!confirm(<%- JSON.stringify(t.confirm_pay) %>))return;const res=await fetch('/billing/api/'+id+'/pay',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
+async function unisolateOnly(id){if(!confirm(<%- JSON.stringify(t.confirm_unisolate) %>))return;const res=await fetch('/billing/api/'+id+'/unisolate',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
+async function deferInvoice(id){if(!confirm(<%- JSON.stringify(t.confirm_defer) %>))return;const res=await fetch('/billing/api/'+id+'/defer',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1200);}
+async function deleteItem(url,msg){if(!confirm(msg))return;const res=await fetch(url,{method:'DELETE'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
+async function generateBulk(){if(!confirm(<%- JSON.stringify(t.confirm_generate_bulk) %>))return;showToast(<%- JSON.stringify(t.generating) %>,'success');const res=await fetch('/billing/api/generate-bulk',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),2000);}
+async function runIsolir(){if(!confirm(<%- JSON.stringify(t.confirm_run_isolir) %>))return;showToast(<%- JSON.stringify(t.running_isolir) %>,'success');const res=await fetch('/billing/api/run-isolir',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1500);}
+async function sendReminders(){if(!confirm(<%- JSON.stringify(t.confirm_send_reminders) %>))return;showToast(<%- JSON.stringify(t.sending_reminders) %>,'success');try{const res=await fetch('/billing/api/send-reminders',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');}catch(e){showToast('Error: '+e.message,'error');}}
+function sendWA(phone,invNum,amount,dueDate){if(!phone){alert(<%- JSON.stringify(t.no_phone) %>);return;}phone=phone.replace(/[^0-9]/g,'');if(phone.startsWith('0'))phone='62'+phone.substring(1);const rawMsg=<%- JSON.stringify(t.wa_bill_msg||'') %>;const msg=rawMsg.replace('{invNum}',invNum).replace('{amount}',amount).replace('{dueDate}',dueDate);window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');}
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+</script>
+</body>
+</html>

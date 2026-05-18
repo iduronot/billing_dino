@@ -1,0 +1,78 @@
+<header class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <!-- Hamburger for Mobile -->
+        <button id="mobileMenuBtn" style="display:none;background:none;border:none;color:var(--text);cursor:pointer;padding:8px;">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <span class="topbar-title" id="pageHeaderTitle"><%= typeof title !== 'undefined' ? title : (settings.company_name || 'Dino-Bill') %></span>
+    </div>
+    <div class="user-info">
+        <a href="/set-lang/<%= lang === 'id' ? 'en' : 'id' %>" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:0 10px;height:38px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;text-decoration:none;font-size:12px;font-weight:600;" title="<%= t.change_language %>">
+            <%= lang === 'id' ? '🇮🇩 ID' : '🇺🇸 EN' %>
+        </a>
+        <button id="themeToggle" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;" title="<%= t.toggle_theme %>">
+            <i class="fas fa-moon"></i>
+        </button>
+        <div class="user-text">
+            <div style="font-size:14px;font-weight:600;"><%= user.username %></div>
+            <div style="font-size:11px;color:var(--muted);"><%= user.role || 'Administrator' %></div>
+        </div>
+        <a href="/profile" class="avatar" style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;color:white;text-decoration:none;">
+            <%= user.username.charAt(0).toUpperCase() %>
+        </a>
+    </div>
+</header>
+
+<script>
+    // Mobile Menu Toggle
+    const mobileBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    
+    function toggleSidebar(state) {
+        const isActive = typeof state === 'boolean' ? state : !sidebar.classList.contains('active');
+        sidebar.classList.toggle('active', isActive);
+        overlay.classList.toggle('active', isActive);
+        if (window.innerWidth <= 768) {
+            document.body.style.overflow = isActive ? 'hidden' : '';
+        }
+    }
+
+    if (mobileBtn && sidebar) {
+        mobileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSidebar();
+        });
+        
+        if (overlay) {
+            overlay.addEventListener('click', () => toggleSidebar(false));
+        }
+
+        // Close sidebar when clicking links inside
+        const navLinks = sidebar.querySelectorAll('.nav-item');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) toggleSidebar(false);
+            });
+        });
+    }
+
+    // Theme Toggle Logic
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = themeToggle.querySelector('i');
+    
+    function updateThemeUI() {
+        const isLight = document.documentElement.classList.contains('light-theme');
+        themeIcon.className = isLight ? 'fas fa-sun' : 'fas fa-moon';
+        themeToggle.style.color = isLight ? '#F59E0B' : 'var(--text)';
+        themeToggle.style.background = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+    }
+    
+    updateThemeUI();
+    
+    themeToggle.addEventListener('click', () => {
+        const isLight = document.documentElement.classList.toggle('light-theme');
+        localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        updateThemeUI();
+    });
+</script>

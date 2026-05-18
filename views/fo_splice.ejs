@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .tube-section { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; margin-bottom:16px; overflow:hidden; }
+        .tube-header  { display:flex; align-items:center; gap:12px; padding:12px 18px; font-weight:700; font-size:13px; border-bottom:1px solid var(--border); }
+        .tube-dot { width:18px; height:18px; border-radius:50%; border:2px solid rgba(255,255,255,.25); flex-shrink:0; }
+
+        /* Grid core */
+        .core-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; padding:14px; background:var(--sub-bg); }
+        .core-card { border:1px solid var(--border); border-radius:10px; padding:10px; cursor:pointer; transition:all .15s; position:relative; }
+        .core-card:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,.2); }
+        .core-card.available { border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.05); }
+        .core-card.partial   { border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.06); }
+        .core-card.broken    { border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.05); opacity:.55; }
+
+        .core-top { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+        .core-dot { width:14px; height:14px; border-radius:4px; flex-shrink:0; }
+        .core-num { font-size:13px; font-weight:800; }
+        .core-color-name { font-size:10px; color:var(--muted); }
+
+        .assign-list { display:flex; flex-direction:column; gap:3px; }
+        .assign-chip { background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.2); color:#60A5FA; border-radius:6px; padding:3px 7px; font-size:10px; font-weight:600; display:flex; align-items:center; gap:4px; justify-content:space-between; }
+        .assign-chip .del-btn { background:none; border:none; color:#EF4444; cursor:pointer; font-size:11px; padding:0; line-height:1; }
+        .assign-chip.drop    { background:rgba(139,92,246,.1); border-color:rgba(139,92,246,.2); color:#A78BFA; }
+        .assign-chip.splice  { background:rgba(59,130,246,.1); border-color:rgba(59,130,246,.2); color:#60A5FA; }
+        .assign-chip.pass    { background:rgba(148,163,184,.1); border-color:rgba(148,163,184,.2); color:#94A3B8; }
+
+        .core-add-btn { width:100%; margin-top:7px; padding:4px 0; border-radius:6px; border:1px dashed var(--border); background:transparent; color:var(--muted); font-size:11px; cursor:pointer; font-family:'Outfit',sans-serif; transition:all .15s; }
+        .core-add-btn:hover { border-color:var(--primary); color:var(--primary); background:rgba(59,130,246,.05); }
+        .core-status-badge { position:absolute; top:8px; right:8px; font-size:9px; font-weight:700; padding:2px 6px; border-radius:10px; }
+
+        .stats-pills { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+        .pill { background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:8px; }
+        .pill b { font-size:18px; font-weight:800; display:block; line-height:1; }
+
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; padding:16px; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:480px; padding:28px; max-height:90vh; overflow-y:auto; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+        .form-group { margin-bottom:13px; }
+        .form-group label { display:block; margin-bottom:5px; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Diagram Core FO' }) %>
+    <div class="content">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">🔌 <%= cable.name %></h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">
+                    <%= cable.cable_type %> · <%= cable.core_count %> core ·
+                    <%= cable.length_m >= 1000 ? (cable.length_m/1000).toFixed(2)+' km' : cable.length_m+' m' %>
+                </p>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="/fo/cables" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--text); font-size:12px;">← Kembali</a>
+                <% if (tubes.length === 0) { %>
+                <button onclick="openGenModal()" class="btn btn-primary"><i class="fas fa-magic"></i> Generate Tube & Core</button>
+                <% } else { %>
+                <button onclick="openGenModal()" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--muted); font-size:12px;"><i class="fas fa-redo"></i> Regenerate</button>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <%
+            let gAvail=0, gPartial=0, gBroken=0, gAssign=0;
+            tubes.forEach(t => t.cores.forEach(c => {
+                if(c.status==='available') gAvail++;
+                else if(c.status==='partial') gPartial++;
+                else if(c.status==='broken') gBroken++;
+                gAssign += (c.assignments||[]).length;
+            }));
+        %>
+        <div class="stats-pills">
+            <div class="pill"><b><%= tubes.length %></b>Tube</div>
+            <div class="pill"><span style="color:#10B981">●</span><div><b style="color:#10B981"><%= gAvail %></b>Bebas</div></div>
+            <div class="pill"><span style="color:#F59E0B">●</span><div><b style="color:#F59E0B"><%= gPartial %></b>Sebagian dipakai</div></div>
+            <div class="pill"><span style="color:#3B82F6">●</span><div><b style="color:#3B82F6"><%= gAssign %></b>Total Assignment</div></div>
+            <% if(gBroken>0){ %><div class="pill"><span style="color:#EF4444">●</span><div><b style="color:#EF4444"><%= gBroken %></b>Putus</div></div><% } %>
+        </div>
+
+        <% if(tubes.length===0){ %>
+        <div style="text-align:center; padding:80px 20px; color:var(--muted);">
+            <div style="font-size:48px; margin-bottom:16px; opacity:.25;">🔌</div>
+            <p style="font-size:15px; margin:0 0 16px;">Tube dan core belum digenerate.</p>
+            <button class="btn btn-primary" onclick="openGenModal()"><i class="fas fa-magic"></i> Generate Sekarang</button>
+        </div>
+        <% } %>
+
+        <!-- Tube & Core -->
+        <% tubes.forEach(tube => {
+            const TC = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+            const tColor = TC[tube.tube_color] || '#94A3B8';
+            const tAvail = tube.cores.filter(c=>c.status==='available').length;
+        %>
+        <div class="tube-section">
+            <div class="tube-header" style="background:<%= tColor %>18;">
+                <div class="tube-dot" style="background:<%= tColor %>;"></div>
+                <span>Tube <%= tube.tube_number %> — <strong><%= tube.tube_color %></strong></span>
+                <span style="margin-left:auto; font-size:11px; color:var(--muted); font-weight:400;">
+                    <%= tAvail %> bebas / <%= tube.core_count %> core
+                </span>
+            </div>
+            <div class="core-grid">
+            <% tube.cores.forEach(core => {
+                const CC = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+                const cColor = CC[core.core_color] || '#94A3B8';
+                const assigns = core.assignments || [];
+            %>
+                <div class="core-card <%= core.status %>">
+                    <% if(core.status==='partial'){ %>
+                    <span class="core-status-badge" style="background:rgba(245,158,11,.15); color:#F59E0B;">dipakai</span>
+                    <% } else if(core.status==='available'){ %>
+                    <span class="core-status-badge" style="background:rgba(16,185,129,.12); color:#10B981;">bebas</span>
+                    <% } else if(core.status==='broken'){ %>
+                    <span class="core-status-badge" style="background:rgba(239,68,68,.15); color:#EF4444;">putus</span>
+                    <% } %>
+
+                    <div class="core-top">
+                        <div class="core-dot" style="background:<%= cColor %>;"></div>
+                        <div>
+                            <div class="core-num">#<%= core.core_number %></div>
+                            <div class="core-color-name"><%= core.core_color %></div>
+                        </div>
+                    </div>
+
+                    <!-- Daftar assignment -->
+                    <div class="assign-list">
+                    <% assigns.forEach(a => { %>
+                        <div class="assign-chip <%= a.usage_type %>">
+                            <span title="<%= a.node_name %>">
+                                <%= a.usage_type==='drop'?'↓':a.usage_type==='splice'?'⇌':'→' %>
+                                <%= a.node_name ? a.node_name.substring(0,14)+(a.node_name.length>14?'…':'') : '-' %>
+                                <% if(a.km_position>0){ %><span style="opacity:.6">(km<%= a.km_position %>)</span><% } %>
+                            </span>
+                            <button class="del-btn" onclick="event.stopPropagation(); deleteAssign(<%= a.id %>, event)" title="Hapus assignment">×</button>
+                        </div>
+                    <% }) %>
+                    </div>
+
+                    <!-- Tombol tambah assignment -->
+                    <% if(core.status !== 'broken'){ %>
+                    <button class="core-add-btn" onclick="openAssignModal(<%= core.id %>, <%= core.core_number %>, '<%= core.core_color %>')">
+                        + Assign ke Node
+                    </button>
+                    <% } %>
+
+                    <!-- Tombol tandai putus -->
+                    <div style="display:flex; gap:4px; margin-top:5px;">
+                        <% if(core.status !== 'broken'){ %>
+                        <button onclick="markBroken(<%= core.id %>)" style="flex:1; padding:3px; border-radius:5px; border:1px solid rgba(239,68,68,.3); background:rgba(239,68,68,.05); color:#EF4444; font-size:10px; cursor:pointer; font-family:'Outfit',sans-serif;">✕ Putus</button>
+                        <% } else { %>
+                        <button onclick="markAvailable(<%= core.id %>)" style="flex:1; padding:3px; border-radius:5px; border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.05); color:#10B981; font-size:10px; cursor:pointer; font-family:'Outfit',sans-serif;">✓ Pulihkan</button>
+                        <% } %>
+                    </div>
+                </div>
+            <% }) %>
+            </div>
+        </div>
+        <% }) %>
+    </div>
+</main>
+
+<!-- Modal Generate -->
+<div class="modal-overlay" id="genModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">⚙️ Generate Tube & Core</h3>
+            <button onclick="document.getElementById('genModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div style="background:var(--sub-bg); border-radius:12px; padding:14px; margin-bottom:16px; font-size:13px; color:var(--muted);">
+            <b style="color:var(--text);">Kabel:</b> <%= cable.name %> · <b style="color:var(--text);"><%= cable.core_count %> core</b><br>
+            Warna tube & core mengikuti standar ITU-T.
+        </div>
+        <div class="form-group">
+            <label>Core per Tube</label>
+            <select id="coresPerTube" class="form-control">
+                <option value="12" selected>12 core/tube (standar)</option>
+                <option value="6">6 core/tube</option>
+                <option value="8">8 core/tube</option>
+                <option value="24">24 core/tube</option>
+            </select>
+        </div>
+        <% if(tubes.length > 0){ %>
+        <div style="background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:10px; padding:12px; font-size:12px; color:#EF4444; margin-bottom:14px;">
+            ⚠ Regenerate akan menghapus semua tube & core termasuk semua assignment yang ada.
+        </div>
+        <% } %>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('genModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="generateTubes()" class="btn btn-primary"><i class="fas fa-magic"></i> Generate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Assign Core ke Node -->
+<div class="modal-overlay" id="assignModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="assignTitle" style="font-size:17px;font-weight:700;margin:0;">Assign Core ke Node</h3>
+            <button onclick="document.getElementById('assignModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div id="assignCoreBadge" style="margin-bottom:16px;"></div>
+        <input type="hidden" id="assignCoreId">
+        <div class="form-group">
+            <label>Node Tujuan *</label>
+            <select id="assignNodeId" class="form-control">
+                <option value="">-- Pilih Node --</option>
+                <% nodes.forEach(n => { %>
+                <option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option>
+                <% }) %>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Tipe Penggunaan</label>
+            <select id="assignType" class="form-control">
+                <option value="drop">Drop — Core langsung turun ke node ini</option>
+                <option value="splice">Splice — Disambung ke kabel lain di node ini</option>
+                <option value="pass-through">Pass-through — Lewat node ini, lanjut ke depan</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Posisi (km dari awal kabel)</label>
+            <input type="number" id="assignKm" class="form-control" placeholder="0" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label>Catatan</label>
+            <input type="text" id="assignNotes" class="form-control" placeholder="Opsional">
+        </div>
+        <div style="background:rgba(59,130,246,.06); border:1px solid rgba(59,130,246,.15); border-radius:10px; padding:12px; font-size:12px; color:var(--muted); margin-bottom:14px;">
+            💡 Satu core bisa di-assign ke <strong>banyak node berbeda</strong> — misalnya Core 1 dipakai ODC km-5 sekaligus ODP km-12.
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('assignModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="saveAssign()" class="btn btn-primary"><i class="fas fa-link"></i> Assign</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CABLE_ID = <%= cable.id %>;
+const CMAP = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+
+// ── Generate ──
+function openGenModal() { document.getElementById('genModal').style.display='flex'; }
+async function generateTubes() {
+    const cpt = document.getElementById('coresPerTube').value;
+    showToast('Generating...','info');
+    const res = await fetch(`/fo/api/cables/${CABLE_ID}/generate-tubes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cores_per_tube:cpt})});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){ document.getElementById('genModal').style.display='none'; setTimeout(()=>location.reload(),800); }
+}
+
+// ── Assign ──
+function openAssignModal(coreId, coreNum, coreColor) {
+    document.getElementById('assignCoreId').value = coreId;
+    document.getElementById('assignTitle').textContent = `Assign Core #${coreNum}`;
+    document.getElementById('assignNodeId').value = '';
+    document.getElementById('assignType').value   = 'drop';
+    document.getElementById('assignKm').value     = '';
+    document.getElementById('assignNotes').value  = '';
+    document.getElementById('assignCoreBadge').innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;background:var(--sub-bg);padding:10px 14px;border-radius:10px;">
+            <div style="width:20px;height:20px;border-radius:5px;background:${CMAP[coreColor]||'#94A3B8'};"></div>
+            <div><b>Core #${coreNum}</b> <span style="color:var(--muted);font-size:12px;">${coreColor}</span></div>
+        </div>`;
+    document.getElementById('assignModal').style.display='flex';
+}
+
+async function saveAssign() {
+    const coreId = document.getElementById('assignCoreId').value;
+    const body   = {
+        node_id:    document.getElementById('assignNodeId').value,
+        usage_type: document.getElementById('assignType').value,
+        km_position:document.getElementById('assignKm').value,
+        notes:      document.getElementById('assignNotes').value
+    };
+    if (!body.node_id) return showToast('Pilih node tujuan dulu','error');
+    const res = await fetch(`/fo/api/cores/${coreId}/assign`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){ document.getElementById('assignModal').style.display='none'; setTimeout(()=>location.reload(),600); }
+}
+
+async function deleteAssign(assignId, event) {
+    if(!confirm('Hapus assignment ini?')) return;
+    const res = await fetch(`/fo/api/assignments/${assignId}`,{method:'DELETE'});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),500);
+}
+
+async function markBroken(coreId) {
+    if(!confirm('Tandai core ini sebagai putus?')) return;
+    const res = await fetch(`/fo/api/cores/${coreId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'broken'})});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),500);
+}
+async function markAvailable(coreId) {
+    const res = await fetch(`/fo/api/cores/${coreId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'available'})});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),500);
+}
+
+function showToast(msg,type) {
+    const t=document.getElementById('toast');
+    t.textContent=msg;
+    const C={success:['rgba(16,185,129,.4)','#10B981'],error:['rgba(239,68,68,.4)','#EF4444'],info:['rgba(59,130,246,.4)','#60A5FA']};
+    const [b,c]=C[type]||C.info;
+    t.style.borderColor=b; t.style.color=c;
+    t.classList.add('show'); clearTimeout(t._t);
+    t._t=setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>

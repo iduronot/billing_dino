@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+        .stat-card.orange::before{background:linear-gradient(90deg,#FF6B35,#FCA5A5);}
+        .stat-card.blue::before{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+        .stat-card.green::before{background:linear-gradient(90deg,#10B981,#34D399);}
+        .stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+        .stat-val{font-size:22px;font-weight:800;}
+        .tbl-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;padding:11px 14px;text-align:left;white-space:nowrap;}
+        td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}tr:hover td{background:var(--hover-bg);}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:2000;padding:16px;}
+        .modal-card{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:540px;padding:28px;max-height:90vh;overflow-y:auto;}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .form-group{margin-bottom:12px;}.form-group.full{grid-column:1/-1;}
+        .form-group label{display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}.toast.show{display:block;}
+        .color-dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Kabel FO' }) %>
+    <div class="content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">🔌 Manajemen Kabel FO</h1>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">Rute, panjang, dan status kabel serat optik</p>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <a href="/fo" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;">🗺 Kembali ke Peta</a>
+                <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Kabel</button>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stat-card orange"><div class="stat-label">Total Kabel</div><div class="stat-val"><%= cstats.total||0 %></div></div>
+            <div class="stat-card blue"><div class="stat-label">Total Panjang</div><div class="stat-val"><%= ((cstats.total_m||0)/1000).toFixed(2) %> km</div></div>
+            <div class="stat-card green"><div class="stat-label">Total Core</div><div class="stat-val"><%= (cstats.total_core||0).toLocaleString('id-ID') %></div></div>
+        </div>
+
+        <div class="tbl-card">
+            <table>
+                <thead><tr><th>Nama</th><th>Dari</th><th>Ke</th><th>Tipe</th><th>Core</th><th>Panjang</th><th>Warna</th><th>Status</th><th>Aksi</th></tr></thead>
+                <tbody>
+                <% if(cables.length>0){%><% cables.forEach(c=>{%>
+                <tr>
+                    <td style="font-weight:600;">🔌 <%= c.name %></td>
+                    <td style="font-size:12px;"><%= c.from_name||'-' %><% if(c.from_type){%><br><span style="color:var(--muted);">(<%= c.from_type %>)</span><%}%></td>
+                    <td style="font-size:12px;"><%= c.to_name||'-' %><% if(c.to_type){%><br><span style="color:var(--muted);">(<%= c.to_type %>)</span><%}%></td>
+                    <td style="font-size:12px;"><%= c.cable_type %></td>
+                    <td style="font-weight:700;"><%= c.core_count %></td>
+                    <td style="font-weight:600;"><%= c.length_m>=1000?(c.length_m/1000).toFixed(2)+' km':c.length_m+' m' %></td>
+                    <td><span class="color-dot" style="background:<%= c.color||'#FF6B35' %>;"></span></td>
+                    <td><span style="padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;background:<%=c.status==='active'?'rgba(16,185,129,.1)':c.status==='damaged'?'rgba(239,68,68,.1)':c.status==='under_construction'?'rgba(245,158,11,.1)':'rgba(148,163,184,.1)'%>;color:<%=c.status==='active'?'#10B981':c.status==='damaged'?'#EF4444':c.status==='under_construction'?'#F59E0B':'#94A3B8'%>;"><%= c.status %></span></td>
+                    <td>
+                        <div style="display:flex;gap:5px;">
+                            <a href="/fo/splice/<%= c.id %>" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.08);color:#60A5FA;text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:11px;" title="Diagram Splice"><i class="fas fa-project-diagram"></i></a>
+                            <button onclick='openEditModal(<%- JSON.stringify(c) %>)' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-edit"></i></button>
+                            <% if (user && user.role === 'admin') { %><button onclick="deleteCable(<%= c.id %>)" style="width:30px;height:30px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;"><i class="fas fa-trash"></i></button><% } %>
+                        </div>
+                    </td>
+                </tr>
+                <%})%><%}else{%>
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:50px;">Belum ada kabel. <a href="/fo" style="color:var(--primary);">Gambar via peta</a></td></tr>
+                <%}%>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+<div class="modal-overlay" id="cableModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="cModalTitle" style="font-size:17px;font-weight:700;margin:0;">Tambah Kabel FO</h3>
+            <button onclick="document.getElementById('cableModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <form id="cableForm">
+            <input type="hidden" id="cId">
+            <div class="form-grid">
+                <div class="form-group full"><label>Nama *</label><input type="text" id="cName" class="form-control" required placeholder="FO-ODC01-ODP05"></div>
+                <div class="form-group"><label>Tipe</label><select id="cType" class="form-control"><% ['Single Mode','Multi Mode','ADSS','OPGW','Drop Cable'].forEach(t=>{%><option value="<%= t %>"><%= t %></option><%})%></select></div>
+                <div class="form-group"><label>Core</label><select id="cCore" class="form-control"><% [2,4,6,8,12,24,48,96,144].forEach(n=>{%><option value="<%= n %>" <%= n===12?'selected':'' %>><%= n %></option><%})%></select></div>
+                <div class="form-group"><label>Dari Node</label><select id="cFrom" class="form-control"><option value="">-</option><% nodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%></select></div>
+                <div class="form-group"><label>Ke Node</label><select id="cTo" class="form-control"><option value="">-</option><% nodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%></select></div>
+                <div class="form-group"><label>Panjang (m)</label><input type="number" id="cLen" class="form-control" placeholder="0" min="0" step="0.1"></div>
+                <div class="form-group"><label>Status</label><select id="cStatus" class="form-control"><option value="active">Aktif</option><option value="under_construction">Dalam Pemasangan</option><option value="inactive">Tidak Aktif</option><option value="damaged">Rusak</option></select></div>
+                <div class="form-group"><label>Warna</label><input type="color" id="cColor" value="#FF6B35" class="form-control" style="height:40px;padding:2px 4px;cursor:pointer;"></div>
+                <div class="form-group full"><label>Catatan</label><input type="text" id="cNotes" class="form-control" placeholder="Opsional"></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+                <button type="button" onclick="document.getElementById('cableModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+function openAddModal(){document.getElementById('cModalTitle').textContent='Tambah Kabel FO';document.getElementById('cId').value='';['cName','cLen','cNotes'].forEach(id=>document.getElementById(id).value='');document.getElementById('cType').value='Single Mode';document.getElementById('cCore').value='12';document.getElementById('cStatus').value='active';document.getElementById('cColor').value='#FF6B35';document.getElementById('cableModal').style.display='flex';}
+function openEditModal(c){document.getElementById('cModalTitle').textContent='Edit: '+c.name;document.getElementById('cId').value=c.id;document.getElementById('cName').value=c.name;document.getElementById('cType').value=c.cable_type;document.getElementById('cCore').value=c.core_count;document.getElementById('cFrom').value=c.from_node_id||'';document.getElementById('cTo').value=c.to_node_id||'';document.getElementById('cLen').value=c.length_m||'';document.getElementById('cStatus').value=c.status;document.getElementById('cColor').value=c.color||'#FF6B35';document.getElementById('cNotes').value=c.notes||'';document.getElementById('cableModal').style.display='flex';}
+document.getElementById('cableForm').addEventListener('submit',async ev=>{ev.preventDefault();const id=document.getElementById('cId').value;const body={name:document.getElementById('cName').value,cable_type:document.getElementById('cType').value,core_count:document.getElementById('cCore').value,from_node_id:document.getElementById('cFrom').value,to_node_id:document.getElementById('cTo').value,length_m:document.getElementById('cLen').value,status:document.getElementById('cStatus').value,color:document.getElementById('cColor').value,notes:document.getElementById('cNotes').value,path:[]};const res=await fetch(id?'/fo/api/cables/'+id:'/fo/api/cables',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success){document.getElementById('cableModal').style.display='none';setTimeout(()=>location.reload(),800);}});
+async function deleteCable(id){if(!confirm('Hapus kabel ini?'))return;const res=await fetch('/fo/api/cables/'+id,{method:'DELETE'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),800);}
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+</script>
+</body>
+</html>

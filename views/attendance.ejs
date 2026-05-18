@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .checkin-card{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:28px;text-align:center;max-width:440px;margin:0 auto 24px;}
+        .checkin-status{font-size:64px;margin-bottom:12px;line-height:1;}
+        .checkin-title{font-size:20px;font-weight:800;margin-bottom:4px;}
+        .checkin-sub{font-size:14px;color:var(--muted);margin-bottom:20px;}
+        .checkin-info{background:var(--sub-bg);border-radius:12px;padding:14px;margin-bottom:18px;text-align:left;}
+        .ci-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;}
+        .ci-label{color:var(--muted);}
+        .ci-val{font-weight:600;}
+        .btn-checkin{width:100%;padding:16px;border-radius:14px;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;}
+        .btn-checkin.ready{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 6px 20px rgba(16,185,129,.4);}
+        .btn-checkin.ready:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(16,185,129,.4);}
+        .btn-checkin.done{background:var(--sub-bg);color:var(--muted);cursor:not-allowed;border:1px solid var(--border);}
+        .result-card{border-radius:14px;padding:16px;margin-bottom:14px;text-align:center;display:none;}
+        .result-card.success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#10B981;}
+        .result-card.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#EF4444;}
+        .result-card.late{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:#F59E0B;}
+
+        .hist-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+        .hist-month{display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;padding:10px 14px;text-align:left;}
+        td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+        tr:last-child td{border-bottom:none;}
+
+        .status-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+        .status-badge.hadir{background:rgba(16,185,129,.1);color:#10B981;border:1px solid rgba(16,185,129,.2);}
+        .status-badge.terlambat{background:rgba(245,158,11,.1);color:#F59E0B;border:1px solid rgba(245,158,11,.2);}
+        .status-badge.ditolak{background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.2);}
+
+        .stats-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;}
+        .sm-card{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+        .sm-val{font-size:24px;font-weight:800;}
+        .sm-label{font-size:11px;color:var(--muted);margin-top:2px;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Presensi' }) %>
+    <div class="content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">📍 Presensi Harian</h1>
+                <div id="liveClock" style="font-size:13px;color:var(--muted);margin-top:4px;"></div>
+            </div>
+        </div>
+
+        <!-- Card Presensi Utama -->
+        <div class="checkin-card">
+            <% if (todayRecord) { %>
+                <div class="checkin-status"><%= todayRecord.status==='hadir'?'✅':todayRecord.status==='terlambat'?'🟡':'❌' %></div>
+                <div class="checkin-title"><%= todayRecord.status==='hadir'?'Sudah Hadir':todayRecord.status==='terlambat'?'Terlambat':'Ditolak' %></div>
+                <div class="checkin-sub">Presensi hari ini sudah tercatat</div>
+                <div class="checkin-info">
+                    <div class="ci-row"><span class="ci-label">Waktu Masuk</span><span class="ci-val"><%= new Date(todayRecord.check_in_time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) %></span></div>
+                    <div class="ci-row"><span class="ci-label">Jarak dari Kantor</span><span class="ci-val"><%= todayRecord.distance_m %>m</span></div>
+                    <div class="ci-row"><span class="ci-label">Status</span><span class="ci-val" style="color:<%=todayRecord.status==='hadir'?'#10B981':todayRecord.status==='terlambat'?'#F59E0B':'#EF4444'%>;"><%= todayRecord.status.toUpperCase() %></span></div>
+                </div>
+                <button class="btn-checkin done" disabled>✓ Presensi Selesai Hari Ini</button>
+            <% } else { %>
+                <div class="checkin-status">📍</div>
+                <div class="checkin-title">Presensi Sekarang</div>
+                <div class="checkin-sub">
+                    Radius maks. <strong><%= cfg.attendance_radius || 100 %>m</strong> dari titik kantor<br>
+                    Batas tepat waktu: <strong><%= cfg.attendance_late_time || '08:30' %></strong>
+                </div>
+                <div id="resultCard" class="result-card"></div>
+                <div class="checkin-info" id="gpsInfo">
+                    <div class="ci-row"><span class="ci-label">Status GPS</span><span class="ci-val" id="gpsStatusText" style="color:#F59E0B;">Belum diakses</span></div>
+                    <div class="ci-row"><span class="ci-label">Koordinat</span><span class="ci-val" id="coordText" style="font-size:11px;">-</span></div>
+                    <div class="ci-row"><span class="ci-label">Akurasi</span><span class="ci-val" id="accText">-</span></div>
+                </div>
+                <button class="btn-checkin ready" id="btnCheckin" onclick="doCheckin()">
+                    📍 Ambil GPS & Presensi Sekarang
+                </button>
+            <% } %>
+        </div>
+
+        <!-- Stats mini bulan ini -->
+        <div class="stats-mini">
+            <div class="sm-card"><div class="sm-val" style="color:#10B981;"><%= stats.hadir||0 %></div><div class="sm-label">✅ Tepat Waktu</div></div>
+            <div class="sm-card"><div class="sm-val" style="color:#F59E0B;"><%= stats.terlambat||0 %></div><div class="sm-label">🟡 Terlambat</div></div>
+            <div class="sm-card"><div class="sm-val" style="color:#EF4444;"><%= stats.ditolak||0 %></div><div class="sm-label">❌ Ditolak</div></div>
+        </div>
+
+        <!-- Riwayat -->
+        <div class="hist-card">
+            <form method="GET" class="hist-month">
+                <span style="font-size:14px;font-weight:700;line-height:36px;">📅 Riwayat</span>
+                <input type="month" name="month" value="<%= month %>" class="form-control" style="width:180px;" onchange="this.form.submit()">
+            </form>
+            <table>
+                <thead><tr><th>Tanggal</th><th>Hari</th><th>Jam Masuk</th><th>Jarak</th><th>Status</th></tr></thead>
+                <tbody>
+                <% if(history.length>0){ %>
+                <% const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu']; %>
+                <% history.forEach(h => { %>
+                <tr>
+                    <td style="font-weight:600;"><%= new Date(h.date+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></td>
+                    <td style="color:var(--muted);"><%= DAYS[new Date(h.date+'T00:00:00').getDay()] %></td>
+                    <td><%= h.check_in_time ? new Date(h.check_in_time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-' %></td>
+                    <td style="font-size:12px;color:var(--muted);"><%= h.distance_m ? h.distance_m+'m' : '-' %></td>
+                    <td><span class="status-badge <%= h.status %>"><%= h.status.toUpperCase() %></span></td>
+                </tr>
+                <% }) %>
+                <% }else{ %>
+                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:40px;">Belum ada riwayat presensi bulan ini</td></tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+
+<script>
+// Helper format waktu WIB
+function toWIB(dateStr) {
+    if (!dateStr) return '-';
+    const d = new Date(dateStr);
+    d.setHours(d.getHours()); // sudah tersimpan WIB di DB
+    return d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+// Live clock
+function updateClock() {
+    const now = new Date();
+    const DAYS = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    document.getElementById('liveClock').textContent =
+        `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()} — ${now.toLocaleTimeString('id-ID')}`;
+}
+updateClock(); setInterval(updateClock, 1000);
+
+let userLat = null, userLng = null, userAcc = null;
+
+// Auto-ambil GPS saat halaman load
+<% if (!todayRecord) { %>
+navigator.geolocation && navigator.geolocation.getCurrentPosition(
+    pos => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        userAcc = Math.round(pos.coords.accuracy);
+        document.getElementById('gpsStatusText').textContent = '✅ Siap';
+        document.getElementById('gpsStatusText').style.color = '#10B981';
+        document.getElementById('coordText').textContent = `${userLat.toFixed(6)}, ${userLng.toFixed(6)}`;
+        document.getElementById('accText').textContent = `±${userAcc}m`;
+    },
+    err => {
+        const msgs = {1:'GPS ditolak — izinkan di pengaturan browser', 2:'Sinyal GPS lemah', 3:'Waktu habis'};
+        document.getElementById('gpsStatusText').textContent = '❌ ' + (msgs[err.code]||err.message);
+        document.getElementById('gpsStatusText').style.color = '#EF4444';
+    },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+);
+<% } %>
+
+async function doCheckin() {
+    const btn = document.getElementById('btnCheckin');
+    const resultCard = document.getElementById('resultCard');
+
+    if (!userLat || !userLng) {
+        // Coba ambil GPS lagi
+        btn.textContent = '📡 Mengambil GPS...';
+        btn.disabled = true;
+        navigator.geolocation.getCurrentPosition(
+            pos => { userLat=pos.coords.latitude; userLng=pos.coords.longitude; userAcc=Math.round(pos.coords.accuracy); btn.disabled=false; btn.textContent='📍 Ambil GPS & Presensi Sekarang'; doCheckin(); },
+            () => { btn.disabled=false; btn.textContent='📍 Ambil GPS & Presensi Sekarang'; showResult('GPS tidak tersedia. Izinkan akses lokasi di browser.','error'); }
+        );
+        return;
+    }
+
+    btn.textContent = '⏳ Memproses presensi...';
+    btn.disabled = true;
+
+    const res = await fetch('/attendance/api/checkin', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+            lat: userLat, lng: userLng,
+            device_info: navigator.userAgent.substring(0,150)
+        })
+    });
+    const d = await res.json();
+
+    if (d.success) {
+        const cls = d.status === 'terlambat' ? 'late' : 'success';
+        showResult(d.message, cls);
+        btn.className = 'btn-checkin done';
+        btn.textContent = '✓ Presensi Berhasil';
+        setTimeout(() => location.reload(), 2000);
+    } else {
+        showResult(d.message, 'error');
+        btn.disabled = false;
+        btn.textContent = '📍 Ambil GPS & Presensi Sekarang';
+    }
+}
+
+function showResult(msg, type) {
+    const card = document.getElementById('resultCard');
+    card.textContent = msg;
+    card.className = 'result-card ' + type;
+    card.style.display = 'block';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ── Layout ── */
+        .wa-layout { display:grid; grid-template-columns:320px 1fr; gap:0; height:calc(100vh - 130px); border:1px solid var(--border); border-radius:18px; overflow:hidden; background:var(--card-bg); }
+        .wa-sidebar { border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+        .wa-main { display:flex; flex-direction:column; overflow:hidden; }
+
+        /* ── Stats Row ── */
+        .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+        .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:16px; position:relative; overflow:hidden; }
+        .stat-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .stat-card.blue::before   { background:linear-gradient(90deg,#3B82F6,#60A5FA); }
+        .stat-card.green::before  { background:linear-gradient(90deg,#10B981,#34D399); }
+        .stat-card.purple::before { background:linear-gradient(90deg,#8B5CF6,#A78BFA); }
+        .stat-card.red::before    { background:linear-gradient(90deg,#EF4444,#F87171); }
+        .stat-label { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+        .stat-val   { font-size:26px; font-weight:800; line-height:1; }
+
+        /* ── Sidebar ── */
+        .wa-search { padding:14px; border-bottom:1px solid var(--border); }
+        .wa-search input { width:100%; background:var(--sub-bg); border:1px solid var(--border); border-radius:10px; padding:9px 14px; font-size:13px; color:var(--text); font-family:'Outfit',sans-serif; outline:none; box-sizing:border-box; }
+        .wa-search input:focus { border-color:var(--primary); }
+        .contact-list { flex:1; overflow-y:auto; }
+        .contact-item { display:flex; align-items:center; gap:12px; padding:13px 16px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .15s; }
+        .contact-item:hover, .contact-item.active { background:var(--hover-bg); }
+        .contact-item.active { border-left:3px solid var(--primary); }
+        .avatar { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; flex-shrink:0; }
+        .contact-info { flex:1; min-width:0; }
+        .contact-name  { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .contact-preview { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+        .contact-meta  { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+        .contact-time  { font-size:10px; color:var(--muted); }
+        .unread-badge  { background:var(--primary); color:white; border-radius:10px; font-size:10px; font-weight:700; padding:2px 7px; min-width:18px; text-align:center; }
+        .unread-badge.wa { background:#25D366; }
+
+        /* ── Chat Area ── */
+        .chat-header { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-shrink:0; }
+        .chat-name { font-weight:700; font-size:15px; }
+        .chat-phone { font-size:12px; color:var(--muted); }
+        .chat-actions { margin-left:auto; display:flex; gap:8px; }
+        .chat-messages { flex:1; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:10px; }
+        .msg-bubble { max-width:72%; padding:10px 14px; border-radius:14px; font-size:13px; line-height:1.5; position:relative; }
+        .msg-bubble.in  { background:var(--sub-bg); border-radius:2px 14px 14px 14px; align-self:flex-start; }
+        .msg-bubble.out { background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.2); border-radius:14px 2px 14px 14px; align-self:flex-end; }
+        .msg-time { font-size:10px; color:var(--muted); margin-top:4px; display:block; }
+        .msg-time.out { text-align:right; }
+        .msg-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); font-size:14px; gap:12px; }
+        .msg-empty i { font-size:48px; opacity:.2; }
+        .chat-input-area { padding:14px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0; }
+        .chat-input { flex:1; background:var(--sub-bg); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-size:13px; color:var(--text); font-family:'Outfit',sans-serif; outline:none; resize:none; max-height:100px; }
+        .chat-input:focus { border-color:var(--primary); }
+        .btn-send { background:var(--primary); color:white; border:none; border-radius:12px; padding:10px 18px; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:opacity .2s; }
+        .btn-send:hover { opacity:.85; }
+        .btn-send:disabled { opacity:.4; cursor:not-allowed; }
+
+        /* ── Chart panel ── */
+        .chart-panel { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; padding:18px; margin-bottom:18px; }
+        .chart-title { font-size:13px; font-weight:700; margin:0 0 14px; }
+
+        /* ── Send broadcast ── */
+        .modal-overlay { position:fixed; inset:0; background:var(--overlay-bg); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; }
+        .modal-card { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:540px; padding:28px; }
+        .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+        .form-group { margin-bottom:14px; }
+        .form-group label { display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+
+        .wa-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px; }
+        .wa-status.ready    { background:rgba(16,185,129,.1); color:#10B981; border:1px solid rgba(16,185,129,.25); }
+        .wa-status.init     { background:rgba(245,158,11,.1); color:#F59E0B; border:1px solid rgba(245,158,11,.25); }
+        .wa-status.offline  { background:rgba(239,68,68,.1);  color:#EF4444; border:1px solid rgba(239,68,68,.25); }
+
+        @media(max-width:900px) { .wa-layout { grid-template-columns:1fr; height:auto; } .stats-row { grid-template-columns:repeat(2,1fr); } }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'WA Manager' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">💬 WhatsApp Manager</h1>
+                <p style="margin:4px 0 0; font-size:13px; color:var(--muted);">Baca, balas, dan kirim pesan WA ke pelanggan</p>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <span class="wa-status <%= waStatus.status === 'READY' ? 'ready' : waStatus.status === 'INITIALIZING' ? 'init' : 'offline' %>" id="waStatusBadge">
+                    <span style="width:7px; height:7px; border-radius:50%; background:currentColor;"></span>
+                    <span id="waStatusText"><%= waStatus.status === 'READY' ? 'Terhubung' : waStatus.status === 'INITIALIZING' ? 'Menghubungkan...' : 'Tidak Terhubung' %></span>
+                </span>
+                <button class="btn" style="background:rgba(37,211,102,.15); color:#25D366; border:1px solid rgba(37,211,102,.3);" onclick="syncMessages(this)">
+                    <i class="fas fa-sync-alt"></i> Sync Pesan
+                </button>
+                <button class="btn" style="background:rgba(245,158,11,.1); color:#F59E0B; border:1px solid rgba(245,158,11,.25); font-size:12px;" onclick="cleanupData(this)" title="Bersihkan nomor @lid di database">
+                    <i class="fas fa-broom"></i> Fix Data
+                </button>
+                <button class="btn btn-primary" onclick="document.getElementById('sendModal').style.display='flex'">
+                    <i class="fas fa-paper-plane"></i> Kirim ke Pelanggan
+                </button>
+            </div>
+        </div>
+
+        <!-- ── STAT CARDS ── -->
+        <div class="stats-row">
+            <div class="stat-card blue">
+                <div class="stat-label">Total Pesan (30 hari)</div>
+                <div class="stat-val" id="statTotal"><%= stats.total || 0 %></div>
+            </div>
+            <div class="stat-card green">
+                <div class="stat-label">Pesan Masuk</div>
+                <div class="stat-val" id="statIncoming"><%= stats.incoming || 0 %></div>
+            </div>
+            <div class="stat-card purple">
+                <div class="stat-label">Pesan Keluar</div>
+                <div class="stat-val" id="statOutgoing"><%= stats.outgoing || 0 %></div>
+            </div>
+            <div class="stat-card red">
+                <div class="stat-label">Belum Dibaca</div>
+                <div class="stat-val" id="statUnread"><%= stats.unread || 0 %></div>
+            </div>
+        </div>
+
+        <!-- ── CHART TREND ── -->
+        <div class="chart-panel">
+            <p class="chart-title">📈 Aktivitas Pesan 7 Hari Terakhir</p>
+            <canvas id="trendChart" height="70"></canvas>
+        </div>
+
+        <!-- ── CHAT LAYOUT ── -->
+        <div class="wa-layout">
+            <!-- Sidebar kontak -->
+            <div class="wa-sidebar">
+                <div class="wa-search">
+                    <input type="text" id="contactSearch" placeholder="🔍  Cari nama atau nomor..." oninput="filterContacts()">
+                </div>
+                <div class="contact-list" id="contactList">
+                    <% if (contacts && contacts.length > 0) { %>
+                        <% contacts.forEach(c => { %>
+                        <div class="contact-item" data-phone="<%= c.phone %>" data-name="<%= (c.customer_name || c.name || c.phone) %>" data-custid="<%= c.customer_id || '' %>"
+                             onclick="openChat('<%= c.phone %>', '<%= (c.customer_name || c.name || c.phone).replace(/'/g, "\\'") %>', '<%= c.customer_id || '' %>')">
+                            <div class="avatar" style="background:hsl(<%= parseInt(c.phone.slice(-3)) % 360 %>,60%,35%);">
+                                <%= (c.customer_name || c.name || c.phone).charAt(0).toUpperCase() %>
+                            </div>
+                            <div class="contact-info">
+                                <div class="contact-name"><%= c.customer_name || c.name || c.phone.split('@')[0] %></div>
+                                <div class="contact-preview"><%= c.last_message ? c.last_message.substring(0,40) : '-' %></div>
+                            </div>
+                            <div class="contact-meta">
+                                <div class="contact-time">
+                                    <% if (c.last_message_at) { %>
+                                        <%= new Date(c.last_message_at * 1000).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) %>
+                                    <% } %>
+                                </div>
+                                <% if (c.unread_count > 0) { %>
+                                <div class="unread-badge wa"><%= c.unread_count %></div>
+                                <% } %>
+                            </div>
+                        </div>
+                        <% }) %>
+                    <% } else { %>
+                    <div style="text-align:center; color:var(--muted); padding:40px 20px; font-size:13px;">
+                        <i class="fas fa-comments" style="font-size:32px; opacity:.2; display:block; margin-bottom:12px;"></i>
+                        Belum ada percakapan.<br>Klik "Sync Pesan" untuk memuat.
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Area chat -->
+            <div class="wa-main" id="chatMain">
+                <div class="chat-messages msg-empty" id="chatMessages">
+                    <i class="fab fa-whatsapp" style="font-size:56px; color:#25D366; opacity:.3;"></i>
+                    <p>Pilih percakapan untuk mulai membaca pesan</p>
+                </div>
+                <div class="chat-input-area" id="chatInputArea" style="display:none;">
+                    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ketik pesan..." onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
+                    <button class="btn-send" id="btnSend" onclick="sendReply()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<!-- Modal Kirim ke Pelanggan -->
+<div class="modal-overlay" id="sendModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px; font-weight:700; margin:0;">📤 Kirim Pesan ke Pelanggan</h3>
+            <button onclick="document.getElementById('sendModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div class="form-group">
+            <label>Pilih Pelanggan atau Masukkan Nomor</label>
+            <select id="sendCustomer" class="form-control" onchange="fillPhone()">
+                <option value="">-- Ketik nomor manual --</option>
+                <% customers.forEach(c => { %>
+                <option value="<%= c.phone %>" data-name="<%= c.name %>"><%= c.name %> (<%= c.phone %>)</option>
+                <% }) %>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Nomor WA *</label>
+            <input type="text" id="sendPhone" class="form-control" placeholder="08xxxxxxxxxx atau 628xxxxxxx">
+        </div>
+        <div class="form-group">
+            <label>Pesan *</label>
+            <textarea id="sendMessage" class="form-control" rows="5" placeholder="Tulis pesan di sini..." style="resize:vertical;"></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px;">
+            <button onclick="document.getElementById('sendModal').style.display='none'" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+            <button onclick="sendToCustomer()" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Kirim</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const isDark    = !document.documentElement.classList.contains('light-theme');
+const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+const tickColor = isDark ? '#94A3B8' : '#64748B';
+
+// ── Trend Chart ──
+const dailyStats = <%- JSON.stringify(dailyStats || []) %>;
+const last7 = [];
+for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
+    const found = dailyStats.find(s => s.date && s.date.toString().startsWith(key));
+    last7.push({ date: d.toLocaleDateString('id-ID',{weekday:'short',day:'2-digit'}), incoming: found ? parseInt(found.incoming)||0 : 0, outgoing: found ? parseInt(found.outgoing)||0 : 0 });
+}
+
+new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: {
+        labels: last7.map(d => d.date),
+        datasets: [
+            { label:'Masuk', data: last7.map(d => d.incoming), backgroundColor:'rgba(59,130,246,0.6)', borderColor:'#3B82F6', borderWidth:1, borderRadius:5 },
+            { label:'Keluar', data: last7.map(d => d.outgoing), backgroundColor:'rgba(16,185,129,0.6)', borderColor:'#10B981', borderWidth:1, borderRadius:5 }
+        ]
+    },
+    options: {
+        responsive:true,
+        plugins:{ legend:{ labels:{ color:tickColor, font:{size:11} } } },
+        scales:{
+            x:{ grid:{display:false}, ticks:{color:tickColor} },
+            y:{ beginAtZero:true, grid:{color:gridColor}, ticks:{color:tickColor, stepSize:1} }
+        }
+    }
+});
+
+// ── Chat State ──
+let currentPhone = null, currentName = null;
+
+function filterContacts() {
+    const q = document.getElementById('contactSearch').value.toLowerCase();
+    document.querySelectorAll('.contact-item').forEach(el => {
+        const name = el.dataset.name.toLowerCase();
+        const phone = el.dataset.phone;
+        el.style.display = (!q || name.includes(q) || phone.includes(q)) ? '' : 'none';
+    });
+}
+
+async function openChat(phone, name, customerId) {
+    // Strip suffix @c.us/@lid/@g.us jika ada
+    phone = phone.split('@')[0].replace(/\D/g, '');
+    currentPhone = phone;
+    currentName  = name;
+
+    // Simpan ke URL hash agar tidak hilang saat refresh
+    history.replaceState(null, '', '#' + phone);
+
+    // Highlight active
+    document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`.contact-item[data-phone="${phone}"]`);
+    if (el) {
+        el.classList.add('active');
+        // Reset unread badge
+        const badge = el.querySelector('.unread-badge');
+        if (badge) badge.remove();
+    }
+
+    // Load messages
+    const msgs = document.getElementById('chatMessages');
+    msgs.className = 'chat-messages';
+    msgs.innerHTML = '<div style="text-align:center; color:var(--muted); padding:20px;"><i class="fas fa-spinner fa-spin"></i> Memuat pesan...</div>';
+    document.getElementById('chatInputArea').style.display = 'flex';
+
+    // Update header
+    let header = document.getElementById('chatHeader');
+    if (!header) {
+        header = document.createElement('div');
+        header.id = 'chatHeader';
+        header.className = 'chat-header';
+        document.getElementById('chatMain').insertBefore(header, msgs);
+    }
+    const initials = name.charAt(0).toUpperCase();
+    const hue = parseInt(phone.slice(-3)) % 360;
+    header.innerHTML = `
+        <div class="avatar" style="background:hsl(${hue},60%,35%);">${initials}</div>
+        <div>
+            <div class="chat-name">${name}</div>
+            <div class="chat-phone">+${phone.split('@')[0]}</div>
+        </div>
+        <div class="chat-actions">
+            ${customerId ? `<a href="/customers/${customerId}" class="btn" style="font-size:12px;padding:6px 12px;background:var(--sub-bg);border:1px solid var(--border);color:var(--text);text-decoration:none;">👤 Profil</a>` : ''}
+        </div>`;
+
+    try {
+        const res  = await fetch(`/wa/api/messages/${phone}`);
+        const data = await res.json();
+        if (data.success && data.messages.length > 0) {
+            msgs.innerHTML = data.messages.map(m => `
+                <div class="msg-bubble ${m.from_me ? 'out' : 'in'}">
+                    ${escapeHtml(m.body)}
+                    <span class="msg-time ${m.from_me ? 'out' : ''}">
+                        ${new Date(m.timestamp * 1000).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
+                        ${m.from_me ? ' ✓' : ''}
+                    </span>
+                </div>`).join('');
+        } else {
+            msgs.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px;font-size:13px;">Belum ada pesan</div>';
+        }
+        msgs.scrollTop = msgs.scrollHeight;
+        // Update unread count
+        updateStats();
+    } catch(e) {
+        msgs.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px;">Gagal memuat pesan</div>';
+    }
+}
+
+async function sendReply() {
+    if (!currentPhone) return;
+    const input = document.getElementById('chatInput');
+    const msg   = input.value.trim();
+    if (!msg) return;
+
+    const btn = document.getElementById('btnSend');
+    btn.disabled = true;
+    input.disabled = true;
+
+    const res  = await fetch('/wa/api/send', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ phone: currentPhone, message: msg })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+        // Tambah bubble langsung
+        const msgs = document.getElementById('chatMessages');
+        const now  = new Date();
+        msgs.innerHTML += `
+            <div class="msg-bubble out">
+                ${escapeHtml(msg)}
+                <span class="msg-time out">${now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})} ✓</span>
+            </div>`;
+        msgs.scrollTop = msgs.scrollHeight;
+        input.value = '';
+        autoResize(input);
+    } else {
+        showToast(data.message, 'error');
+    }
+    btn.disabled  = false;
+    input.disabled = false;
+    input.focus();
+}
+
+function handleEnter(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); }
+}
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+// ── Kirim ke pelanggan (broadcast) ──
+function fillPhone() {
+    const sel = document.getElementById('sendCustomer');
+    const opt = sel.options[sel.selectedIndex];
+    if (opt.value) document.getElementById('sendPhone').value = opt.value;
+}
+
+async function sendToCustomer() {
+    const phone   = document.getElementById('sendPhone').value.trim();
+    const message = document.getElementById('sendMessage').value.trim();
+    if (!phone || !message) return showToast('Nomor dan pesan wajib diisi', 'error');
+
+    const res  = await fetch('/wa/api/send', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ phone, message })
+    });
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) {
+        document.getElementById('sendModal').style.display = 'none';
+        document.getElementById('sendMessage').value = '';
+    }
+}
+
+// ── Sync ──
+async function cleanupData(btn) {
+    const oldHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    const res = await fetch('/wa/api/cleanup', { method: 'POST' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 800);
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+}
+
+async function syncMessages(btn) {
+    const oldHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sync...';
+    const res = await fetch('/wa/api/sync', { method: 'POST' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 1000);
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+}
+
+// ── Live stats update ──
+async function updateStats() {
+    try {
+        const res  = await fetch('/wa/api/stats');
+        const data = await res.json();
+        if (data.success && data.stats) {
+            const s = data.stats;
+            document.getElementById('statTotal').textContent    = s.total || 0;
+            document.getElementById('statIncoming').textContent = s.incoming || 0;
+            document.getElementById('statOutgoing').textContent = s.outgoing || 0;
+            document.getElementById('statUnread').textContent   = s.unread || 0;
+        }
+    } catch(e) {}
+}
+setInterval(updateStats, 15000);
+
+// ── Live status WA ──
+async function checkWAStatus() {
+    try {
+        const res  = await fetch('/wa/api/status');
+        const data = await res.json();
+        const badge = document.getElementById('waStatusBadge');
+        const text  = document.getElementById('waStatusText');
+        badge.className = 'wa-status ' + (data.status === 'READY' ? 'ready' : data.status === 'INITIALIZING' ? 'init' : 'offline');
+        text.textContent = data.status === 'READY' ? 'Terhubung' : data.status === 'INITIALIZING' ? 'Menghubungkan...' : 'Tidak Terhubung';
+    } catch(e) {}
+}
+setInterval(checkWAStatus, 10000);
+
+// ── Auto-open chat dari URL hash saat refresh ──
+(function autoOpenFromHash() {
+    const hash = window.location.hash.replace('#', '');
+    if (!hash) return;
+    const el = document.querySelector(`.contact-item[data-phone="${hash}"]`);
+    if (el) {
+        // Ambil custId dari data attribute (lebih aman dari parsing onclick)
+        const phone  = el.dataset.phone;
+        const name   = el.dataset.name;
+        const custId = el.dataset.custid || '';
+        setTimeout(() => openChat(phone, name, custId), 300);
+    }
+})();
+
+function escapeHtml(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color = type === 'success' ? '#10B981' : '#EF4444';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

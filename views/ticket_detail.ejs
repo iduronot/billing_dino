@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .detail-grid{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;}
+        .card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;}
+        .card-title{font-size:14px;font-weight:700;margin:0 0 14px;}
+        .info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+        .info-row:last-child{border-bottom:none;}
+        .info-label{color:var(--muted);font-weight:500;}
+        .info-val{font-weight:600;text-align:right;max-width:200px;}
+
+        .badge-priority{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;}
+        .badge-priority.critical{background:rgba(239,68,68,.15);color:#EF4444;}
+        .badge-priority.high{background:rgba(249,115,22,.15);color:#F97316;}
+        .badge-priority.normal{background:rgba(59,130,246,.15);color:#60A5FA;}
+        .badge-priority.low{background:rgba(148,163,184,.15);color:#94A3B8;}
+        .badge-status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;}
+        .badge-status.open{background:rgba(245,158,11,.15);color:#F59E0B;}
+        .badge-status.in_progress{background:rgba(59,130,246,.15);color:#3B82F6;}
+        .badge-status.closed{background:rgba(16,185,129,.15);color:#10B981;}
+
+        /* Timeline komentar */
+        .comment-item{display:flex;gap:12px;margin-bottom:16px;}
+        .comment-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+        .comment-body{flex:1;}
+        .comment-header{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;}
+        .comment-name{font-weight:700;font-size:13px;}
+        .comment-time{font-size:11px;color:var(--muted);}
+        .comment-role{font-size:10px;padding:2px 7px;border-radius:10px;}
+        .comment-text{font-size:13px;line-height:1.5;background:var(--sub-bg);padding:10px 14px;border-radius:10px;}
+        .comment-internal .comment-text{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);}
+
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}
+        .toast.show{display:block;}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:2000;padding:16px;}
+        .modal-card{background:var(--sidebar-bg);border:1px solid var(--border);border-radius:20px;width:100%;max-width:460px;padding:28px;}
+        .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+        .form-group{margin-bottom:14px;}
+        .form-group label{display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;}
+        @media(max-width:900px){.detail-grid{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Detail Tiket' }) %>
+    <div class="content">
+
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <a href="/tickets" style="font-size:13px;color:var(--muted);text-decoration:none;">← Kembali ke Daftar Tiket</a>
+                <h1 style="margin:8px 0 4px;font-size:20px;font-weight:700;">#<%= ticket.id %> — <%= ticket.title %></h1>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                    <span class="badge-priority <%= ticket.priority %>"><%= ticket.priority %></span>
+                    <span class="badge-status <%= ticket.status %>"><%= ticket.status.replace('_',' ') %></span>
+                    <span style="font-size:12px;color:var(--muted);">Dibuat <%= new Date(ticket.created_at).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}) %></span>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <% if(ticket.status !== 'closed'){ %>
+                <button onclick="openCloseModal()" class="btn" style="background:rgba(16,185,129,.1);color:#10B981;border:1px solid rgba(16,185,129,.25);">✅ Selesaikan</button>
+                <% } else { %>
+                <button onclick="reopenTicket()" class="btn" style="background:rgba(245,158,11,.1);color:#F59E0B;border:1px solid rgba(245,158,11,.25);">🔄 Buka Kembali</button>
+                <% } %>
+                <% if(user && user.role==='admin'){ %>
+                <button onclick="deleteTicket()" class="btn" style="background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);">🗑 Hapus</button>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="detail-grid">
+            <!-- Kiri: Deskripsi + Komentar -->
+            <div>
+                <!-- Deskripsi -->
+                <div class="card">
+                    <p class="card-title">📋 Deskripsi Masalah</p>
+                    <p style="font-size:14px;line-height:1.6;margin:0;white-space:pre-wrap;"><%= ticket.description || 'Tidak ada deskripsi tambahan.' %></p>
+                    <% if(ticket.location){ %>
+                    <div style="margin-top:12px;padding:10px 14px;background:var(--sub-bg);border-radius:10px;font-size:13px;">
+                        📍 <strong>Lokasi:</strong> <%= ticket.location %>
+                    </div>
+                    <% } %>
+                    <% if(ticket.response_note){ %>
+                    <div style="margin-top:12px;padding:10px 14px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:10px;font-size:13px;">
+                        ✅ <strong>Resolusi:</strong> <%= ticket.response_note %>
+                    </div>
+                    <% } %>
+                </div>
+
+                <!-- Timeline Komentar -->
+                <div class="card">
+                    <p class="card-title">💬 Riwayat & Komentar (<%= comments.length %>)</p>
+                    <% if(comments.length===0){ %>
+                    <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">Belum ada komentar</div>
+                    <% } %>
+                    <% comments.forEach(c => {
+                        const roleColors = {admin:'#8B5CF6',technician:'#3B82F6',sales:'#10B981'};
+                        const rColor = roleColors[c.role]||'#94A3B8';
+                        const initials = (c.username||'?').substring(0,2).toUpperCase();
+                    %>
+                    <div class="comment-item <%= c.is_internal?'comment-internal':'' %>">
+                        <div class="comment-avatar" style="background:<%=rColor%>22;color:<%=rColor%>;"><%= initials %></div>
+                        <div class="comment-body">
+                            <div class="comment-header">
+                                <span class="comment-name"><%= c.username||'Sistem' %></span>
+                                <span class="comment-role" style="background:<%=rColor%>22;color:<%=rColor%>;"><%= c.role||'system' %></span>
+                                <% if(c.is_internal){ %><span style="font-size:10px;color:#F59E0B;background:rgba(245,158,11,.1);padding:2px 7px;border-radius:10px;">🔒 Internal</span><% } %>
+                                <span class="comment-time"><%= new Date(c.created_at).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) %></span>
+                            </div>
+                            <div class="comment-text"><%= c.comment %></div>
+                        </div>
+                    </div>
+                    <% }) %>
+
+                    <!-- Form tambah komentar -->
+                    <% if(ticket.status !== 'closed'){ %>
+                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                        <textarea id="commentText" class="form-control" rows="3" placeholder="Tulis komentar atau update progress..." style="resize:vertical;width:100%;margin-bottom:10px;"></textarea>
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+                                <input type="checkbox" id="isInternal"> Catatan internal (tidak terlihat pelanggan)
+                            </label>
+                            <button onclick="addComment()" class="btn btn-primary" style="padding:8px 20px;">Kirim</button>
+                        </div>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Kanan: Info Tiket -->
+            <div>
+                <div class="card">
+                    <p class="card-title">📌 Informasi Tiket</p>
+                    <div class="info-row"><span class="info-label">Kategori</span><span class="info-val"><%= ticket.category?.replace('_',' ')||'-' %></span></div>
+                    <div class="info-row"><span class="info-label">Prioritas</span><span class="info-val"><span class="badge-priority <%= ticket.priority %>"><%= ticket.priority %></span></span></div>
+                    <div class="info-row"><span class="info-label">Status</span><span class="info-val"><span class="badge-status <%= ticket.status %>"><%= ticket.status.replace('_',' ') %></span></span></div>
+                    <div class="info-row"><span class="info-label">Dibuat</span><span class="info-val" style="font-size:12px;"><%= new Date(ticket.created_at).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}) %></span></div>
+                    <% if(ticket.resolved_at){ %><div class="info-row"><span class="info-label">Diselesaikan</span><span class="info-val" style="font-size:12px;color:#10B981;"><%= new Date(ticket.resolved_at).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}) %></span></div><% } %>
+                </div>
+
+                <div class="card">
+                    <p class="card-title">👤 Pelanggan</p>
+                    <% if(ticket.customer_name){ %>
+                    <div style="font-weight:700;font-size:15px;margin-bottom:4px;"><%= ticket.customer_name %></div>
+                    <% if(ticket.customer_phone){ %><div style="font-size:13px;color:var(--muted);margin-bottom:8px;">📱 <%= ticket.customer_phone %></div><% } %>
+                    <% if(ticket.customer_address){ %><div style="font-size:12px;color:var(--muted);">📍 <%= ticket.customer_address %></div><% } %>
+                    <% } else { %>
+                    <div style="color:var(--muted);font-size:13px;">Tidak terhubung ke pelanggan</div>
+                    <% } %>
+                </div>
+
+                <div class="card">
+                    <p class="card-title">🔧 Teknisi yang Bertugas</p>
+                    <!-- Daftar teknisi yang sudah ditugaskan -->
+                    <div id="techChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+                    <% if(assignedTechs && assignedTechs.length > 0){ %>
+                        <% assignedTechs.forEach(t => { %>
+                        <span style="background:rgba(139,92,246,.1);color:#A78BFA;border:1px solid rgba(139,92,246,.2);padding:5px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;">
+                            👷 <%= t.username %>
+                            <% if(user && user.role==='admin'){ %>
+                            <button onclick="removeTechDetail(<%= t.id %>,'<%= t.username %>')" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:13px;line-height:1;padding:0;" title="Lepas">×</button>
+                            <% } %>
+                        </span>
+                        <% }) %>
+                    <% } else { %>
+                        <span style="color:var(--muted);font-size:13px;">Belum ada teknisi ditugaskan</span>
+                    <% } %>
+                    </div>
+                    <!-- Tambah teknisi -->
+                    <% if(user && (user.role==='admin') && ticket.status !== 'closed'){ %>
+                    <div style="display:flex;gap:8px;">
+                        <select id="techSelect" class="form-control" style="flex:1;">
+                            <option value="">+ Tambah Teknisi</option>
+                            <% technicians.forEach(t => { %>
+                            <option value="<%= t.id %>"><%= t.username %></option>
+                            <% }) %>
+                        </select>
+                        <button onclick="addTechDetail()" class="btn btn-primary" style="white-space:nowrap; padding:8px 14px;">Tambah</button>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Modal Selesaikan -->
+<div class="modal-overlay" id="closeModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">✅ Selesaikan Tiket</h3>
+            <button onclick="document.getElementById('closeModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div class="form-group">
+            <label>Catatan Resolusi</label>
+            <textarea id="resolveNote" class="form-control" rows="4" style="resize:vertical;" placeholder="Jelaskan cara penyelesaian masalah..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button onclick="document.getElementById('closeModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+            <button onclick="closeTicket()" class="btn btn-primary">✅ Selesaikan</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TICKET_ID = <%= ticket.id %>;
+
+function openCloseModal() { document.getElementById('closeModal').style.display='flex'; }
+
+async function closeTicket() {
+    const note = document.getElementById('resolveNote').value;
+    const res = await fetch(`/tickets/api/${TICKET_ID}/close`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({response_note:note}) });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){ document.getElementById('closeModal').style.display='none'; setTimeout(()=>location.reload(),800); }
+}
+async function reopenTicket() {
+    const res = await fetch(`/tickets/api/${TICKET_ID}/reopen`, { method:'POST' });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),800);
+}
+async function deleteTicket() {
+    if(!confirm('Hapus tiket ini?')) return;
+    const res = await fetch(`/tickets/api/${TICKET_ID}`, { method:'DELETE' });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.href='/tickets',800);
+}
+async function addComment() {
+    const comment = document.getElementById('commentText').value.trim();
+    if(!comment) return showToast('Komentar tidak boleh kosong','error');
+    const is_internal = document.getElementById('isInternal').checked;
+    const res = await fetch(`/tickets/api/${TICKET_ID}/comment`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({comment, is_internal}) });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){ document.getElementById('commentText').value=''; setTimeout(()=>location.reload(),600); }
+}
+async function addTechDetail() {
+    const techId = document.getElementById('techSelect').value;
+    if (!techId) return showToast('Pilih teknisi dulu','error');
+    const res = await fetch(`/tickets/api/${TICKET_ID}/assign`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({technician_id:techId})
+    });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),600);
+}
+
+async function removeTechDetail(techId, techName) {
+    if(!confirm(`Lepas ${techName} dari tiket ini?`)) return;
+    const res = await fetch(`/tickets/api/${TICKET_ID}/assign/${techId}`, { method:'DELETE' });
+    const d = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(),600);
+}
+function showToast(msg,type) {
+    const t=document.getElementById('toast');
+    t.textContent=msg;
+    const C={success:['rgba(16,185,129,.4)','#10B981'],error:['rgba(239,68,68,.4)','#EF4444']};
+    const [b,c]=C[type]||C.error;
+    t.style.borderColor=b; t.style.color=c;
+    t.classList.add('show'); clearTimeout(t._t);
+    t._t=setTimeout(()=>t.classList.remove('show'),3000);
+}
+</script>
+</body>
+</html>

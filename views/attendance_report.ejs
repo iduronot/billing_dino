@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+        .stat-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative;overflow:hidden;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+        .stat-card.green::before{background:linear-gradient(90deg,#10B981,#34D399);}
+        .stat-card.amber::before{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+        .stat-card.blue::before{background:linear-gradient(90deg,#3B82F6,#60A5FA);}
+        .stat-card.purple::before{background:linear-gradient(90deg,#8B5CF6,#A78BFA);}
+        .stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+        .stat-val{font-size:24px;font-weight:800;}
+
+        .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+        .chart-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:20px;}
+        .chart-title{font-size:14px;font-weight:700;margin:0 0 16px;}
+        .chart-wrap{position:relative;height:220px;}
+
+        .tbl-card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;padding:10px 14px;text-align:left;}
+        td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+        tr:last-child td{border-bottom:none;}tr:hover td{background:var(--hover-bg);}
+        .status-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+        .status-badge.hadir{background:rgba(16,185,129,.1);color:#10B981;}
+        .status-badge.terlambat{background:rgba(245,158,11,.1);color:#F59E0B;}
+        .status-badge.ditolak{background:rgba(239,68,68,.1);color:#EF4444;}
+        .progress-bar{height:6px;background:var(--sub-bg);border-radius:3px;overflow:hidden;margin-top:4px;min-width:80px;}
+        .progress-fill{height:100%;border-radius:3px;}
+        @media(max-width:900px){.chart-grid{grid-template-columns:1fr;}}
+
+        /* Kalender grid */
+        .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:10px;}
+        .cal-day{padding:6px 4px;text-align:center;border-radius:6px;font-size:11px;font-weight:600;}
+        .cal-day.hadir{background:rgba(16,185,129,.2);color:#10B981;}
+        .cal-day.terlambat{background:rgba(245,158,11,.2);color:#F59E0B;}
+        .cal-day.weekend{background:var(--sub-bg);color:var(--muted);}
+        .cal-day.empty{background:transparent;}
+        .cal-day.absent{background:rgba(239,68,68,.08);color:#EF4444;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Rekap Presensi' }) %>
+    <div class="content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">📊 Rekap Presensi Teknisi</h1>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">Hari kerja bulan ini: <b><%= workDays %> hari</b></p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <a href="/attendance" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;">← Presensi</a>
+                <form method="GET" style="display:flex;gap:8px;">
+                    <input type="month" name="month" value="<%= month %>" class="form-control" style="width:180px;" onchange="this.form.submit()">
+                </form>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <%
+            const totalHadir   = recap.reduce((s,r)=>s+(parseInt(r.hadir)||0), 0);
+            const totalLambat  = recap.reduce((s,r)=>s+(parseInt(r.terlambat)||0), 0);
+            const totalTech    = technicians.length;
+            const avgKehadiran = totalTech > 0 && workDays > 0 ? Math.round((totalHadir/(totalTech*workDays))*100) : 0;
+        %>
+        <div class="stats-row">
+            <div class="stat-card blue"><div class="stat-label">Total Teknisi</div><div class="stat-val"><%= totalTech %></div></div>
+            <div class="stat-card green"><div class="stat-label">Total Hadir</div><div class="stat-val"><%= totalHadir + totalLambat %></div></div>
+            <div class="stat-card amber"><div class="stat-label">Rata-rata Kehadiran</div><div class="stat-val"><%= avgKehadiran %>%</div></div>
+            <div class="stat-card purple"><div class="stat-label">Terlambat</div><div class="stat-val"><%= totalLambat %></div></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-grid">
+            <div class="chart-card">
+                <p class="chart-title">📈 Kehadiran Harian</p>
+                <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <p class="chart-title">👷 Kehadiran per Teknisi</p>
+                <div class="chart-wrap"><canvas id="techChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Tabel Rekap per Teknisi -->
+        <div class="tbl-card">
+            <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700;">👷 Rekap per Teknisi</div>
+            <table>
+                <thead><tr>
+                    <th>Teknisi</th><th>Tepat Waktu</th><th>Terlambat</th>
+                    <th>Total Hadir</th><th>Kehadiran</th><th>Rata-rata Jarak</th><th>Jam Termuda</th>
+                </tr></thead>
+                <tbody>
+                <% if(recap.length>0){ %>
+                <% recap.forEach(r => {
+                    const totalH = (parseInt(r.tepat_waktu)||0) + (parseInt(r.terlambat)||0);
+                    const rate   = workDays > 0 ? Math.round((totalH/workDays)*100) : 0;
+                    const rColor = rate>=90?'#10B981':rate>=70?'#F59E0B':'#EF4444';
+                %>
+                <tr>
+                    <td style="font-weight:700;">👷 <%= r.username %></td>
+                    <td style="color:#10B981;font-weight:700;"><%= r.tepat_waktu||0 %></td>
+                    <td style="color:#F59E0B;font-weight:700;"><%= r.terlambat||0 %></td>
+                    <td style="font-weight:700;"><%= totalH %> / <%= workDays %></td>
+                    <td>
+                        <span style="font-weight:700;color:<%= rColor %>;"><%= rate %>%</span>
+                        <div class="progress-bar"><div class="progress-fill" style="width:<%= rate %>%;background:<%= rColor %>;"></div></div>
+                    </td>
+                    <td style="color:var(--muted);font-size:12px;"><%= r.avg_distance ? Math.round(r.avg_distance)+'m' : '-' %></td>
+                    <td style="font-size:12px;"><%= r.earliest ? (() => { const d = new Date(r.earliest); return d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'}); })() : '-' %></td>
+                </tr>
+                <% }) %>
+                <% }else{ %>
+                <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px;">Belum ada data presensi bulan ini</td></tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Detail presensi per teknisi (kalender visual) -->
+        <% if(technicians.length > 0) { %>
+        <% const [yr, mn] = month.split('-').map(Number); %>
+        <% const daysInMonth = new Date(yr, mn, 0).getDate(); %>
+        <% technicians.forEach(tech => {
+            const techDetails = details.filter(d => d.user_id === tech.id);
+            const techMap = {};
+            techDetails.forEach(d => { techMap[d.date.toString().split('T')[0]] = d; });
+        %>
+        <div class="tbl-card" style="margin-bottom:14px;">
+            <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:14px;font-weight:700;">👷 <%= tech.username %></span>
+                <span style="font-size:12px;color:var(--muted);">
+                    Hadir: <b style="color:#10B981;"><%= techDetails.filter(d=>d.status!=='ditolak').length %></b> /
+                    Terlambat: <b style="color:#F59E0B;"><%= techDetails.filter(d=>d.status==='terlambat').length %></b>
+                </span>
+            </div>
+            <div style="padding:14px 18px;">
+                <!-- Header hari -->
+                <div class="cal-grid" style="margin-bottom:4px;">
+                    <% ['Min','Sen','Sel','Rab','Kam','Jum','Sab'].forEach(d => { %>
+                    <div style="text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:4px;"><%= d %></div>
+                    <% }) %>
+                </div>
+                <!-- Grid kalender -->
+                <div class="cal-grid">
+                    <% const firstDow = new Date(yr, mn-1, 1).getDay(); %>
+                    <% for(let e=0; e<firstDow; e++) { %><div class="cal-day empty"></div><% } %>
+                    <% for(let d=1; d<=daysInMonth; d++) {
+                        const dateStr = `${yr}-${String(mn).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        const dow = new Date(yr, mn-1, d).getDay();
+                        const rec = techMap[dateStr];
+                        const isToday = dateStr === new Date().toISOString().split('T')[0];
+                        let cls = '', label = d;
+                        if (dow === 0) { cls='weekend'; }
+                        else if (rec) { cls = rec.status; label = d; }
+                        else { cls = new Date(dateStr) < new Date() ? 'absent' : ''; }
+                    %>
+                    <div class="cal-day <%= cls %>" title="<%= dateStr %><%= rec ? ' — '+new Date(rec.check_in_time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'}) : '' %>"
+                         style="<%= isToday ? 'ring:2px solid var(--primary);outline:2px solid var(--primary);' : '' %>">
+                        <%= d %>
+                        <% if(rec) { %>
+                        <div style="font-size:9px;margin-top:1px;"><%= new Date(rec.check_in_time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Jakarta'}) %></div>
+                        <% } %>
+                    </div>
+                    <% } %>
+                </div>
+                <div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(16,185,129,.2);display:inline-block;"></span>Hadir</div>
+                    <div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(245,158,11,.2);display:inline-block;"></span>Terlambat</div>
+                    <div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:12px;height:12px;border-radius:3px;background:rgba(239,68,68,.08);display:inline-block;"></span>Tidak Hadir</div>
+                    <div style="display:flex;align-items:center;gap:5px;font-size:11px;"><span style="width:12px;height:12px;border-radius:3px;background:var(--sub-bg);display:inline-block;"></span>Minggu</div>
+                </div>
+            </div>
+        </div>
+        <% }) %>
+        <% } %>
+    </div>
+</main>
+
+<script>
+const DAILY_DATA = <%- JSON.stringify(dailyTrend) %>;
+const RECAP_DATA = <%- JSON.stringify(recap) %>;
+Chart.defaults.font.family = "'Outfit', sans-serif";
+Chart.defaults.color = '#94A3B8';
+
+// Chart kehadiran harian
+new Chart(document.getElementById('dailyChart'), {
+    type: 'bar',
+    data: {
+        labels: DAILY_DATA.map(d => {
+            const dt = new Date(d.date+'T00:00:00');
+            return dt.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+        }),
+        datasets: [
+            { label:'Tepat Waktu', data: DAILY_DATA.map(d=>d.hadir), backgroundColor:'rgba(16,185,129,.7)', borderRadius:4 },
+            { label:'Terlambat',   data: DAILY_DATA.map(d=>d.terlambat), backgroundColor:'rgba(245,158,11,.7)', borderRadius:4 }
+        ]
+    },
+    options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'top' } },
+        scales:{ x:{ stacked:true, grid:{color:'rgba(255,255,255,.05)'} }, y:{ stacked:true, beginAtZero:true, ticks:{stepSize:1}, grid:{color:'rgba(255,255,255,.05)'} } }
+    }
+});
+
+// Chart per teknisi
+const workDays = <%= workDays %>;
+new Chart(document.getElementById('techChart'), {
+    type: 'bar',
+    data: {
+        labels: RECAP_DATA.map(r => r.username),
+        datasets: [
+            { label:'Tepat Waktu', data: RECAP_DATA.map(r=>r.tepat_waktu||0), backgroundColor:'rgba(16,185,129,.7)', borderRadius:4 },
+            { label:'Terlambat',   data: RECAP_DATA.map(r=>r.terlambat||0),   backgroundColor:'rgba(245,158,11,.7)', borderRadius:4 }
+        ]
+    },
+    options: {
+        responsive:true, maintainAspectRatio:false, indexAxis:'y',
+        plugins:{ legend:{ position:'top' } },
+        scales:{
+            x:{ stacked:true, max:workDays, grid:{color:'rgba(255,255,255,.05)'} },
+            y:{ stacked:true, grid:{display:false} }
+        }
+    }
+});
+</script>
+</body>
+</html>
