@@ -249,7 +249,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 Jalankan satu perintah ini di terminal server sebagai root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/ittosolution-png/Dino-Bill/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/iduronot/billing_dino/main/install.sh | sudo bash
 ```
 
 Setelah selesai, buka browser dan akses:
@@ -265,7 +265,7 @@ Web Installer akan memandu mengisi koneksi database dan membuat akun admin perta
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/ittosolution-png/Dino-Bill.git /opt/dino-bill
+git clone https://github.com/iduronot/billing_dino.git /opt/dino-bill
 cd /opt/dino-bill
 
 # 2. Install dependensi (skip download Chromium bawaan Puppeteer)

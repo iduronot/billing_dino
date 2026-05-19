@@ -87,7 +87,7 @@ APP_DIR="/opt/dino-bill"
 
 if [ ! -d "$APP_DIR" ]; then
     info "Cloning Dino-Bill ke $APP_DIR ..."
-    git clone https://github.com/ittosolution-png/Dino-Bill.git "$APP_DIR"
+    git clone https://github.com/iduronot/billing_dino.git "$APP_DIR"
     success "Repository berhasil di-clone"
 else
     info "Update Dino-Bill dari repository..."
