@@ -72,6 +72,93 @@
         .form-group label { display:block; margin-bottom:6px; font-size:13px; color:var(--muted); }
         .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,.5); }
         .toast.show { display:block; }
+
+        /* ── Searchable Customer Picker ── */
+        .cust-picker { position:relative; }
+        .cust-input-wrap {
+            display:flex; align-items:center; gap:8px;
+            background:var(--input-bg,var(--sub-bg)); border:1px solid var(--border);
+            border-radius:10px; padding:0 12px; transition:border-color .2s;
+        }
+        .cust-input-wrap:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+        .cust-search-icon { color:var(--muted); font-size:13px; flex-shrink:0; }
+        .cust-search-input {
+            flex:1; background:none; border:none; outline:none; padding:11px 0;
+            color:var(--text); font-size:14px; font-family:'Outfit',sans-serif;
+        }
+        .cust-search-input::placeholder { color:var(--muted); }
+        .cust-clear {
+            background:none; border:none; color:var(--muted); font-size:18px;
+            cursor:pointer; line-height:1; padding:0; flex-shrink:0;
+        }
+        .cust-clear:hover { color:var(--text); }
+        .cust-dropdown {
+            display:none; position:absolute; left:0; right:0; top:calc(100% + 6px);
+            background:var(--modal-bg); border:1px solid var(--border); border-radius:12px;
+            max-height:260px; overflow-y:auto; z-index:6000;
+            box-shadow:0 12px 40px rgba(0,0,0,.5);
+        }
+        .cust-dropdown.open { display:block; }
+        .cust-item {
+            padding:11px 16px; cursor:pointer; border-bottom:1px solid var(--border);
+            transition:background .1s;
+        }
+        .cust-item:last-child { border-bottom:none; }
+        .cust-item:hover, .cust-item.focused { background:rgba(59,130,246,.1); }
+        .cust-item-name { font-size:14px; font-weight:600; color:var(--text); }
+        .cust-item-sub { font-size:11px; color:var(--muted); margin-top:2px; display:flex; gap:10px; }
+        .cust-item-sub span { display:inline-flex; align-items:center; gap:4px; }
+        .cust-empty { padding:24px 16px; text-align:center; color:var(--muted); font-size:13px; }
+        .cust-counter { padding:6px 14px; font-size:11px; color:var(--muted); border-bottom:1px solid var(--border); background:var(--sub-bg); }
+
+        /* ── Action Menu ── */
+        .act-wrap { display:flex; align-items:center; gap:6px; }
+        .act-pay {
+            display:inline-flex; align-items:center; gap:6px;
+            background:linear-gradient(135deg,#10B981,#059669);
+            color:white; border:none; border-radius:8px;
+            padding:6px 12px; font-size:12px; font-weight:600;
+            cursor:pointer; font-family:'Outfit',sans-serif;
+            white-space:nowrap; transition:opacity .15s;
+        }
+        .act-pay:hover { opacity:.88; }
+        .act-paid-badge {
+            display:inline-flex; align-items:center; gap:5px;
+            background:rgba(16,185,129,.12); color:#10B981;
+            border:1px solid rgba(16,185,129,.25); border-radius:8px;
+            padding:5px 10px; font-size:12px; font-weight:600;
+            white-space:nowrap;
+        }
+        .act-more { position:relative; }
+        .act-more-btn {
+            width:32px; height:32px; border-radius:8px;
+            border:1px solid var(--border); background:var(--sub-bg);
+            color:var(--muted); cursor:pointer; font-size:18px; line-height:1;
+            display:flex; align-items:center; justify-content:center;
+            transition:all .15s;
+        }
+        .act-more-btn:hover { background:rgba(255,255,255,.1); color:var(--text); }
+        .act-dropdown {
+            display:none; position:absolute; right:0; top:calc(100% + 6px);
+            background:var(--modal-bg); border:1px solid var(--border);
+            border-radius:12px; min-width:180px; z-index:5000;
+            box-shadow:0 8px 32px rgba(0,0,0,.45); overflow:hidden;
+        }
+        .act-dropdown.open { display:block; }
+        .act-dropdown hr { border:none; border-top:1px solid var(--border); margin:4px 0; }
+        .act-dropdown button,
+        .act-dropdown a {
+            display:flex; align-items:center; gap:10px; width:100%;
+            padding:10px 14px; background:none; border:none;
+            color:var(--text); font-size:13px; font-family:'Outfit',sans-serif;
+            cursor:pointer; text-decoration:none; text-align:left;
+            transition:background .12s;
+        }
+        .act-dropdown button:hover,
+        .act-dropdown a:hover { background:rgba(255,255,255,.06); }
+        .act-dropdown button.danger { color:#EF4444; }
+        .act-dropdown button.danger:hover { background:rgba(239,68,68,.08); }
+        .act-dropdown .act-icon { width:20px; text-align:center; font-size:14px; opacity:.85; }
     </style>
 </head>
 <body>
@@ -233,18 +320,46 @@
                             <% } %>
                         </td>
                         <td>
-                            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                            <div class="act-wrap">
                                 <% if(i.status !== 'paid') { %>
-                                <button class="btn btn-sm btn-success" title="<%= t.pay %>" onclick="payInvoice(<%= i.id %>)">✓</button>
-                                <button class="btn btn-sm" title="<%= t.unisolate %>" style="background:rgba(139,92,246,.15);color:#A78BFA;border:1px solid rgba(139,92,246,.3)" onclick="unisolateOnly(<%= i.id %>)">🔓</button>
-                                <button class="btn btn-sm" title="<%= t.defer %>" style="background:rgba(245,158,11,.15);color:var(--warning);border:1px solid rgba(245,158,11,.3)" onclick="deferInvoice(<%= i.id %>)">📅</button>
+                                <button class="act-pay" onclick="payInvoice(<%= i.id %>)">
+                                    <i class="fas fa-check-circle"></i> Catat Bayar
+                                </button>
+                                <% } else { %>
+                                <span class="act-paid-badge">
+                                    <i class="fas fa-check-circle"></i> Lunas
+                                </span>
                                 <% } %>
-                                <button class="btn btn-sm btn-info" title="<%= t.edit %>" onclick="openEditById(<%= i.id %>)">✏</button>
-                                <a href="/print/invoice?ids=<%= i.id %>" target="_blank" class="btn btn-sm" title="<%= t.print %>" style="background:rgba(96,165,250,.15);color:#60A5FA;border:1px solid rgba(96,165,250,.3)">🖨</a>
-                                <button class="btn btn-sm" title="<%= t.send_wa %>" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">💬</button>
-                                <% if(i.status !== 'paid') { %>
-                                <button class="btn btn-sm btn-danger" title="<%= t.delete %>" onclick="deleteItem('/billing/api/<%= i.id %>','<%= t.delete_confirm %>')">🗑</button>
-                                <% } %>
+
+                                <div class="act-more">
+                                    <button class="act-more-btn" onclick="toggleActMenu(this)" title="Aksi lainnya">⋮</button>
+                                    <div class="act-dropdown">
+                                        <% if(i.status !== 'paid') { %>
+                                        <button onclick="closeAllMenus();unisolateOnly(<%= i.id %>)">
+                                            <span class="act-icon"><i class="fas fa-unlock"></i></span> Aktifkan PPPoE
+                                        </button>
+                                        <button onclick="closeAllMenus();deferInvoice(<%= i.id %>)">
+                                            <span class="act-icon"><i class="fas fa-calendar-alt"></i></span> Tunda Invoice
+                                        </button>
+                                        <hr>
+                                        <% } %>
+                                        <button onclick="closeAllMenus();openEditById(<%= i.id %>)">
+                                            <span class="act-icon"><i class="fas fa-edit"></i></span> Edit Invoice
+                                        </button>
+                                        <a href="/print/invoice?ids=<%= i.id %>" target="_blank" onclick="closeAllMenus()">
+                                            <span class="act-icon"><i class="fas fa-print"></i></span> Cetak Invoice
+                                        </a>
+                                        <button onclick="closeAllMenus();sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">
+                                            <span class="act-icon" style="color:#25D366"><i class="fab fa-whatsapp"></i></span> Kirim WA Tagihan
+                                        </button>
+                                        <% if(i.status !== 'paid') { %>
+                                        <hr>
+                                        <button class="danger" onclick="closeAllMenus();deleteItem('/billing/api/<%= i.id %>','<%= t.delete_confirm %>')">
+                                            <span class="act-icon"><i class="fas fa-trash-alt"></i></span> Hapus Invoice
+                                        </button>
+                                        <% } %>
+                                    </div>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -291,18 +406,42 @@
 
 <!-- Add Invoice Modal -->
 <div class="overlay" id="addModal" onclick="if(event.target===this)this.style.display='none'">
-    <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header"><h2 class="modal-title"><%= t.add_invoice %></h2><button class="close-btn" onclick="document.getElementById('addModal').style.display='none'">×</button></div>
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:500px;">
+        <div class="modal-header">
+            <h2 class="modal-title">➕ <%= t.add_invoice %></h2>
+            <button class="close-btn" onclick="document.getElementById('addModal').style.display='none'">×</button>
+        </div>
         <form id="addInvoiceForm">
-            <div class="form-group"><label><%= t.customer %></label>
-                <select id="invCustomer" class="form-control" required>
-                    <option value=""><%= t.select_package %></option>
-                    <% customers.forEach(c => { %><option value="<%= c.id %>"><%= c.name %></option><% }); %>
-                </select>
+            <!-- Searchable Customer Picker -->
+            <div class="form-group">
+                <label><%= t.customer %> *</label>
+                <input type="hidden" id="invCustomer" required>
+                <div class="cust-picker" id="custPicker">
+                    <div class="cust-input-wrap">
+                        <i class="fas fa-search cust-search-icon"></i>
+                        <input type="text" id="custSearch" class="cust-search-input"
+                            placeholder="Ketik nama atau PPPoE username..." autocomplete="off"
+                            oninput="filterCustomers()" onfocus="openCustDropdown()" onkeydown="custKeyNav(event)">
+                        <button type="button" class="cust-clear" id="custClear" onclick="clearCustPicker()" style="display:none">×</button>
+                    </div>
+                    <div class="cust-dropdown" id="custDropdown"></div>
+                </div>
+                <div id="custSelected" style="display:none; margin-top:8px; padding:10px 14px; background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); border-radius:10px; font-size:13px;">
+                    <span style="color:var(--primary); font-weight:600;" id="custSelectedName"></span>
+                    <span style="color:var(--muted); font-size:11px; margin-left:8px;" id="custSelectedInfo"></span>
+                </div>
             </div>
-            <div class="form-group"><label><%= t.amount %> (Rp)</label><input type="number" id="invAmount" class="form-control" placeholder="Otomatis dari paket jika kosong"></div>
-            <div class="form-group"><label><%= t.due_date %></label><input type="date" id="invDue" class="form-control"></div>
-            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;margin-top:6px;"><%= t.save %></button>
+            <div class="form-group">
+                <label><%= t.amount %> (Rp)</label>
+                <input type="number" id="invAmount" class="form-control" placeholder="Otomatis dari paket jika kosong">
+            </div>
+            <div class="form-group">
+                <label><%= t.due_date %></label>
+                <input type="date" id="invDue" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:13px;margin-top:6px;font-size:15px;">
+                <i class="fas fa-save"></i> <%= t.save %>
+            </button>
         </form>
     </div>
 </div>
@@ -330,8 +469,154 @@
 
 <div class="toast" id="toast"></div>
 <textarea id="invoicesData" style="display:none;"><%= JSON.stringify(invoices) %></textarea>
+<textarea id="customersData" style="display:none;"><%= JSON.stringify(customers.map(c=>({id:c.id,name:c.name,phone:c.phone||'',pppoe:c.pppoe_username||'',pkg:c.package_name||'',price:c.package_price||0,iso:c.isolation_date||20}))) %></textarea>
 
 <script>
+// ── Searchable Customer Picker ──
+let allCustomers = [];
+try { allCustomers = JSON.parse(document.getElementById('customersData').value); } catch(e) {}
+
+let custFocusIdx = -1;
+
+function openCustDropdown() {
+    filterCustomers();
+    document.getElementById('custDropdown').classList.add('open');
+}
+
+function filterCustomers() {
+    const q = document.getElementById('custSearch').value.toLowerCase().trim();
+    const dropdown = document.getElementById('custDropdown');
+    const MAX = 80;
+
+    const filtered = q
+        ? allCustomers.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            c.pppoe.toLowerCase().includes(q) ||
+            c.phone.includes(q))
+        : allCustomers;
+
+    custFocusIdx = -1;
+    document.getElementById('custClear').style.display = q ? 'block' : 'none';
+
+    if (filtered.length === 0) {
+        dropdown.innerHTML = `<div class="cust-empty"><i class="fas fa-search" style="opacity:.4;font-size:20px;display:block;margin-bottom:8px;"></i>Tidak ada pelanggan "<b>${q}</b>"</div>`;
+        dropdown.classList.add('open');
+        return;
+    }
+
+    const shown = filtered.slice(0, MAX);
+    let html = '';
+    if (filtered.length > MAX) {
+        html += `<div class="cust-counter">Menampilkan ${MAX} dari ${filtered.length} hasil — ketik lebih spesifik</div>`;
+    } else if (filtered.length > 0) {
+        html += `<div class="cust-counter">${filtered.length} pelanggan ditemukan</div>`;
+    }
+    html += shown.map((c, idx) => `
+        <div class="cust-item" data-id="${c.id}" data-idx="${idx}" onclick="selectCustomer(${c.id},'${c.name.replace(/'/g,"\\'")}','${c.pppoe}','${c.pkg}',${c.price},${c.iso})">
+            <div class="cust-item-name">${highlight(c.name, q)}</div>
+            <div class="cust-item-sub">
+                ${c.pppoe ? `<span><i class="fas fa-network-wired"></i> ${highlight(c.pppoe, q)}</span>` : ''}
+                ${c.phone ? `<span><i class="fas fa-phone"></i> ${c.phone}</span>` : ''}
+                ${c.pkg   ? `<span><i class="fas fa-box"></i> ${c.pkg}</span>` : ''}
+            </div>
+        </div>`).join('');
+
+    dropdown.innerHTML = html;
+    dropdown.classList.add('open');
+}
+
+function highlight(text, q) {
+    if (!q) return text;
+    const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+    return text.replace(re, '<mark style="background:rgba(59,130,246,.3);color:inherit;border-radius:2px;padding:0 1px;">$1</mark>');
+}
+
+function selectCustomer(id, name, pppoe, pkg, price, iso) {
+    document.getElementById('invCustomer').value = id;
+    document.getElementById('custSearch').value  = name;
+    document.getElementById('custClear').style.display = 'block';
+    document.getElementById('custDropdown').classList.remove('open');
+
+    // Show selected badge
+    const sel = document.getElementById('custSelected');
+    document.getElementById('custSelectedName').textContent = name;
+    document.getElementById('custSelectedInfo').textContent =
+        [pppoe ? '📡 '+pppoe : '', pkg ? '📦 '+pkg : '', price ? 'Rp '+Number(price).toLocaleString('id-ID') : ''].filter(Boolean).join('  •  ');
+    sel.style.display = 'block';
+
+    // Auto-fill amount & due date
+    if (price && !document.getElementById('invAmount').value) {
+        document.getElementById('invAmount').value = price;
+    }
+    if (!document.getElementById('invDue').value && iso) {
+        const now = new Date();
+        const y = now.getFullYear(), m = now.getMonth() + 1;
+        document.getElementById('invDue').value = `${y}-${String(m).padStart(2,'0')}-${String(iso).padStart(2,'0')}`;
+    }
+    custFocusIdx = -1;
+}
+
+function clearCustPicker() {
+    document.getElementById('invCustomer').value = '';
+    document.getElementById('custSearch').value  = '';
+    document.getElementById('custClear').style.display = 'none';
+    document.getElementById('custSelected').style.display = 'none';
+    document.getElementById('custDropdown').classList.remove('open');
+    document.getElementById('invAmount').value = '';
+    document.getElementById('invDue').value = '';
+    document.getElementById('custSearch').focus();
+}
+
+function custKeyNav(e) {
+    const items = document.querySelectorAll('#custDropdown .cust-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        custFocusIdx = Math.min(custFocusIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        custFocusIdx = Math.max(custFocusIdx - 1, 0);
+    } else if (e.key === 'Enter' && custFocusIdx >= 0) {
+        e.preventDefault();
+        items[custFocusIdx].click();
+        return;
+    } else if (e.key === 'Escape') {
+        document.getElementById('custDropdown').classList.remove('open');
+        return;
+    }
+    items.forEach((el, i) => el.classList.toggle('focused', i === custFocusIdx));
+    if (custFocusIdx >= 0) items[custFocusIdx].scrollIntoView({ block:'nearest' });
+}
+
+// Tutup dropdown saat klik luar
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#custPicker')) {
+        document.getElementById('custDropdown').classList.remove('open');
+    }
+});
+
+// Reset picker saat modal dibuka
+document.getElementById('addModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        clearCustPicker();
+        document.getElementById('addInvoiceForm').reset();
+    }
+});
+
+// ── Action dropdown ──
+function toggleActMenu(btn) {
+    const dropdown = btn.nextElementSibling;
+    const isOpen = dropdown.classList.contains('open');
+    closeAllMenus();
+    if (!isOpen) dropdown.classList.add('open');
+}
+function closeAllMenus() {
+    document.querySelectorAll('.act-dropdown.open').forEach(d => d.classList.remove('open'));
+}
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.act-more')) closeAllMenus();
+});
+
 // ── Live Clock ──
 const HARI  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -351,10 +636,16 @@ try { allInvoices = JSON.parse(document.getElementById('invoicesData').value); }
 
 document.getElementById('addInvoiceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!document.getElementById('invCustomer').value) {
+        document.getElementById('custSearch').focus();
+        document.getElementById('custPicker').querySelector('.cust-input-wrap').style.borderColor = '#EF4444';
+        setTimeout(() => document.getElementById('custPicker').querySelector('.cust-input-wrap').style.borderColor = '', 1500);
+        return showToast('Pilih pelanggan terlebih dahulu', 'error');
+    }
     const res = await fetch('/billing/api/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ customer_id: document.getElementById('invCustomer').value, amount: document.getElementById('invAmount').value||null, due_date: document.getElementById('invDue').value||null }) });
     const data = await res.json();
     showToast(data.message, data.success?'success':'error');
-    if(data.success){ document.getElementById('addModal').style.display='none'; setTimeout(()=>location.reload(),1000); }
+    if(data.success){ document.getElementById('addModal').style.display='none'; clearCustPicker(); document.getElementById('addInvoiceForm').reset(); setTimeout(()=>location.reload(),1000); }
 });
 
 document.getElementById('editInvForm').addEventListener('submit', async (e) => {

@@ -371,9 +371,15 @@
                             <input type="text" id="fPhone" class="form-control" required placeholder="08xxxxxxxx">
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label><%= t.email_label %></label>
-                        <input type="email" id="fEmail" class="form-control" placeholder="pelanggan@email.com">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><%= t.email_label %></label>
+                            <input type="email" id="fEmail" class="form-control" placeholder="pelanggan@email.com">
+                        </div>
+                        <div class="form-group">
+                            <label>NIK (No. KTP)</label>
+                            <input type="text" id="fNik" class="form-control" placeholder="16 digit NIK" maxlength="16" pattern="\d{16}" inputmode="numeric">
+                        </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -506,6 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('fName').value = data.name || '';
             document.getElementById('fEmail').value = data.email || '';
             document.getElementById('fPhone').value = data.phone || '';
+            document.getElementById('fNik').value = data.nik || '';
             document.getElementById('fPppoe').value = data.pppoe_username || '';
             document.getElementById('fPppoePass').value = '';
             document.getElementById('fPackage').value = data.package_id || '';
@@ -593,6 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 name: document.getElementById('fName').value,
                 email: document.getElementById('fEmail').value,
                 phone: document.getElementById('fPhone').value,
+                nik: document.getElementById('fNik').value || null,
                 pppoe_username: document.getElementById('fPppoe').value,
                 pppoe_password: document.getElementById('fPppoePass').value,
                 package_id: document.getElementById('fPackage').value || null,

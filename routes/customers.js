@@ -64,11 +64,11 @@ router.get('/', async (req, res) => {
 
 // POST - Create customer
 router.post('/', async (req, res) => {
-    const { name, email, phone, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id } = req.body;
+    const { name, email, phone, nik, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id } = req.body;
     try {
         const [result] = await pool.query(
-            'INSERT INTO customers (name, email, phone, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, email || null, phone, address, package_id || null, router_id || null, pppoe_username, pppoe_password, isolation_date || 20, billing_method || 'fixed', lat || null, lng || null, odp_id || null, technician_id || null, 'active']
+            'INSERT INTO customers (name, email, phone, nik, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, email || null, phone, nik || null, address, package_id || null, router_id || null, pppoe_username, pppoe_password, isolation_date || 20, billing_method || 'fixed', lat || null, lng || null, odp_id || null, technician_id || null, 'active']
         );
         const newCustomerId = result.insertId;
 
@@ -105,10 +105,10 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-    const { name, email, phone, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id } = req.body;
+    const { name, email, phone, nik, address, package_id, router_id, pppoe_username, pppoe_password, isolation_date, billing_method, lat, lng, odp_id, technician_id } = req.body;
     try {
-        let query = 'UPDATE customers SET name=?, email=?, phone=?, address=?, package_id=?, router_id=?, pppoe_username=?, isolation_date=?, billing_method=?, lat=?, lng=?, odp_id=?, technician_id=?, updated_at=NOW()';
-        let values = [name, email || null, phone, address, package_id || null, router_id || null, pppoe_username, isolation_date || 20, billing_method || 'fixed', lat || null, lng || null, odp_id || null, technician_id || null];
+        let query = 'UPDATE customers SET name=?, email=?, phone=?, nik=?, address=?, package_id=?, router_id=?, pppoe_username=?, isolation_date=?, billing_method=?, lat=?, lng=?, odp_id=?, technician_id=?, updated_at=NOW()';
+        let values = [name, email || null, phone, nik || null, address, package_id || null, router_id || null, pppoe_username, isolation_date || 20, billing_method || 'fixed', lat || null, lng || null, odp_id || null, technician_id || null];
         
         if (pppoe_password) {
             query += ', pppoe_password=?';

@@ -248,7 +248,33 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   checkAndAddColumn('customers', 'odp_id', 'INT');
   checkAndAddColumn('customers', 'technician_id', 'INT');
   checkAndAddColumn('customers', 'installation_status', "VARCHAR(20) DEFAULT 'completed'");
+  checkAndAddColumn('customers', 'nik', 'VARCHAR(20) NULL');
   checkAndAddColumn('trouble_tickets', 'technician_id', 'INT');
+  checkAndAddColumn('inventory', 'price', 'DECIMAL(15,2) DEFAULT 0');
+  checkAndAddColumn('inventory', 'min_stock', 'INT DEFAULT 5');
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS inventory_mutations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      inventory_id INT NOT NULL,
+      type ENUM('in','out') NOT NULL,
+      quantity INT NOT NULL,
+      note VARCHAR(255),
+      user_name VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_inv (inventory_id)
+    )
+  `).catch(console.error);
+
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS mutation_technicians (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      mutation_id INT NOT NULL,
+      technician_id INT NOT NULL,
+      technician_name VARCHAR(100) NOT NULL,
+      INDEX idx_mut (mutation_id),
+      INDEX idx_tech (technician_id)
+    )
+  `).catch(console.error);
 
   // Tabel many-to-many: satu tiket bisa ditangani banyak teknisi
   pool.query(`
@@ -339,11 +365,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     ['wa_api_token', ''],
     ['wa_api_url', ''],
     ['wa_delay', '5'],
-    ['wa_limit', '50'],
-    ['xendit_api_key', ''],
-    ['xendit_webhook_token', ''],
-    ['xendit_callback_url', ''],
-    ['payment_gateway', 'manual']
+    ['wa_limit', '50']
 ];
   for (const [key, val] of defaultSettings) {
     pool.query('INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)', [key, val]).catch(() => {});
@@ -1789,70 +1811,6 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       res.json({ success: true });
     } catch (e) {
       console.error('[Tripay] Callback error:', e.message);
-      res.status(500).json({ success: false });
-    }
-  });
-
-  // Xendit QRIS Callback Webhook (no auth - called by Xendit server)
-  app.post('/api/xendit/callback', async (req, res) => {
-    try {
-      const xenditHelper = require('./helpers/xendit');
-      const s = await xenditHelper.getXenditSettings(pool);
-
-      // Verifikasi webhook token
-      const callbackToken = req.headers['x-callback-token'] || '';
-      if (!xenditHelper.verifyWebhookToken(callbackToken, s.xendit_webhook_token)) {
-        console.warn('[Xendit] Invalid webhook token');
-        return res.status(401).json({ success: false, message: 'Invalid token' });
-      }
-
-      const { event, data } = req.body;
-
-      // Hanya proses event pembayaran QR yang berhasil
-      if (event === 'qr.payment' && data && data.status === 'SUCCEEDED') {
-        const referenceId = data.reference_id; // format: INV-{id}-{timestamp}
-        if (!referenceId) return res.json({ success: true });
-
-        // Cari invoice berdasarkan invoice_number yang kita simpan saat buat QR
-        const [[inv]] = await pool.query(
-          "SELECT * FROM invoices WHERE invoice_number = ? AND status = 'unpaid'",
-          [referenceId]
-        );
-
-        if (inv) {
-          await pool.query(
-            "UPDATE invoices SET status='paid', paid_at=NOW(), payment_method='Xendit QRIS' WHERE id=?",
-            [inv.id]
-          );
-
-          // Auto-unisolate + aktifkan di MikroTik
-          const [[cust]] = await pool.query(`
-            SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port
-            FROM customers c
-            LEFT JOIN routers r ON c.router_id = r.id
-            WHERE c.id = ?`, [inv.customer_id]);
-
-          if (cust) {
-            await pool.query("UPDATE customers SET status='active' WHERE id=? AND status='isolated'", [cust.id]);
-
-            if (cust.pppoe_username && cust.r_ip) {
-              mikrotikHelper.enablePPPoESecret(
-                { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port },
-                cust.pppoe_username
-              ).catch(e => console.error('[Xendit CB] MikroTik enable error:', e.message));
-            }
-
-            const { notifyPaymentReceived } = require('./helpers/notification');
-            await notifyPaymentReceived(pool, cust, inv.amount).catch(() => {});
-          }
-
-          console.log(`[Xendit] Payment QRIS OK — Invoice #${inv.id} (Ref: ${referenceId})`);
-        }
-      }
-
-      res.json({ success: true });
-    } catch (e) {
-      console.error('[Xendit] Callback error:', e.message);
       res.status(500).json({ success: false });
     }
   });
