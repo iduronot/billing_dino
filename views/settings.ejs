@@ -195,8 +195,8 @@
             <div class="form-group"><label>Default Gateway</label>
                 <select id="payment_gateway" class="form-control">
                     <option value="manual" <%=settings.payment_gateway==='manual'?'selected':''%>>Manual (Transfer/Cash)</option>
+                    <option value="xendit" <%=settings.payment_gateway==='xendit'?'selected':''%>>Xendit QRIS</option>
                     <option value="tripay" <%=settings.payment_gateway==='tripay'?'selected':''%>>Tripay</option>
-                    <option value="midtrans" <%=settings.payment_gateway==='midtrans'?'selected':''%>>Midtrans</option>
                 </select>
             </div>
             <hr style="border-color:var(--border);margin:16px 0">
@@ -241,6 +241,30 @@
             <div style="display:flex;gap:10px;flex-wrap:wrap">
                 <button class="btn btn-primary" onclick="save(['payment_gateway','tripay_api_key','tripay_private_key','tripay_merchant_code','tripay_mode','tripay_channels'])">💾 <%= t.save %></button>
                 <button class="btn" style="background:rgba(99,102,241,.15);color:#818CF8;border:1px solid rgba(99,102,241,.3)" onclick="testTripay()">💳 Test & Muat Channel</button>
+            </div>
+            <hr style="border-color:var(--border);margin:20px 0">
+            <h3 style="font-size:14px;color:var(--muted);margin:0 0 12px">⚡ Xendit QRIS</h3>
+            <div class="form-group">
+                <label>API Key (Secret Key)</label>
+                <input type="password" id="xendit_api_key" class="form-control" value="<%=settings.xendit_api_key||''%>" placeholder="xnd_production_...">
+                <p class="setting-desc" style="margin-top:6px">Dapatkan dari <b>Xendit Dashboard → Settings → API Keys</b>. Gunakan Secret Key (bukan Public Key).</p>
+            </div>
+            <div class="form-group">
+                <label>Webhook Token (Callback Token)</label>
+                <input type="password" id="xendit_webhook_token" class="form-control" value="<%=settings.xendit_webhook_token||''%>" placeholder="Token verifikasi webhook Xendit">
+                <p class="setting-desc" style="margin-top:6px">Dapatkan dari <b>Xendit Dashboard → Settings → Webhooks → Callback Token</b>.</p>
+            </div>
+            <div class="form-group">
+                <label>Callback URL (daftarkan ke Xendit)</label>
+                <div style="display:flex;gap:10px">
+                    <input type="text" id="xendit_callback_url" class="form-control" readonly style="background:rgba(0,0,0,0.2);cursor:default;font-family:monospace;font-size:12px" value="">
+                    <button class="btn btn-sm btn-info" onclick="copyXenditCallback()">Salin</button>
+                </div>
+                <p class="setting-desc" style="margin-top:6px">Daftarkan URL di atas ke <b>Xendit Dashboard → Settings → Webhooks → QR Code</b> agar pembayaran otomatis terdeteksi.</p>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="save(['payment_gateway','xendit_api_key','xendit_webhook_token'])">💾 Simpan Xendit</button>
+                <button class="btn" style="background:rgba(16,185,129,.15);color:#10B981;border:1px solid rgba(16,185,129,.3)" onclick="testXendit()">⚡ Test Koneksi Xendit</button>
             </div>
         </div>
 
@@ -483,6 +507,16 @@ async function testTelegram(){
     const res=await fetch('/settings/api/test-telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'✅ Test Telegram from Dino-Bill'})});
     const d=await res.json();showToast(d.message,d.success?'success':'error');
 }
+async function testXendit(){
+    showToast('⏳ Testing Xendit connection...','success');
+    const res=await fetch('/settings/api/test-xendit',{method:'POST',headers:{'Content-Type':'application/json'}});
+    const d=await res.json();showToast(d.message,d.success?'success':'error');
+}
+function copyXenditCallback(){
+    const el=document.getElementById('xendit_callback_url');
+    el.select();document.execCommand('copy');
+    showToast('Callback URL Xendit disalin','success');
+}
 async function testTripay(silent = false){
     if(!silent) showToast('⏳ Testing Tripay connection...','success');
     const res=await fetch('/settings/api/test-tripay',{method:'POST',headers:{'Content-Type':'application/json'}});
@@ -641,6 +675,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadUsers();
     const cbInput = document.getElementById('tripay_callback_url');
     if (cbInput) cbInput.value = window.location.origin + '/api/tripay/callback';
+    const xenditCbInput = document.getElementById('xendit_callback_url');
+    if (xenditCbInput) xenditCbInput.value = window.location.origin + '/api/xendit/callback';
     
     toggleWAFields();
     setInterval(checkWAStatus, 5000);
