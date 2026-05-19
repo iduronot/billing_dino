@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const tripay = require('../helpers/tripay');
+const xendit = require('../helpers/xendit');
 const axios = require('axios');
 let pool;
 
@@ -73,7 +73,9 @@ router.get('/', requirePortalAuth, async (req, res) => {
         const settings = {};
         settingsRows.forEach(r => settings[r.setting_key] = r.setting_value);
         
-        const paymentGateway = settings.payment_gateway || 'manual';
+        // Xendit aktif jika API key sudah diisi, override setting 'manual'
+        const hasXendit = !!(settings.xendit_api_key && settings.xendit_api_key.trim());
+        const paymentGateway = hasXendit ? 'xendit' : (settings.payment_gateway || 'manual');
         const company = {
             company_name: settings.company_name || 'Dino-Net',
             company_phone: settings.company_phone || '',
@@ -93,7 +95,7 @@ router.get('/', requirePortalAuth, async (req, res) => {
     }
 });
 
-// POST /portal/pay/:invoiceId — Create Tripay payment
+// POST /portal/pay/:invoiceId — Create Xendit QRIS payment
 router.post('/pay/:invoiceId', requirePortalAuth, async (req, res) => {
     try {
         const [[inv]] = await pool.query('SELECT * FROM invoices WHERE id = ? AND customer_id = ?', [req.params.invoiceId, req.session.customerId]);
@@ -101,21 +103,19 @@ router.post('/pay/:invoiceId', requirePortalAuth, async (req, res) => {
         if (inv.status === 'paid') return res.json({ success: false, message: 'Invoice sudah lunas' });
 
         const [[customer]] = await pool.query('SELECT * FROM customers WHERE id = ?', [req.session.customerId]);
-        const method = req.body.method || 'QRIS';
-        const merchantRef = `INV-${inv.id}-${Date.now()}`;
 
-        const result = await tripay.createTransaction(pool, {
-            method,
-            merchantRef,
+        const result = await xendit.createQRCode(pool, {
+            invoiceId: inv.id,
             amount: parseInt(inv.amount),
-            customerName: customer.name,
-            customerPhone: customer.phone || '',
-            customerEmail: customer.email || '',
-            callbackUrl: req.body.callbackUrl || '',
-            returnUrl: req.body.returnUrl || `${req.protocol}://${req.get('host')}/portal`
+            customerName: customer.name
         });
 
         if (result.success) {
+            // Simpan referenceId ke invoice agar callback bisa trace
+            await pool.query(
+                "UPDATE invoices SET invoice_number = ? WHERE id = ?",
+                [result.data.referenceId, inv.id]
+            );
             res.json({ success: true, data: result.data });
         } else {
             res.json({ success: false, message: result.message });
@@ -262,10 +262,10 @@ router.post('/wifi', requirePortalAuth, async (req, res) => {
     }
 });
 
-// GET /portal/payment-channels
-router.get('/payment-channels', requirePortalAuth, async (req, res) => {
+// GET /portal/qr-status/:referenceId — Cek status QR (polling dari frontend)
+router.get('/qr-status/:referenceId', requirePortalAuth, async (req, res) => {
     try {
-        const result = await tripay.getPaymentChannels(pool);
+        const result = await xendit.getQRCode(pool, req.params.referenceId);
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

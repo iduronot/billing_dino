@@ -92,6 +92,16 @@ router.post('/api/test-tripay', async (req, res) => {
     }
 });
 
+router.post('/api/test-xendit', async (req, res) => {
+    try {
+        const xendit = require('../helpers/xendit');
+        const result = await xendit.testConnection(pool);
+        res.json(result);
+    } catch (e) {
+        res.json({ success: false, message: e.message });
+    }
+});
+
 // GET - List users
 router.get('/api/users', async (req, res) => {
     try {
