@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+/* ── NOC Dashboard ─────────────────────────────────────────── */
+.noc-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+.noc-title{font-size:22px;font-weight:800;display:flex;align-items:center;gap:10px;}
+.live-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#10B981;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#10B981;animation:blink 1.4s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ── Stat Cards ─────────────────────────────────────────────── */
+.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+@media(max-width:1100px){.stat-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:680px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+.scard{background:var(--card-bg);border:1px solid var(--border);border-radius:18px;padding:20px;overflow:hidden;transition:transform .2s;}
+.scard:hover{transform:translateY(-2px);}
+.scard .icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px;}
+.scard .val{font-size:32px;font-weight:800;line-height:1;}
+.scard .lbl{font-size:11px;color:var(--text-muted);margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.scard .sub{font-size:11px;margin-top:4px;}
+.sc-online{border-color:rgba(16,185,129,.3);}.sc-online .icon{background:rgba(16,185,129,.1);}.sc-online .val{color:#10B981;}
+.sc-offline{border-color:rgba(239,68,68,.3);}.sc-offline .icon{background:rgba(239,68,68,.1);}.sc-offline .val{color:#EF4444;}
+.sc-weak{border-color:rgba(245,158,11,.3);}.sc-weak .icon{background:rgba(245,158,11,.1);}.sc-weak .val{color:#F59E0B;}
+.sc-router{border-color:rgba(59,130,246,.3);}.sc-router .icon{background:rgba(59,130,246,.1);}.sc-router .val{color:#3B82F6;}
+.sc-ticket{border-color:rgba(139,92,246,.3);}.sc-ticket .icon{background:rgba(139,92,246,.1);}.sc-ticket .val{color:#8B5CF6;}
+
+/* ── Layout Grids ────────────────────────────────────────────── */
+.main-grid{display:grid;grid-template-columns:1fr 340px;gap:18px;margin-bottom:18px;}
+.bot-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+@media(max-width:1050px){.main-grid,.bot-grid{grid-template-columns:1fr;}}
+
+/* ── Panel ───────────────────────────────────────────────────── */
+.panel{background:var(--card-bg);border:1px solid var(--border);border-radius:18px;overflow:hidden;}
+.panel-hdr{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.panel-title{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.panel-body{padding:16px 20px;}
+
+/* ── OLT Bars ────────────────────────────────────────────────── */
+.olt-item{margin-bottom:18px;}.olt-item:last-child{margin-bottom:0;}
+.olt-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.olt-name{font-size:13px;font-weight:700;}
+.progress-bar{height:10px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden;}
+.progress-fill{height:100%;border-radius:6px;transition:width .8s ease;}
+.fill-good{background:linear-gradient(90deg,#10B981,#34D399);}
+.fill-warn{background:linear-gradient(90deg,#F59E0B,#FCD34D);}
+.fill-bad{background:linear-gradient(90deg,#EF4444,#F87171);}
+.olt-meta{display:flex;gap:12px;margin-top:5px;font-size:11px;color:var(--text-muted);flex-wrap:wrap;}
+
+/* ── Alert Feed ──────────────────────────────────────────────── */
+.alert-feed{max-height:330px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
+.al-item{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-radius:11px;border:1px solid transparent;text-decoration:none;color:inherit;}
+.al-crit{background:rgba(239,68,68,.07);border-color:rgba(239,68,68,.2);}
+.al-warn{background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.2);}
+.al-info{background:rgba(59,130,246,.07);border-color:rgba(59,130,246,.2);}
+.al-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.dot-crit{background:#EF4444;box-shadow:0 0 6px #EF4444;}
+.dot-warn{background:#F59E0B;box-shadow:0 0 6px #F59E0B;}
+.dot-info{background:#3B82F6;box-shadow:0 0 6px #3B82F6;}
+
+/* ── Signal Table ────────────────────────────────────────────── */
+.sig-table{width:100%;border-collapse:collapse;font-size:12px;}
+.sig-table th{padding:8px 12px;text-align:left;font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);font-weight:600;}
+.sig-table td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;}
+.sig-table tr:last-child td{border-bottom:none;}
+.sig-table tr:hover td{background:rgba(255,255,255,.02);}
+.rx-pill{display:inline-block;padding:2px 8px;border-radius:8px;font-weight:700;font-size:11px;}
+.rx-ok{background:rgba(16,185,129,.15);color:#34D399;}
+.rx-warn{background:rgba(245,158,11,.15);color:#FCD34D;}
+.rx-crit{background:rgba(239,68,68,.15);color:#F87171;}
+.rx-off{background:rgba(100,116,139,.15);color:#94A3B8;}
+
+/* ── Router Cards ────────────────────────────────────────────── */
+.rcard{border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.rcard:last-child{margin-bottom:0;}
+.rcard-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.rdot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.rdot-on{background:#10B981;box-shadow:0 0 8px #10B981;}
+.rdot-off{background:#EF4444;box-shadow:0 0 8px #EF4444;}
+.rmetrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.rmetric{background:rgba(255,255,255,.04);border-radius:8px;padding:7px 10px;text-align:center;}
+.rmetric-val{font-size:15px;font-weight:800;}
+.rmetric-lbl{font-size:10px;color:var(--text-muted);margin-top:2px;text-transform:uppercase;}
+.mbar{height:4px;border-radius:2px;background:rgba(255,255,255,.07);margin-top:5px;overflow:hidden;}
+.mfill{height:100%;border-radius:2px;}
+
+.btn-outline{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#3B82F6;font-family:inherit;}
+.btn-outline:hover{background:rgba(59,130,246,.2);}
+/* ── Misc ────────────────────────────────────────────────────── */
+.spin-wrap{display:flex;align-items:center;justify-content:center;padding:30px;}
+.spinner{width:28px;height:28px;border:3px solid rgba(255,255,255,.07);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{text-align:center;padding:28px;color:var(--text-muted);font-size:13px;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+<%- include('partials/topbar', { title: 'Network Monitoring' }) %>
+<div class="content">
+
+<!-- NOC Header -->
+<div class="noc-header">
+    <div class="noc-title">
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        NOC Dashboard
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <span class="live-badge"><span class="live-dot"></span>LIVE · Auto-refresh 60s</span>
+        <span style="font-size:12px;color:var(--text-muted)">Update: <strong id="lastUpdate">—</strong></span>
+        <button onclick="refreshAll()" class="btn btn-sm btn-outline">↻ Refresh</button>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="stat-grid">
+    <div class="scard sc-online">
+        <div class="icon">📶</div>
+        <div class="val" id="s-online">—</div>
+        <div class="lbl">ONU Online</div>
+        <div class="sub" id="s-online-pct" style="color:#10B981">—</div>
+    </div>
+    <div class="scard sc-offline">
+        <div class="icon">🔴</div>
+        <div class="val" id="s-offline">—</div>
+        <div class="lbl">ONU Offline</div>
+        <div class="sub" id="s-offline-pct" style="color:#EF4444">—</div>
+    </div>
+    <div class="scard sc-weak">
+        <div class="icon">⚠️</div>
+        <div class="val" id="s-weak">—</div>
+        <div class="lbl">Sinyal Lemah</div>
+        <div class="sub" style="color:#F59E0B">Rx &lt; -27 dBm</div>
+    </div>
+    <div class="scard sc-router">
+        <div class="icon">🖧</div>
+        <div class="val" id="s-router">—</div>
+        <div class="lbl">Router Aktif</div>
+        <div class="sub" id="s-router-sub" style="color:#3B82F6">—</div>
+    </div>
+    <div class="scard sc-ticket">
+        <div class="icon">🎫</div>
+        <div class="val" id="s-ticket">—</div>
+        <div class="lbl">Tiket Aktif</div>
+        <div class="sub" id="s-ticket-urgent" style="color:#8B5CF6">—</div>
+    </div>
+</div>
+
+<!-- Main: OLT Status + Alert Feed -->
+<div class="main-grid">
+    <div class="panel">
+        <div class="panel-hdr">
+            <div class="panel-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+                Status Per OLT
+            </div>
+            <span id="olt-sub" style="font-size:11px;color:var(--text-muted)">Memuat...</span>
+        </div>
+        <div class="panel-body" id="oltPanel"><div class="spin-wrap"><div class="spinner"></div></div></div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-hdr">
+            <div class="panel-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                Alert Feed
+            </div>
+            <span id="alert-count" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="padding:12px 14px">
+            <div class="alert-feed" id="alertFeed"><div class="spin-wrap"><div class="spinner"></div></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom: Weak Signal Table + Router Status -->
+<div class="bot-grid">
+    <div class="panel">
+        <div class="panel-hdr">
+            <div class="panel-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                ONU Bermasalah
+            </div>
+            <span id="weak-count" style="font-size:11px;color:var(--text-muted)"></span>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="sig-table">
+                <thead>
+                    <tr>
+                        <th>ONU / SN</th>
+                        <th>Pelanggan</th>
+                        <th>OLT</th>
+                        <th>Rx (dBm)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="weakTable"><tr><td colspan="5" class="empty">Memuat...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-hdr">
+            <div class="panel-title">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+                Router MikroTik
+            </div>
+            <span id="router-sub" style="font-size:11px;color:var(--text-muted)">Memuat...</span>
+        </div>
+        <div class="panel-body" id="routerPanel"><div class="spin-wrap"><div class="spinner"></div></div></div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+</div><!-- /content -->
+</main>
+
+<script>
+function fmt(n){return n!=null?Number(n).toLocaleString('id-ID'):'—';}
+function fmtTime(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}
+function pctColor(p){return p>=85?'#EF4444':p>=60?'#F59E0B':'#10B981';}
+function rxPill(rx,status){
+    if(status==='Down')return'<span class="rx-pill rx-off">Offline</span>';
+    if(rx==null||rx==='')return'<span class="rx-pill rx-off">—</span>';
+    const v=parseFloat(rx);
+    const cls=v<-30?'rx-crit':v<-27?'rx-warn':'rx-ok';
+    return`<span class="rx-pill ${cls}">${v.toFixed(1)}</span>`;
+}
+
+async function loadSummary(){
+    try{
+        const d=await fetch('/monitoring/api/summary').then(r=>r.json());
+        if(!d.success)return;
+        const {onu,tickets,router_total}=d;
+        const tot=onu.total||1;
+        document.getElementById('s-online').textContent=fmt(onu.online);
+        document.getElementById('s-offline').textContent=fmt(onu.offline);
+        document.getElementById('s-weak').textContent=fmt(onu.weak_signal);
+        document.getElementById('s-ticket').textContent=fmt((tickets.open_count||0)+(tickets.inprogress_count||0));
+        document.getElementById('s-online-pct').textContent=Math.round((onu.online||0)/tot*100)+'% uptime';
+        document.getElementById('s-offline-pct').textContent=Math.round((onu.offline||0)/tot*100)+'% dari total';
+        document.getElementById('s-ticket-urgent').textContent=(tickets.urgent_count||0)+' Kritis/Urgent';
+    }catch(_){}
+}
+
+async function loadOlt(){
+    try{
+        const d=await fetch('/monitoring/api/olt-status').then(r=>r.json());
+        if(!d.success)return;
+        const panel=document.getElementById('oltPanel');
+        document.getElementById('olt-sub').textContent=d.olts.length+' OLT';
+        if(!d.olts.length){panel.innerHTML='<div class="empty">Tidak ada data OLT</div>';return;}
+        panel.innerHTML=d.olts.map(o=>{
+            const tot=parseInt(o.total_onu)||0,on=parseInt(o.online_onu)||0,off=parseInt(o.offline_onu)||0,weak=parseInt(o.weak_count)||0;
+            const pct=tot>0?Math.round(on/tot*100):0;
+            const fc=pct>=90?'fill-good':pct>=70?'fill-warn':'fill-bad';
+            const pc=pct>=90?'#10B981':pct>=70?'#F59E0B':'#EF4444';
+            const avgRx=o.avg_rx?parseFloat(o.avg_rx).toFixed(1)+' dBm':'—';
+            return`<div class="olt-item">
+                <div class="olt-top">
+                    <span class="olt-name">${o.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${o.brand||''}</span></span>
+                    <span style="font-size:13px;font-weight:800;color:${pc}">${pct}%</span>
+                </div>
+                <div class="progress-bar"><div class="progress-fill ${fc}" style="width:${pct}%"></div></div>
+                <div class="olt-meta">
+                    <span style="color:#10B981">● ${on} Online</span>
+                    <span style="color:#EF4444">● ${off} Offline</span>
+                    ${weak?`<span style="color:#F59E0B">⚠ ${weak} Lemah</span>`:''}
+                    <span>Avg Rx: ${avgRx}</span>
+                </div>
+            </div>`;
+        }).join('');
+    }catch(_){}
+}
+
+async function loadRouters(){
+    try{
+        const d=await fetch('/monitoring/api/routers').then(r=>r.json());
+        if(!d.success)return;
+        const panel=document.getElementById('routerPanel');
+        const online=d.routers.filter(r=>r.online).length;
+        document.getElementById('s-router').textContent=online+'/'+d.routers.length;
+        document.getElementById('s-router-sub').textContent=online===d.routers.length?'Semua Online':(d.routers.length-online)+' Offline';
+        document.getElementById('router-sub').textContent=d.routers.length+' router';
+        if(!d.routers.length){panel.innerHTML='<div class="empty">Tidak ada router terdaftar</div>';return;}
+        panel.innerHTML=d.routers.map(r=>{
+            const cc=r.cpu_load!=null?pctColor(r.cpu_load):'var(--text-muted)';
+            const mc=r.mem_pct!=null?pctColor(r.mem_pct):'var(--text-muted)';
+            return`<div class="rcard" style="border-color:${r.online?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)'}">
+                <div class="rcard-top">
+                    <span class="rdot ${r.online?'rdot-on':'rdot-off'}"></span>
+                    <div style="flex:1">
+                        <div style="font-size:13px;font-weight:700">${r.name} <span style="font-size:10px;color:var(--text-muted);font-weight:400">${r.identity||''}</span></div>
+                        <div style="font-size:11px;color:var(--text-muted);font-family:monospace">${r.ip_address}</div>
+                    </div>
+                    <span style="font-size:11px;font-weight:700;color:${r.online?'#10B981':'#EF4444'}">${r.online?'Online':'Offline'}</span>
+                </div>
+                ${r.online?`
+                <div class="rmetrics">
+                    <div class="rmetric">
+                        <div class="rmetric-val" style="color:${cc}">${r.cpu_load!=null?r.cpu_load+'%':'—'}</div>
+                        <div class="rmetric-lbl">CPU</div>
+                        ${r.cpu_load!=null?`<div class="mbar"><div class="mfill" style="width:${r.cpu_load}%;background:${cc}"></div></div>`:''}
+                    </div>
+                    <div class="rmetric">
+                        <div class="rmetric-val" style="color:${mc}">${r.mem_pct!=null?r.mem_pct+'%':'—'}</div>
+                        <div class="rmetric-lbl">RAM</div>
+                        ${r.mem_pct!=null?`<div class="mbar"><div class="mfill" style="width:${r.mem_pct}%;background:${mc}"></div></div>`:''}
+                    </div>
+                    <div class="rmetric">
+                        <div class="rmetric-val" style="color:#3B82F6">${r.active_pppoe!=null?r.active_pppoe:'—'}</div>
+                        <div class="rmetric-lbl">PPPoE</div>
+                    </div>
+                </div>
+                ${r.uptime?`<div style="font-size:10px;color:var(--text-muted);margin-top:8px">⏱ Uptime: ${r.uptime}</div>`:''}
+                `:`<div style="font-size:12px;color:#EF4444;margin-top:4px">⚠ Router tidak dapat dijangkau</div>`}
+            </div>`;
+        }).join('');
+    }catch(_){}
+}
+
+async function loadWeak(){
+    try{
+        const d=await fetch('/monitoring/api/weak-signal').then(r=>r.json());
+        if(!d.success)return;
+        const tbody=document.getElementById('weakTable');
+        document.getElementById('weak-count').textContent=d.onus.length+' perangkat';
+        if(!d.onus.length){tbody.innerHTML='<tr><td colspan="5" class="empty" style="color:#10B981">✅ Semua ONU sinyal baik</td></tr>';return;}
+        tbody.innerHTML=d.onus.map(u=>`<tr>
+            <td><div style="font-weight:700">${u.name||'—'}</div><div style="font-size:10px;color:var(--text-muted);font-family:monospace">${u.sn||''}</div></td>
+            <td style="font-size:12px">${u.customer_name||'<span style="color:var(--text-muted)">—</span>'}</td>
+            <td style="font-size:12px">${u.olt_name}</td>
+            <td>${rxPill(u.rx_power,u.status)}</td>
+            <td><span style="font-size:11px;font-weight:700;color:${u.status==='Up'?'#10B981':'#EF4444'}">${u.status||'—'}</span></td>
+        </tr>`).join('');
+    }catch(_){}
+}
+
+async function loadAlerts(){
+    try{
+        const d=await fetch('/monitoring/api/alerts').then(r=>r.json());
+        if(!d.success)return;
+        const feed=document.getElementById('alertFeed');
+        document.getElementById('alert-count').textContent=d.alerts.length+' alert';
+        if(!d.alerts.length){feed.innerHTML='<div class="empty" style="color:#10B981">✅ Tidak ada alert aktif</div>';return;}
+        const ico={offline:'🔴',weak_signal:'⚠️',ticket:'🎫'};
+        feed.innerHTML=d.alerts.map(a=>{
+            const cls=a.severity==='critical'?'al-crit':a.severity==='warning'?'al-warn':'al-info';
+            const dc=a.severity==='critical'?'dot-crit':a.severity==='warning'?'dot-warn':'dot-info';
+            const tag=a.ticket_id?'a':'div';
+            const href=a.ticket_id?`href="/tickets/${a.ticket_id}" target="_blank"`:'';
+            return`<${tag} class="al-item ${cls}" ${href}>
+                <span class="al-dot ${dc}"></span>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:700">${ico[a.type]||'•'} ${a.message}</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${a.detail}</div>
+                    <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${fmtTime(a.time)}</div>
+                </div>
+            </${tag}>`;
+        }).join('');
+    }catch(_){}
+}
+
+async function refreshAll(){
+    await Promise.allSettled([loadSummary(),loadOlt(),loadRouters(),loadWeak(),loadAlerts()]);
+    document.getElementById('lastUpdate').textContent=new Date().toLocaleTimeString('id-ID');
+}
+
+// SSE
+function connectSSE(){
+    const es=new EventSource('/monitoring/sse');
+    es.onmessage=e=>{
+        const data=JSON.parse(e.data);
+        if(data.type==='onu_change'){loadSummary();loadOlt();loadWeak();loadAlerts();}
+        else if(data.type==='router_change'){loadRouters();}
+    };
+    es.onerror=()=>setTimeout(connectSSE,10000);
+}
+
+refreshAll();
+connectSSE();
+setInterval(refreshAll,60000);
+</script>
+</body>
+</html>

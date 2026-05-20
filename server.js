@@ -1470,6 +1470,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   inventoryRouter.setPool(pool);
   app.use('/inventory', adminOnly, inventoryRouter);
 
+  const monitoringRouter = require('./routes/monitoring');
+  monitoringRouter.setPool(pool);
+  app.use('/monitoring', adminOnly, monitoringRouter);
+
   // Background Tasks / Cron Jobs
 
   // Daily at midnight: auto-isolate overdue customers + MikroTik + WA
