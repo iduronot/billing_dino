@@ -1269,6 +1269,88 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         FROM hioso_onus WHERE status = 'Up'
       `);
 
+      // ── Tab 3: Tagihan jatuh tempo minggu ini ──
+      const [dueThisWeek] = await pool.query(`
+        SELECT i.*, c.name as customer_name, c.phone as customer_phone, p.name as package_name
+        FROM invoices i
+        LEFT JOIN customers c ON i.customer_id = c.id
+        LEFT JOIN packages p ON c.package_id = p.id
+        WHERE i.status = 'unpaid'
+          AND i.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+        ORDER BY i.due_date ASC
+        LIMIT 50
+      `).catch(() => [[]]);
+
+      // ── Tab 3: Pelanggan isolir beserta durasi ──
+      const [isolatedList] = await pool.query(`
+        SELECT c.*, p.name as package_name, p.price,
+               DATEDIFF(NOW(), c.updated_at) as days_isolated
+        FROM customers c
+        LEFT JOIN packages p ON c.package_id = p.id
+        WHERE c.status = 'isolated'
+        ORDER BY days_isolated DESC
+        LIMIT 50
+      `).catch(() => [[]]);
+
+      // ── Tab 4: Tiket per teknisi (semua teknisi, termasuk yg belum punya tiket) ──
+      const [ticketsByTech] = await pool.query(`
+        SELECT
+          u.id, u.username as technician,
+          COUNT(t.id)                                                as total,
+          SUM(CASE WHEN t.status='open'        THEN 1 ELSE 0 END)   as open,
+          SUM(CASE WHEN t.status='in_progress' THEN 1 ELSE 0 END)   as in_progress,
+          SUM(CASE WHEN t.status='resolved'    THEN 1 ELSE 0 END)   as resolved
+        FROM users u
+        LEFT JOIN trouble_tickets t ON t.technician_id = u.id
+        WHERE u.role = 'technician'
+        GROUP BY u.id, u.username
+        ORDER BY open DESC, total DESC
+      `).catch(() => [[]]);
+
+      // ── Tab 4: Tiket dibuka hari ini ──
+      const [todayTickets] = await pool.query(`
+        SELECT t.*, c.name as customer_name, u.username as technician_name
+        FROM trouble_tickets t
+        LEFT JOIN customers c ON t.customer_id = c.id
+        LEFT JOIN users u ON t.technician_id = u.id
+        WHERE DATE(t.created_at) = CURDATE()
+        ORDER BY t.created_at DESC
+        LIMIT 30
+      `).catch(() => [[]]);
+
+      // ── Tab 4: Statistik tiket ──
+      const [[ticketStats]] = await pool.query(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN status='open'        THEN 1 ELSE 0 END) as open,
+          SUM(CASE WHEN status='in_progress' THEN 1 ELSE 0 END) as in_progress,
+          SUM(CASE WHEN status='resolved'    THEN 1 ELSE 0 END) as resolved,
+          SUM(CASE WHEN MONTH(created_at)=MONTH(NOW()) AND YEAR(created_at)=YEAR(NOW()) THEN 1 ELSE 0 END) as this_month,
+          SUM(CASE WHEN DATE(created_at)=CURDATE() THEN 1 ELSE 0 END) as today
+        FROM trouble_tickets
+      `).catch(() => [[{ total:0, open:0, in_progress:0, resolved:0, this_month:0, today:0 }]]);
+
+      // ── Tab 2: PPPoE Stats per Router ──
+      const [pppoePerRouter] = await pool.query(`
+        SELECT r.id, r.name as router_name, r.ip_address, r.status,
+               COUNT(c.id)                                               as total_users,
+               SUM(CASE WHEN c.status='active'   THEN 1 ELSE 0 END)     as active_users,
+               SUM(CASE WHEN c.status='isolated' THEN 1 ELSE 0 END)     as isolated_users
+        FROM routers r
+        LEFT JOIN customers c ON c.router_id = r.id
+        GROUP BY r.id, r.name, r.ip_address, r.status
+        ORDER BY total_users DESC
+      `).catch(() => [[]]);
+
+      const [[pppoeStats]] = await pool.query(`
+        SELECT
+          COUNT(*)                                           as total_accounts,
+          SUM(CASE WHEN status='active'   THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN status='isolated' THEN 1 ELSE 0 END) as isolated,
+          SUM(CASE WHEN pppoe_username IS NOT NULL AND pppoe_username != '' THEN 1 ELSE 0 END) as with_pppoe
+        FROM customers
+      `).catch(() => [[{ total_accounts:0, active:0, isolated:0, with_pppoe:0 }]]);
+
       res.render('dashboard', {
         user: req.session,
         stats: { totalCustomers, activeCustomers, isolatedCustomers, unpaidInvoices, overdueInvoices, totalRevenue, openTickets, newCustomers },
@@ -1277,6 +1359,11 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         routerStats: routerStats || { total: 0, online: 0 },
         acsStats:    acsStats    || { total: 0, online: 0, linked: 0 },
         expenseStats: expenseStats || { totalExpense: 0, totalCount: 0 },
+        dueThisWeek: dueThisWeek || [], isolatedList: isolatedList || [],
+        ticketsByTech: ticketsByTech || [], todayTickets: todayTickets || [],
+        ticketStats: ticketStats || { total:0, open:0, in_progress:0, resolved:0, this_month:0, today:0 },
+        pppoePerRouter: pppoePerRouter || [],
+        pppoeStats: pppoeStats || { total_accounts:0, active:0, isolated:0, with_pppoe:0 },
         expenseByCategory: expenseByCategory || [],
         monthlyExpenses: monthlyExpenses || [],
         oltPerDevice: oltPerDevice || [],
@@ -1296,6 +1383,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         acsStats: { total: 0, online: 0, linked: 0 },
         expenseStats: { totalExpense: 0, totalCount: 0 },
         expenseByCategory: [], monthlyExpenses: [],
+        dueThisWeek: [], isolatedList: [],
+        ticketsByTech: [], todayTickets: [],
+        ticketStats: { total:0, open:0, in_progress:0, resolved:0, this_month:0, today:0 },
+        pppoePerRouter: [], pppoeStats: { total_accounts:0, active:0, isolated:0, with_pppoe:0 },
         dateFrom: '', dateTo: '',
         currentPage: 'dashboard'
       });
