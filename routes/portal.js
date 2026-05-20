@@ -25,14 +25,27 @@ router.get('/login', (req, res) => {
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     try {
-        const [rows] = await pool.query('SELECT * FROM customers WHERE pppoe_username = ? OR phone = ?', [username, username]);
+        // Normalize phone: strip spaces/dashes, handle 08xxx <-> 628xxx variants
+        const raw = username.trim().replace(/[\s\-]/g, '');
+        const phoneVariants = [raw];
+        if (/^08/.test(raw))        phoneVariants.push('62' + raw.slice(1));   // 08x → 628x
+        if (/^628/.test(raw))       phoneVariants.push('0'  + raw.slice(2));   // 628x → 08x
+        if (/^\+628/.test(raw))     phoneVariants.push('0'  + raw.slice(3));   // +628x → 08x
+        if (/^\+62/.test(raw))      phoneVariants.push('0'  + raw.slice(3));   // +62x → 0x
+
+        const placeholders = phoneVariants.map(() => '?').join(',');
+        const [rows] = await pool.query(
+            `SELECT * FROM customers WHERE pppoe_username = ? OR phone IN (${placeholders})`,
+            [raw, ...phoneVariants]
+        );
+
         if (rows.length > 0) {
             const customer = rows[0];
             // Default password is '1234' if portal_password is not set
-            const validPass = customer.portal_password ? 
-                await bcrypt.compare(password, customer.portal_password) : 
+            const validPass = customer.portal_password ?
+                await bcrypt.compare(password, customer.portal_password) :
                 (password === '1234');
-            
+
             if (validPass) {
                 req.session.customerId = customer.id;
                 req.session.customerName = customer.name;

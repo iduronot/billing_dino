@@ -146,7 +146,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Tracking komisi dan balance
 
 ### 12. 🌐 Portal Pelanggan (Self-Service)
-- Login menggunakan username PPPoE atau nomor telepon
+- Login menggunakan **username PPPoE** atau **nomor HP** (format bebas: `08xxx`, `628xxx`, `+628xxx`)
 - Password default `1234`, bisa diganti sendiri kapan saja
 - Lihat semua tagihan dan riwayat pembayaran (10 invoice terakhir)
 - Bayar tagihan via Xendit QRIS langsung dari portal
@@ -295,6 +295,12 @@ pm2 save && pm2 startup
 - URL: `http://IP-SERVER:3999`
 - Username: `admin` | Password: `admin`
 - **Ganti password segera setelah login pertama**
+
+### 1b. Login Portal Pelanggan
+- URL: `http://IP-SERVER:3999/portal/login`
+- Username: nomor HP pelanggan (format bebas: `081234567890`, `6281234567890`, `+6281234567890`) **atau** username PPPoE
+- Password default: `1234`
+- Link **Portal Pelanggan** juga tersedia di sidebar dashboard admin
 
 ### 2. Profil Perusahaan
 **Pengaturan → Perusahaan** → isi nama ISP, telepon, alamat, timezone.
