@@ -220,8 +220,36 @@
         }
 
         .btn-icon.refresh:hover { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
-        .btn-icon.reboot:hover { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
-        .btn-icon.reset:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+        .btn-icon.reboot:hover  { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
+        .btn-icon.reset:hover   { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger); }
+        .btn-icon.wifi:hover    { background: rgba(6,182,212,.12); color: #06B6D4; border-color: #06B6D4; }
+
+        /* ── WiFi Modal ── */
+        .wifi-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(8px); z-index:3000; display:none; align-items:center; justify-content:center; }
+        .wifi-overlay.open { display:flex; }
+        .wifi-modal { background:var(--modal-bg); border:1px solid var(--border); border-radius:20px; width:min(560px,96vw); max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.5); }
+        .wifi-modal-head { padding:22px 26px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+        .wifi-modal-icon { width:44px; height:44px; border-radius:12px; background:rgba(6,182,212,.12); color:#06B6D4; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+        .wifi-modal-body { padding:22px 26px; }
+        .wifi-band-tabs { display:flex; gap:4px; background:var(--sub-bg); border:1px solid var(--border); border-radius:10px; padding:3px; margin-bottom:20px; }
+        .wifi-band-tab  { flex:1; padding:8px; border:none; border-radius:8px; background:none; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; transition:all .2s; }
+        .wifi-band-tab.active { background:var(--card-bg); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.15); }
+        .wifi-band-pane { display:none; }
+        .wifi-band-pane.active { display:block; }
+        .wifi-field { margin-bottom:16px; }
+        .wifi-field label { display:block; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px; }
+        .wifi-field input { width:100%; padding:10px 14px; background:var(--input-bg); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; font-family:'Outfit',sans-serif; outline:none; transition:border-color .2s; box-sizing:border-box; }
+        .wifi-field input:focus { border-color:#06B6D4; }
+        .wifi-path-note { font-size:10px; color:var(--muted); margin-top:3px; font-family:'Courier New',monospace; opacity:.7; }
+        .wifi-advanced-toggle { font-size:11px; color:var(--muted); cursor:pointer; display:inline-flex; align-items:center; gap:5px; margin-bottom:14px; user-select:none; }
+        .wifi-advanced-toggle:hover { color:var(--text); }
+        .wifi-path-inputs { display:none; margin-bottom:16px; }
+        .wifi-path-inputs.open { display:block; }
+        .wifi-modal-foot { padding:16px 26px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+        .pw-toggle { position:relative; }
+        .pw-toggle input { padding-right:42px; }
+        .pw-toggle-btn { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px; }
+        .wifi-info-box { background:rgba(6,182,212,.06); border:1px solid rgba(6,182,212,.2); border-radius:10px; padding:10px 14px; margin-bottom:18px; font-size:12px; color:#67E8F9; line-height:1.5; }
 
         .btn-icon .tooltip {
             position: absolute;
@@ -410,6 +438,10 @@
                                         <i class="fas fa-sync-alt"></i>
                                         <span class="tooltip">Ambil Data</span>
                                     </button>
+                                    <button class="btn-icon wifi" onclick="openWifiModal(this)" data-id="<%= d.id %>" data-sn="<%= (d.sn||d.id).replace(/"/g,'&quot;') %>">
+                                        <i class="fas fa-wifi"></i>
+                                        <span class="tooltip">Ganti WiFi</span>
+                                    </button>
                                     <button class="btn-icon reboot" onclick="rebootDevice('<%= d.id %>')">
                                         <i class="fas fa-power-off"></i>
                                         <span class="tooltip">Reboot</span>
@@ -452,6 +484,98 @@
 
     </div>
 </main>
+
+<!-- WiFi Modal -->
+<div class="wifi-overlay" id="wifiOverlay" onclick="if(event.target===this)closeWifiModal()">
+    <div class="wifi-modal">
+        <div class="wifi-modal-head">
+            <div class="wifi-modal-icon"><i class="fas fa-wifi"></i></div>
+            <div>
+                <div style="font-size:16px;font-weight:700">Ubah Pengaturan WiFi</div>
+                <div style="font-size:12px;color:var(--muted)" id="wifiDeviceLabel">-</div>
+            </div>
+            <button onclick="closeWifiModal()" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div class="wifi-modal-body">
+            <div class="wifi-info-box">
+                <i class="fas fa-info-circle"></i>
+                Perubahan dikirim via TR-069. Perangkat harus <b>online</b> dan terhubung ke GenieACS agar perintah dijalankan. Beberapa ONT membutuhkan waktu 1–3 menit untuk menerapkan perubahan.
+            </div>
+
+            <!-- Band tabs -->
+            <div class="wifi-band-tabs">
+                <button class="wifi-band-tab active" onclick="switchBand('24',this)"><i class="fas fa-broadcast-tower" style="font-size:11px"></i> 2.4 GHz</button>
+                <button class="wifi-band-tab" onclick="switchBand('5',this)"><i class="fas fa-bolt" style="font-size:11px"></i> 5 GHz</button>
+            </div>
+
+            <!-- 2.4 GHz -->
+            <div class="wifi-band-pane active" id="pane24">
+                <div class="wifi-field">
+                    <label>Nama WiFi (SSID)</label>
+                    <input type="text" id="ssid24" placeholder="Masukkan SSID baru..." maxlength="32">
+                    <div class="wifi-path-note" id="path-ssid24">WLANConfiguration.1.SSID</div>
+                </div>
+                <div class="wifi-field">
+                    <label>Password WiFi</label>
+                    <div class="pw-toggle">
+                        <input type="password" id="pass24" placeholder="Kosongkan jika tidak ingin diubah" maxlength="63">
+                        <button class="pw-toggle-btn" onclick="togglePw('pass24',this)" type="button"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <div class="wifi-path-note" id="path-pass24">WLANConfiguration.1.PreSharedKey.1.PreSharedKey</div>
+                </div>
+                <div class="wifi-advanced-toggle" onclick="toggleAdvanced('adv24')">
+                    <i class="fas fa-chevron-right" id="adv24-arrow" style="font-size:10px;transition:transform .2s"></i> Path TR-069 (Advanced)
+                </div>
+                <div class="wifi-path-inputs" id="adv24">
+                    <div class="wifi-field">
+                        <label>Path SSID</label>
+                        <input type="text" id="customPathSsid24" value="InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID">
+                    </div>
+                    <div class="wifi-field">
+                        <label>Path Password</label>
+                        <input type="text" id="customPathPass24" value="InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5 GHz -->
+            <div class="wifi-band-pane" id="pane5">
+                <div class="wifi-field">
+                    <label>Nama WiFi 5GHz (SSID)</label>
+                    <input type="text" id="ssid5" placeholder="Masukkan SSID baru..." maxlength="32">
+                    <div class="wifi-path-note" id="path-ssid5">WLANConfiguration.5.SSID</div>
+                </div>
+                <div class="wifi-field">
+                    <label>Password WiFi 5GHz</label>
+                    <div class="pw-toggle">
+                        <input type="password" id="pass5" placeholder="Kosongkan jika tidak ingin diubah" maxlength="63">
+                        <button class="pw-toggle-btn" onclick="togglePw('pass5',this)" type="button"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <div class="wifi-path-note" id="path-pass5">WLANConfiguration.5.PreSharedKey.1.PreSharedKey</div>
+                </div>
+                <div class="wifi-advanced-toggle" onclick="toggleAdvanced('adv5')">
+                    <i class="fas fa-chevron-right" id="adv5-arrow" style="font-size:10px;transition:transform .2s"></i> Path TR-069 (Advanced)
+                </div>
+                <div class="wifi-path-inputs" id="adv5">
+                    <div class="wifi-field">
+                        <label>Path SSID 5GHz</label>
+                        <input type="text" id="customPathSsid5" value="InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID">
+                    </div>
+                    <div class="wifi-field">
+                        <label>Path Password 5GHz</label>
+                        <input type="text" id="customPathPass5" value="InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey.1.PreSharedKey">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="wifi-modal-foot">
+            <button onclick="closeWifiModal()" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:10px 20px;cursor:pointer;font-size:13px;font-family:'Outfit',sans-serif">Batal</button>
+            <button onclick="applyWifi()" id="btnApplyWifi" style="background:linear-gradient(135deg,#06B6D4,#0EA5E9);color:white;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;display:inline-flex;align-items:center;gap:8px">
+                <i class="fas fa-check"></i> Terapkan Perubahan
+            </button>
+        </div>
+    </div>
+</div>
 
 <div id="toast" style="position:fixed; bottom:30px; right:30px; background:#1F2937; color:white; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:16px 24px; z-index:10000; display:none; font-size:14px; box-shadow:0 20px 25px -5px rgba(0, 0, 0, 0.2); backdrop-filter:blur(10px);"></div>
 
@@ -505,6 +629,128 @@ async function factoryReset(deviceId) {
     } catch(e) {
         showToast('❌ Gagal: ' + e.message, 'error');
     }
+}
+
+// ── WiFi Modal ──────────────────────────────────────────────
+let wifiDeviceId = null;
+
+async function openWifiModal(btn) {
+    wifiDeviceId = btn.dataset.id;
+    const sn = btn.dataset.sn || btn.dataset.id;
+    document.getElementById('wifiDeviceLabel').textContent = 'SN: ' + sn;
+    // Reset form
+    ['ssid24','pass24','ssid5','pass5'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('ssid24').placeholder = 'Memuat...';
+    document.getElementById('pass24').placeholder = 'Memuat...';
+    document.getElementById('ssid5').placeholder = 'Memuat...';
+    document.getElementById('pass5').placeholder = 'Memuat...';
+    // Reset tabs
+    document.querySelectorAll('.wifi-band-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.wifi-band-pane').forEach(p => p.classList.remove('active'));
+    document.querySelector('.wifi-band-tab').classList.add('active');
+    document.getElementById('pane24').classList.add('active');
+    document.getElementById('wifiOverlay').classList.add('open');
+
+    // Fetch current SSID & password values from device
+    try {
+        const pathSsid24 = document.getElementById('customPathSsid24').value.trim();
+        const pathPass24 = document.getElementById('customPathPass24').value.trim();
+        const pathSsid5  = document.getElementById('customPathSsid5').value.trim();
+        const pathPass5  = document.getElementById('customPathPass5').value.trim();
+        const params = new URLSearchParams({ pathSsid24, pathPass24, pathSsid5, pathPass5 });
+        const res = await fetch(`/acs/api/wifi/${encodeURIComponent(wifiDeviceId)}?${params}`);
+        const data = await res.json();
+        if (data.success) {
+            if (data.ssid24) document.getElementById('ssid24').value = data.ssid24;
+            if (data.pass24) document.getElementById('pass24').value = data.pass24;
+            if (data.ssid5)  document.getElementById('ssid5').value  = data.ssid5;
+            if (data.pass5)  document.getElementById('pass5').value  = data.pass5;
+        }
+    } catch(e) { /* ignore, user can still type manually */ }
+
+    document.getElementById('ssid24').placeholder = 'Masukkan SSID baru...';
+    document.getElementById('pass24').placeholder = 'Kosongkan jika tidak ingin diubah';
+    document.getElementById('ssid5').placeholder = 'Masukkan SSID baru...';
+    document.getElementById('pass5').placeholder = 'Kosongkan jika tidak ingin diubah';
+}
+
+function closeWifiModal() {
+    document.getElementById('wifiOverlay').classList.remove('open');
+    wifiDeviceId = null;
+}
+
+function switchBand(band, btn) {
+    document.querySelectorAll('.wifi-band-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.wifi-band-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('pane' + band).classList.add('active');
+}
+
+function toggleAdvanced(id) {
+    const el    = document.getElementById(id);
+    const arrow = document.getElementById(id + '-arrow');
+    const open  = el.classList.toggle('open');
+    arrow.style.transform = open ? 'rotate(90deg)' : '';
+}
+
+function togglePw(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const icon  = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'fas fa-eye';
+    }
+}
+
+async function applyWifi() {
+    if (!wifiDeviceId) return;
+    const btn = document.getElementById('btnApplyWifi');
+
+    // Determine active band
+    const activePaneId = document.querySelector('.wifi-band-pane.active')?.id;
+    const is5 = activePaneId === 'pane5';
+    const suffix = is5 ? '5' : '24';
+
+    const ssid = document.getElementById('ssid' + suffix).value.trim();
+    const pass = document.getElementById('pass' + suffix).value.trim();
+
+    if (!ssid && !pass) {
+        showToast('❌ Isi minimal salah satu field (SSID atau Password)', 'error');
+        return;
+    }
+    if (pass && pass.length < 8) {
+        showToast('❌ Password WiFi minimal 8 karakter', 'error');
+        return;
+    }
+
+    const pathSsid = document.getElementById('customPathSsid' + suffix).value.trim();
+    const pathPass = document.getElementById('customPathPass' + suffix).value.trim();
+
+    const params = [];
+    if (ssid) params.push([pathSsid, ssid, 'xsd:string']);
+    if (pass) params.push([pathPass, pass, 'xsd:string']);
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+
+    try {
+        const res = await fetch(`/acs/api/wifi/${encodeURIComponent(wifiDeviceId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ params })
+        });
+        const d = await res.json();
+        showToast(d.success ? '✅ ' + d.message : '❌ ' + d.message, d.success ? 'success' : 'error');
+        if (d.success) closeWifiModal();
+    } catch(e) {
+        showToast('❌ Gagal: ' + e.message, 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-check"></i> Terapkan Perubahan';
 }
 
 function showToast(msg, type) {

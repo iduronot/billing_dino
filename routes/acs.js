@@ -152,6 +152,92 @@ router.post('/api/factory-reset/:deviceId', async (req, res) => {
     }
 });
 
+// GET /acs/api/wifi/:deviceId — Fetch current WiFi SSID values
+router.get('/api/wifi/:deviceId', async (req, res) => {
+    try {
+        const s = await getACSSettings();
+        if (!s.acs_url) return res.json({ success: false, message: 'ACS URL belum dikonfigurasi' });
+
+        const deviceId = decodeURIComponent(req.params.deviceId);
+        // Accept optional custom paths via query, fallback to defaults
+        const pathSsid24 = req.query.pathSsid24 || 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID';
+        const pathPass24 = req.query.pathPass24 || 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.PreSharedKey';
+        const pathSsid5  = req.query.pathSsid5  || 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.SSID';
+        const pathPass5  = req.query.pathPass5  || 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.PreSharedKey.1.PreSharedKey';
+
+        // Also try alternate password paths (KeyPassphrase variant used by some vendors)
+        const altPass24 = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.KeyPassphrase';
+        const altPass5  = 'InternetGatewayDevice.LANDevice.1.WLANConfiguration.5.KeyPassphrase';
+
+        const allPaths = [...new Set([pathSsid24, pathPass24, pathSsid5, pathPass5, altPass24, altPass5])];
+        const projection = `_id,${allPaths.join(',')}`;
+
+        const response = await axios.get(`${s.acs_url}/devices`, {
+            ...getAxiosConfig(s),
+            params: { query: JSON.stringify({ _id: deviceId }), projection }
+        });
+
+        if (!Array.isArray(response.data) || response.data.length === 0)
+            return res.json({ success: false, message: 'Perangkat tidak ditemukan' });
+
+        const d = response.data[0];
+        const getVal = (path) => {
+            const parts = path.split('.');
+            let val = d;
+            for (const part of parts) { val = (val && val[part]) ? val[part] : undefined; }
+            return (val && typeof val === 'object' && '_value' in val) ? val._value : (val || '');
+        };
+        // Use first non-empty value between primary and alternate path
+        const resolvePass = (primary, alt) => getVal(primary) || getVal(alt);
+
+        res.json({
+            success: true,
+            ssid24: getVal(pathSsid24),
+            pass24: resolvePass(pathPass24, altPass24),
+            ssid5:  getVal(pathSsid5),
+            pass5:  resolvePass(pathPass5, altPass5)
+        });
+    } catch (e) {
+        const errorData = (e.response && e.response.data) ? e.response.data : e.message;
+        res.json({ success: false, message: `Gagal: ${errorData}` });
+    }
+});
+
+// POST /acs/api/wifi/:deviceId — Set WiFi SSID / Password via setParameterValues
+router.post('/api/wifi/:deviceId', async (req, res) => {
+    try {
+        const s = await getACSSettings();
+        if (!s.acs_url) return res.json({ success: false, message: 'ACS URL belum dikonfigurasi' });
+
+        const deviceId = decodeURIComponent(req.params.deviceId);
+        const { params } = req.body; // [[path, value, xsdType], ...]
+
+        if (!params || !Array.isArray(params) || params.length === 0)
+            return res.json({ success: false, message: 'Tidak ada parameter yang dikirim' });
+
+        // Basic path validation — only allow IGD WiFi paths
+        for (const p of params) {
+            if (!Array.isArray(p) || !p[0] || !p[1])
+                return res.json({ success: false, message: 'Format parameter tidak valid' });
+            if (!/^InternetGatewayDevice\.LANDevice\.\d+\.WLANConfiguration\.\d+\./i.test(p[0]))
+                return res.json({ success: false, message: `Path tidak diizinkan: ${p[0]}` });
+        }
+
+        await axios.post(
+            `${s.acs_url}/devices/${encodeURIComponent(deviceId)}/tasks`,
+            {
+                name: 'setParameterValues',
+                parameterValues: params.map(p => [p[0], p[1], p[2] || 'xsd:string'])
+            },
+            { ...getAxiosConfig(s), params: { connection_request: '' } }
+        );
+        res.json({ success: true, message: 'Konfigurasi WiFi berhasil dikirim ke perangkat.' });
+    } catch (e) {
+        const errorData = (e.response && e.response.data) ? JSON.stringify(e.response.data) : e.message;
+        res.json({ success: false, message: `Gagal: ${errorData}` });
+    }
+});
+
 // DELETE /acs/api/device/:deviceId — Delete device from ACS
 router.delete('/api/device/:deviceId', async (req, res) => {
     try {

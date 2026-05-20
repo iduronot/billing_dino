@@ -3,6 +3,8 @@ const path = require('path');
 const session = require('express-session');
 const fs = require('fs');
 const dotenv = require('dotenv');
+const { exec } = require('child_process');
+const IS_WIN = process.platform === 'win32';
 
 // Check if .env exists, if not, we are in "install mode"
 const envPath = path.join(__dirname, '.env');
@@ -2026,6 +2028,29 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       console.error('[UPDATE] Error:', e.message);
       res.status(500).json({ success: false, message: "Gagal update: " + e.message });
     }
+  });
+
+  // ── Network Tools: Ping & Traceroute ────────────────────────
+  function validateIP(ip) {
+    return typeof ip === 'string' && /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every(n => parseInt(n) <= 255);
+  }
+
+  app.post('/api/network/ping', requireAuth, (req, res) => {
+    const { ip } = req.body;
+    if (!validateIP(ip)) return res.json({ success: false, output: 'IP tidak valid' });
+    const cmd = IS_WIN ? `ping -n 4 ${ip}` : `ping -c 4 -W 2 ${ip}`;
+    exec(cmd, { timeout: 15000 }, (err, stdout, stderr) => {
+      res.json({ success: true, output: (stdout || '') + (stderr || '') || 'Tidak ada output' });
+    });
+  });
+
+  app.post('/api/network/traceroute', requireAuth, (req, res) => {
+    const { ip } = req.body;
+    if (!validateIP(ip)) return res.json({ success: false, output: 'IP tidak valid' });
+    const cmd = IS_WIN ? `tracert -h 20 -w 1000 ${ip}` : `traceroute -m 20 -w 2 ${ip}`;
+    exec(cmd, { timeout: 45000 }, (err, stdout, stderr) => {
+      res.json({ success: true, output: (stdout || '') + (stderr || '') || 'Tidak ada output' });
+    });
   });
 }
 
