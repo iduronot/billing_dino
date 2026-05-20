@@ -1,77 +1,275 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cetak Invoice #<%= invoices[0].id %></title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice <%= invoices.length === 1 ? '#' + (invoices[0].invoice_number || invoices[0].id) : '(' + invoices.length + ' invoice)' %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <style>
-        body{font-family:'Courier New',monospace;font-size:13px;margin:0;padding:20px;background:#fff;color:#000;}
-        .no-print{text-align:center;margin-bottom:20px;display:flex;gap:10px;justify-content:center;}
-        .btn-print{padding:10px 28px;background:#1e40af;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;}
-        .btn-back{padding:10px 28px;background:#374151;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;}
-        .invoice-box{max-width:680px;margin:auto;border:1px solid #ddd;padding:24px;}
-        .header{text-align:center;margin-bottom:16px;border-bottom:2px dashed #000;padding-bottom:12px;}
-        .header h2{margin:0 0 4px;font-size:20px;} .header p{margin:2px 0;font-size:12px;}
-        .details table{width:100%;border-collapse:collapse;margin-bottom:16px;}
-        .details td{padding:4px 6px;font-size:13px;vertical-align:top;}
-        .items{width:100%;border-collapse:collapse;margin-bottom:16px;}
-        .items th,.items td{padding:8px 6px;text-align:left;border-bottom:1px solid #eee;font-size:13px;}
-        .items th{border-bottom:2px solid #000;font-weight:bold;}
-        .items .right{text-align:right;}
-        .total-row{border-top:2px dashed #000;font-weight:bold;font-size:15px;}
-        .footer{text-align:center;font-size:11px;color:#666;margin-top:20px;border-top:1px dashed #ccc;padding-top:10px;}
-        @media print{.no-print{display:none!important;}.invoice-box{border:none;max-width:100%;}}
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: #F1F5F9; color: #1E293B; font-size: 12px; line-height: 1.4; }
+
+        /* Toolbar */
+        .toolbar { position:fixed; top:0; left:0; right:0; z-index:999; background:#1E293B; padding:9px 20px; display:flex; align-items:center; gap:10px; box-shadow:0 2px 12px rgba(0,0,0,.3); }
+        .toolbar-title { color:#94A3B8; font-size:13px; flex:1; }
+        .toolbar-title strong { color:#F8FAFC; }
+        .btn-print { background:linear-gradient(135deg,#3B82F6,#6366F1); color:white; border:none; border-radius:8px; padding:7px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; display:flex; align-items:center; gap:7px; transition:opacity .2s; }
+        .btn-print:hover { opacity:.85; }
+        .btn-back { background:rgba(255,255,255,.08); color:#CBD5E1; border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; font-family:'Inter',sans-serif; }
+
+        /* Pages */
+        .pages { padding:58px 20px 20px; max-width:740px; margin:0 auto; }
+
+        /* Invoice Card */
+        .invoice-card { background:#FFFFFF; border-radius:12px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,.10); margin-bottom:36px; page-break-after:always; }
+        .invoice-card:last-child { margin-bottom:0; page-break-after:auto; }
+
+        /* Header */
+        .inv-header { background:linear-gradient(135deg,#0F172A 0%,#1E3A5F 60%,#1E40AF 100%); padding:18px 28px 0; position:relative; overflow:hidden; }
+        .inv-header::before { content:''; position:absolute; top:-40px; right:-40px; width:160px; height:160px; border-radius:50%; background:rgba(255,255,255,.04); }
+        .inv-header::after  { content:''; position:absolute; bottom:-50px; right:50px; width:200px; height:200px; border-radius:50%; background:rgba(59,130,246,.06); }
+        .header-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; position:relative; z-index:1; }
+        .company-logo { height:32px; max-width:140px; object-fit:contain; margin-bottom:6px; filter:brightness(0) invert(1); }
+        .company-name-text { font-family:'Playfair Display',serif; font-size:16px; font-weight:700; color:#FFFFFF; margin-bottom:3px; }
+        .company-meta { font-size:10px; color:rgba(255,255,255,.65); line-height:1.55; }
+        .invoice-label { text-align:right; position:relative; z-index:1; flex-shrink:0; }
+        .invoice-word { font-size:9px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,.5); margin-bottom:3px; }
+        .invoice-num  { font-size:20px; font-weight:800; color:#FFFFFF; letter-spacing:-0.5px; }
+        .invoice-date { font-size:10px; color:rgba(255,255,255,.55); margin-top:3px; }
+
+        /* Status banner */
+        .status-banner { display:flex; align-items:center; justify-content:space-between; padding:8px 28px; position:relative; z-index:1; margin-top:10px; border-top:1px solid rgba(255,255,255,.08); }
+        .status-pill { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; }
+        .status-pill.paid    { background:rgba(16,185,129,.2);  color:#34D399; border:1px solid rgba(16,185,129,.3); }
+        .status-pill.unpaid  { background:rgba(245,158,11,.2);  color:#FCD34D; border:1px solid rgba(245,158,11,.3); }
+        .status-pill.overdue { background:rgba(239,68,68,.2);   color:#FCA5A5; border:1px solid rgba(239,68,68,.3); }
+        .status-pill::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+        .paid-info { font-size:10px; color:rgba(255,255,255,.55); }
+
+        /* Body */
+        .inv-body { padding:16px 28px; }
+
+        /* Parties */
+        .parties { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:12px; }
+        .party-label { font-size:9px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:#94A3B8; margin-bottom:5px; }
+        .party-name  { font-size:13px; font-weight:700; color:#0F172A; margin-bottom:2px; }
+        .party-meta  { font-size:11px; color:#64748B; line-height:1.5; }
+        .party-pppoe { display:inline-flex; align-items:center; gap:4px; background:#F1F5F9; border:1px solid #E2E8F0; border-radius:5px; padding:2px 7px; font-size:10px; font-weight:600; color:#475569; margin-top:3px; font-family:'Courier New',monospace; }
+        .detail-grid { display:grid; grid-template-columns:max-content 1fr; gap:3px 10px; align-items:baseline; }
+        .detail-grid .dk { font-size:10px; color:#94A3B8; font-weight:600; white-space:nowrap; }
+        .detail-grid .dv { font-size:11px; color:#334155; font-weight:500; }
+
+        /* Divider */
+        .divider { height:1px; background:linear-gradient(90deg,#E2E8F0,transparent); margin:0 0 10px; }
+
+        /* Items table */
+        .inv-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+        .inv-table thead tr { background:#F8FAFC; border-bottom:2px solid #E2E8F0; }
+        .inv-table th { padding:7px 10px; text-align:left; font-size:9px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#94A3B8; }
+        .inv-table th.right, .inv-table td.right { text-align:right; }
+        .inv-table td { padding:9px 10px; border-bottom:1px solid #F1F5F9; font-size:12px; color:#334155; vertical-align:top; }
+        .inv-table tbody tr:last-child td { border-bottom:none; }
+        .item-name  { font-weight:600; color:#1E293B; }
+        .item-sub   { font-size:10px; color:#94A3B8; margin-top:1px; }
+
+        /* Totals */
+        .totals-wrap { display:flex; justify-content:flex-end; margin-bottom:10px; }
+        .totals-box  { min-width:230px; }
+        .totals-row  { display:flex; justify-content:space-between; padding:3px 0; font-size:12px; }
+        .totals-row .lbl { color:#64748B; }
+        .totals-row .val { font-weight:600; color:#1E293B; }
+        .totals-sep  { height:1px; background:#E2E8F0; margin:4px 0; }
+        .totals-grand { display:flex; justify-content:space-between; align-items:center; padding:8px 13px; border-radius:8px; background:linear-gradient(135deg,#0F172A,#1E3A5F); margin-top:5px; }
+        .totals-grand .lbl { font-size:9px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.6); }
+        .totals-grand .val { font-size:16px; font-weight:800; color:#FFFFFF; }
+
+        /* Payment */
+        .pay-method { display:inline-flex; align-items:center; gap:5px; background:#EEF2FF; border:1px solid #C7D2FE; border-radius:6px; padding:3px 10px; font-size:11px; font-weight:600; color:#4338CA; margin-bottom:9px; }
+
+        /* Notes */
+        .inv-notes { background:#F8FAFC; border-left:3px solid #3B82F6; border-radius:0 6px 6px 0; padding:7px 12px; margin-bottom:10px; font-size:11px; color:#64748B; line-height:1.45; }
+
+        /* Footer */
+        .inv-footer { display:flex; justify-content:space-between; align-items:flex-end; padding-top:10px; border-top:1px solid #E2E8F0; gap:12px; }
+        .footer-left { font-size:10px; color:#94A3B8; line-height:1.6; }
+        .footer-left strong { color:#64748B; }
+        .signature-box { text-align:center; min-width:110px; }
+        .signature-line { width:110px; height:30px; border-bottom:1.5px solid #CBD5E1; margin:0 auto 4px; }
+        .signature-label { font-size:9px; color:#94A3B8; font-weight:600; letter-spacing:.5px; }
+        .signature-name  { font-size:10px; color:#475569; font-weight:700; margin-top:1px; }
+
+        /* Accent bar */
+        .inv-accent { height:4px; background:linear-gradient(90deg,#3B82F6,#6366F1,#8B5CF6); }
+
+        /* Print */
+        @media print {
+            @page { size:A4; margin:7mm 10mm; }
+            body { background:white; font-size:11px; }
+            .toolbar { display:none !important; }
+            .pages { padding:0; max-width:100%; }
+            .invoice-card { border-radius:0; box-shadow:none; margin-bottom:0; }
+            .inv-header, .totals-grand, .inv-accent, .status-pill, .pay-method { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        }
     </style>
 </head>
 <body>
-<div class="no-print">
-    <button class="btn-print" onclick="window.print()">🖨 Cetak Invoice</button>
+
+<div class="toolbar">
+    <div class="toolbar-title">Mencetak <strong><%= invoices.length %> invoice</strong></div>
     <button class="btn-back" onclick="window.history.back()">← Kembali</button>
+    <button class="btn-print" onclick="window.print()">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+        Cetak
+    </button>
 </div>
-<div class="invoice-box">
-    <div class="header">
-        <h2><%= settings.company_name || 'Dino-Bill ISP' %></h2>
-        <p><%= settings.company_address || '' %></p>
-        <p>Tel: <%= settings.company_phone || '-' %> | <%= settings.company_email || '' %></p>
-        <p style="margin-top:8px;font-weight:bold;font-size:14px">BUKTI PEMBAYARAN</p>
-        <p style="font-size:11px">Dicetak: <%= new Date().toLocaleString('id-ID') %></p>
+
+<div class="pages">
+<%
+    const fmtRp   = n => 'Rp ' + Math.floor(Number(n)||0).toLocaleString('id-ID');
+    const fmtDate = (d, opts) => d ? new Date(d).toLocaleDateString('id-ID', opts || {day:'2-digit',month:'long',year:'numeric'}) : '-';
+    const now = new Date();
+%>
+<% invoices.forEach((inv) => {
+    const isPaid    = inv.status === 'paid';
+    const isOverdue = !isPaid && inv.due_date && new Date(inv.due_date) < now;
+    const statusClass = isPaid ? 'paid' : (isOverdue ? 'overdue' : 'unpaid');
+    const statusLabel = isPaid ? 'Lunas' : (isOverdue ? 'Jatuh Tempo' : 'Belum Dibayar');
+    const invNum = inv.invoice_number || ('INV-' + String(inv.id).padStart(6,'0'));
+    const total  = parseFloat(inv.amount || 0);
+%>
+<div class="invoice-card">
+
+    <div class="inv-header">
+        <div class="header-top">
+            <div>
+                <% if (settings.company_logo) { %>
+                <img src="<%= settings.company_logo %>" class="company-logo" alt="Logo">
+                <% } else { %>
+                <div class="company-name-text"><%= settings.company_name || 'Dino-Bill ISP' %></div>
+                <% } %>
+                <div class="company-meta">
+                    <% if (settings.company_address) { %><%= settings.company_address %><br><% } %>
+                    <% if (settings.company_phone)  { %>Tel: <%= settings.company_phone %><% if(settings.company_email){ %> &nbsp;·&nbsp; <%}%><% } %><% if (settings.company_email) { %><%= settings.company_email %><% } %>
+                    <% if (settings.company_website){ %><br><%= settings.company_website %><% } %>
+                </div>
+            </div>
+            <div class="invoice-label">
+                <div class="invoice-word">Invoice</div>
+                <div class="invoice-num">#<%= invNum %></div>
+                <div class="invoice-date">Diterbitkan <%= fmtDate(inv.created_at) %></div>
+            </div>
+        </div>
+        <div class="status-banner">
+            <span class="status-pill <%= statusClass %>"><%= statusLabel %></span>
+            <div class="paid-info"><% if (isPaid && inv.paid_at) { %>Dibayar <%= fmtDate(inv.paid_at, {day:'2-digit',month:'short',year:'numeric'}) %><% } else { %>Jatuh tempo: <strong style="color:rgba(255,255,255,.8)"><%= fmtDate(inv.due_date) %></strong><% } %></div>
+        </div>
     </div>
 
-    <div class="details">
-        <table>
-            <tr><td width="120"><strong>Nama Pelanggan</strong></td><td>: <%= invoices[0].customer_name %></td></tr>
-            <tr><td><strong>PPPoE / ID</strong></td><td>: <%= invoices[0].pppoe_username || '-' %></td></tr>
-            <tr><td><strong>Alamat</strong></td><td>: <%= invoices[0].customer_address || '-' %></td></tr>
-            <tr><td><strong>Kasir</strong></td><td>: Admin (<%= user.username %>)</td></tr>
+    <div class="inv-body">
+
+        <div class="parties">
+            <div>
+                <div class="party-label">Ditagihkan Kepada</div>
+                <div class="party-name"><%= inv.customer_name || '-' %></div>
+                <div class="party-meta">
+                    <% if (inv.customer_phone) { %><%= inv.customer_phone %><br><% } %>
+                    <% if (inv.customer_email) { %><%= inv.customer_email %><br><% } %>
+                    <% if (inv.customer_address) { %><%= inv.customer_address %><% } %>
+                </div>
+                <% if (inv.pppoe_username) { %>
+                <div class="party-pppoe">PPPoE: <%= inv.pppoe_username %></div>
+                <% } %>
+            </div>
+            <div>
+                <div class="party-label">Detail Invoice</div>
+                <div class="detail-grid">
+                    <span class="dk">No. Invoice</span><span class="dv"><%= invNum %></span>
+                    <span class="dk">Periode</span><span class="dv"><%= fmtDate(inv.due_date, {month:'long',year:'numeric'}) %></span>
+                    <span class="dk">Kasir</span><span class="dv"><%= user.username %></span>
+                    <span class="dk">Jatuh Tempo</span><span class="dv"><%= fmtDate(inv.due_date) %></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <table class="inv-table">
+            <thead>
+                <tr>
+                    <th width="36">#</th>
+                    <th>Deskripsi Layanan</th>
+                    <th>Periode</th>
+                    <th class="right">Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="color:#94A3B8;font-size:12px;">1</td>
+                    <td>
+                        <div class="item-name"><%= inv.package_name || 'Layanan Internet' %></div>
+                        <% if (inv.speed_limit) { %><div class="item-sub">Kecepatan: <%= inv.speed_limit %></div><% } %>
+                        <% if (inv.description) { %><div class="item-sub"><%= inv.description %></div><% } %>
+                    </td>
+                    <td style="color:#64748B;"><%= fmtDate(inv.due_date, {month:'long',year:'numeric'}) %></td>
+                    <td class="right" style="font-weight:600;"><%= fmtRp(inv.amount) %></td>
+                </tr>
+            </tbody>
         </table>
+
+        <div class="totals-wrap">
+            <div class="totals-box">
+                <div class="totals-row"><span class="lbl">Subtotal</span><span class="val"><%= fmtRp(total) %></span></div>
+                <div class="totals-row"><span class="lbl">Diskon</span><span class="val">Rp 0</span></div>
+                <div class="totals-sep"></div>
+                <div class="totals-grand">
+                    <span class="lbl">Total Bayar</span>
+                    <span class="val"><%= fmtRp(total) %></span>
+                </div>
+            </div>
+        </div>
+
+        <% if (inv.payment_method && isPaid) { %>
+        <div>
+            <span class="pay-method">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                Dibayar via <%= inv.payment_method %>
+            </span>
+        </div>
+        <% } %>
+
+        <div class="inv-notes">
+            Terima kasih telah menggunakan layanan <strong><%= settings.company_name || 'Dino-Bill ISP' %></strong>.
+            Simpan invoice ini sebagai bukti pembayaran yang sah.
+            <% if (settings.company_phone) { %> Pertanyaan? Hubungi kami di <strong><%= settings.company_phone %></strong>.<% } %>
+        </div>
+
+        <div class="inv-footer">
+            <div class="footer-left">
+                <strong><%= settings.company_name || 'Dino-Bill ISP' %></strong><br>
+                <% if (settings.company_address) { %><%= settings.company_address %><br><% } %>
+                <% if (settings.company_phone)   { %>Tel: <%= settings.company_phone %><br><% } %>
+                <% if (settings.company_website) { %><%= settings.company_website %><br><% } %>
+                Dicetak <%= now.toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) %>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line"></div>
+                <div class="signature-label">Hormat Kami</div>
+                <div class="signature-name"><%= settings.company_name || 'Dino-Bill ISP' %></div>
+            </div>
+        </div>
+
     </div>
 
-    <table class="items">
-        <thead>
-            <tr><th>#</th><th>Keterangan</th><th>Periode</th><th class="right">Jumlah</th></tr>
-        </thead>
-        <tbody>
-        <% invoices.forEach((inv, idx) => { %>
-            <tr>
-                <td><%= idx + 1 %></td>
-                <td><%= inv.package_name || 'Internet' %></td>
-                <td><%= inv.due_date ? new Date(inv.due_date).toLocaleDateString('id-ID',{month:'long',year:'numeric'}) : '-' %></td>
-                <td class="right">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></td>
-            </tr>
-        <% }); %>
-        </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td colspan="3" style="text-align:right;padding-top:8px">TOTAL BAYAR:</td>
-                <td class="right" style="padding-top:8px">Rp <%= invoices.reduce((s,i)=>s+parseFloat(i.amount||0),0).toLocaleString('id-ID') %></td>
-            </tr>
-        </tfoot>
-    </table>
-
-    <div class="footer">
-        <p>Terima kasih atas kepercayaan Anda menggunakan layanan kami.</p>
-        <p>Simpan struk ini sebagai bukti pembayaran yang sah.</p>
-        <p style="margin-top:6px">— <%= settings.company_name || 'Dino-Bill ISP' %> —</p>
-    </div>
+    <div class="inv-accent"></div>
 </div>
+<% }); %>
+</div>
+
+<script>
+    if (new URLSearchParams(location.search).get('autoprint') === '1') {
+        window.addEventListener('load', () => setTimeout(() => window.print(), 600));
+    }
+</script>
 </body>
 </html>

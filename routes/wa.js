@@ -191,6 +191,71 @@ router.post('/api/cleanup', async (req, res) => {
     }
 });
 
+// ── TEMPLATE PESAN ──────────────────────────────────────────
+router.get('/api/templates', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM wa_templates ORDER BY created_at DESC');
+        res.json({ success: true, data: rows });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.post('/api/templates', async (req, res) => {
+    try {
+        const { name, content } = req.body;
+        if (!name || !content) return res.json({ success: false, message: 'Nama dan isi template wajib diisi' });
+        const [r] = await pool.query('INSERT INTO wa_templates (name, content) VALUES (?, ?)', [name, content]);
+        res.json({ success: true, message: 'Template disimpan', id: r.insertId });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.put('/api/templates/:id', async (req, res) => {
+    try {
+        const { name, content } = req.body;
+        await pool.query('UPDATE wa_templates SET name=?, content=? WHERE id=?', [name, content, req.params.id]);
+        res.json({ success: true, message: 'Template diperbarui' });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.delete('/api/templates/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM wa_templates WHERE id=?', [req.params.id]);
+        res.json({ success: true, message: 'Template dihapus' });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ── AUTO REPLY ───────────────────────────────────────────────
+router.get('/api/auto-replies', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM wa_auto_replies ORDER BY created_at DESC');
+        res.json({ success: true, data: rows });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.post('/api/auto-replies', async (req, res) => {
+    try {
+        const { keyword, reply, match_type } = req.body;
+        if (!keyword || !reply) return res.json({ success: false, message: 'Keyword dan balasan wajib diisi' });
+        const [r] = await pool.query('INSERT INTO wa_auto_replies (keyword, reply, match_type) VALUES (?, ?, ?)', [keyword, reply, match_type || 'contains']);
+        res.json({ success: true, message: 'Auto-reply disimpan', id: r.insertId });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.put('/api/auto-replies/:id', async (req, res) => {
+    try {
+        const { keyword, reply, match_type, is_active } = req.body;
+        await pool.query('UPDATE wa_auto_replies SET keyword=?, reply=?, match_type=?, is_active=? WHERE id=?',
+            [keyword, reply, match_type || 'contains', is_active != null ? is_active : 1, req.params.id]);
+        res.json({ success: true, message: 'Auto-reply diperbarui' });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.post('/api/auto-replies/:id/toggle', async (req, res) => {
+    try {
+        await pool.query('UPDATE wa_auto_replies SET is_active = IF(is_active=1,0,1) WHERE id=?', [req.params.id]);
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+router.delete('/api/auto-replies/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM wa_auto_replies WHERE id=?', [req.params.id]);
+        res.json({ success: true, message: 'Auto-reply dihapus' });
+    } catch(e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // GET /wa/api/stats — stats untuk live update
 router.get('/api/stats', async (req, res) => {
     try {

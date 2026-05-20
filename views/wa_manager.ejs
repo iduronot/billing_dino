@@ -76,6 +76,61 @@
         .wa-status.offline  { background:rgba(239,68,68,.1);  color:#EF4444; border:1px solid rgba(239,68,68,.25); }
 
         @media(max-width:900px) { .wa-layout { grid-template-columns:1fr; height:auto; } .stats-row { grid-template-columns:repeat(2,1fr); } }
+
+        /* ── Tabs ── */
+        .wa-tabs { display:flex; gap:4px; background:var(--sub-bg); border:1px solid var(--border); border-radius:12px; padding:4px; margin-bottom:20px; width:fit-content; }
+        .wa-tab  { padding:8px 20px; border-radius:9px; border:none; background:none; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer; font-family:'Outfit',sans-serif; transition:all .2s; display:flex; align-items:center; gap:7px; }
+        .wa-tab.active { background:var(--card-bg); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.15); }
+        .tab-pane { display:none; }
+        .tab-pane.active { display:block; }
+
+        /* ── Template / Auto-reply table ── */
+        .mgmt-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+        .mgmt-card-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+        .mgmt-card-header h3 { font-size:14px; font-weight:700; margin:0; }
+        .var-hint { background:var(--sub-bg); border:1px solid var(--border); border-radius:10px; padding:10px 16px; font-size:11px; color:var(--muted); margin-bottom:14px; line-height:1.7; }
+        .var-hint code { background:rgba(59,130,246,.15); color:#60A5FA; padding:1px 5px; border-radius:4px; font-family:'Courier New',monospace; font-size:11px; }
+        .tpl-row { display:flex; align-items:flex-start; gap:12px; padding:14px 20px; border-bottom:1px solid var(--border); }
+        .tpl-row:last-child { border-bottom:none; }
+        .tpl-body { flex:1; min-width:0; }
+        .tpl-name { font-weight:700; font-size:13px; margin-bottom:3px; }
+        .tpl-content { font-size:12px; color:var(--muted); white-space:pre-wrap; word-break:break-word; }
+        .tpl-actions { display:flex; gap:6px; flex-shrink:0; }
+        .match-badge { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:600; }
+        .match-contains   { background:rgba(59,130,246,.15); color:#60A5FA; }
+        .match-exact      { background:rgba(139,92,246,.15); color:#A78BFA; }
+        .match-startswith { background:rgba(16,185,129,.15); color:#34D399; }
+        .toggle-switch { position:relative; width:38px; height:20px; flex-shrink:0; margin-top:2px; }
+        .toggle-switch input { opacity:0; width:0; height:0; }
+        .toggle-track { position:absolute; inset:0; background:var(--border); border-radius:20px; cursor:pointer; transition:.2s; }
+        .toggle-track::before { content:''; position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s; }
+        .toggle-switch input:checked + .toggle-track { background:#10B981; }
+        .toggle-switch input:checked + .toggle-track::before { transform:translateX(18px); }
+
+        /* ── Searchable customer dropdown ── */
+        .cust-dropdown { position:relative; }
+        .cust-input-wrap { display:flex; align-items:center; position:relative; }
+        .cust-search-input { width:100%; padding:10px 36px 10px 14px; background:var(--input-bg); border:1px solid var(--border); border-radius:10px; color:var(--text); font-size:14px; font-family:'Outfit',sans-serif; outline:none; transition:border-color .2s; }
+        .cust-search-input:focus { border-color:var(--primary); }
+        .cust-clear-btn { position:absolute; right:10px; background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; display:none; line-height:1; padding:2px; }
+        .cust-list { position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--modal-bg); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.3); max-height:220px; overflow-y:auto; z-index:3000; display:none; }
+        .cust-list.open { display:block; }
+        .cust-list-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .15s; }
+        .cust-list-item:last-child { border-bottom:none; }
+        .cust-list-item:hover, .cust-list-item.highlighted { background:var(--hover-bg); }
+        .cust-item-name { font-size:13px; font-weight:600; }
+        .cust-item-phone { font-size:11px; color:var(--muted); margin-top:1px; }
+        .cust-no-result { padding:14px; text-align:center; color:var(--muted); font-size:13px; }
+
+        /* ── Template picker in chat ── */
+        .tpl-picker { position:absolute; bottom:100%; left:0; right:0; background:var(--modal-bg); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.3); max-height:240px; overflow-y:auto; z-index:500; display:none; margin-bottom:6px; }
+        .tpl-picker.open { display:block; }
+        .tpl-pick-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .15s; }
+        .tpl-pick-item:last-child { border-bottom:none; }
+        .tpl-pick-item:hover { background:var(--hover-bg); }
+        .tpl-pick-name { font-size:12px; font-weight:700; margin-bottom:2px; }
+        .tpl-pick-preview { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .chat-input-wrap { flex:1; position:relative; }
     </style>
 </head>
 <body>
@@ -101,11 +156,21 @@
                 <button class="btn" style="background:rgba(245,158,11,.1); color:#F59E0B; border:1px solid rgba(245,158,11,.25); font-size:12px;" onclick="cleanupData(this)" title="Bersihkan nomor @lid di database">
                     <i class="fas fa-broom"></i> Fix Data
                 </button>
-                <button class="btn btn-primary" onclick="document.getElementById('sendModal').style.display='flex'">
+                <button class="btn btn-primary" onclick="openSendModal()">
                     <i class="fas fa-paper-plane"></i> Kirim ke Pelanggan
                 </button>
             </div>
         </div>
+
+        <!-- ── TABS ── -->
+        <div class="wa-tabs">
+            <button class="wa-tab active" onclick="switchWaTab('chat',this)"><i class="fab fa-whatsapp"></i> Chat</button>
+            <button class="wa-tab" onclick="switchWaTab('templates',this)"><i class="fas fa-file-alt"></i> Template Pesan</button>
+            <button class="wa-tab" onclick="switchWaTab('autoreply',this)"><i class="fas fa-robot"></i> Auto Reply</button>
+        </div>
+
+        <!-- ════════════ TAB CHAT ════════════ -->
+        <div class="tab-pane active" id="pane-chat">
 
         <!-- ── STAT CARDS ── -->
         <div class="stats-row">
@@ -180,11 +245,55 @@
                     <p>Pilih percakapan untuk mulai membaca pesan</p>
                 </div>
                 <div class="chat-input-area" id="chatInputArea" style="display:none;">
-                    <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ketik pesan..." onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
+                    <div class="chat-input-wrap">
+                        <div class="tpl-picker" id="tplPicker"></div>
+                        <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ketik pesan..." onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
+                    </div>
+                    <button title="Pilih Template" onclick="toggleTplPicker()" style="background:var(--sub-bg);color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:10px 13px;cursor:pointer;font-size:14px;flex-shrink:0;transition:all .2s" onmouseover="this.style.color=getComputedStyle(document.documentElement).getPropertyValue('--text')" onmouseout="this.style.color=getComputedStyle(document.documentElement).getPropertyValue('--muted')"><i class="fas fa-file-alt"></i></button>
                     <button class="btn-send" id="btnSend" onclick="sendReply()">
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
+            </div>
+        </div>
+
+        </div><!-- /pane-chat -->
+
+        <!-- ════════════ TAB TEMPLATE PESAN ════════════ -->
+        <div class="tab-pane" id="pane-templates">
+            <div class="var-hint">
+                <strong>Variabel yang tersedia:</strong> &nbsp;
+                <code>{nama}</code> nama pelanggan &nbsp;·&nbsp;
+                <code>{nomor}</code> nomor WA &nbsp;·&nbsp;
+                <code>{paket}</code> nama paket &nbsp;·&nbsp;
+                <code>{jumlah}</code> tagihan belum bayar &nbsp;·&nbsp;
+                <code>{tanggal}</code> jatuh tempo tagihan
+            </div>
+            <div class="mgmt-card">
+                <div class="mgmt-card-header">
+                    <h3><i class="fas fa-file-alt" style="color:var(--primary)"></i> Daftar Template</h3>
+                    <button class="btn btn-primary btn-sm" onclick="openTplModal()"><i class="fas fa-plus"></i> Tambah Template</button>
+                </div>
+                <div id="tplList"><div style="padding:30px;text-align:center;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Memuat...</div></div>
+            </div>
+        </div>
+
+        <!-- ════════════ TAB AUTO REPLY ════════════ -->
+        <div class="tab-pane" id="pane-autoreply">
+            <div class="var-hint">
+                <strong>Variabel yang tersedia:</strong> &nbsp;
+                <code>{nama}</code> <code>{nomor}</code> <code>{paket}</code> <code>{jumlah}</code> <code>{tanggal}</code>
+                &nbsp;·&nbsp; <strong>Match type:</strong>
+                <code>contains</code> = pesan mengandung kata &nbsp;·&nbsp;
+                <code>exact</code> = pesan sama persis &nbsp;·&nbsp;
+                <code>startswith</code> = pesan diawali kata
+            </div>
+            <div class="mgmt-card">
+                <div class="mgmt-card-header">
+                    <h3><i class="fas fa-robot" style="color:#10B981"></i> Aturan Auto Reply</h3>
+                    <button class="btn btn-primary btn-sm" onclick="openArModal()"><i class="fas fa-plus"></i> Tambah Aturan</button>
+                </div>
+                <div id="arList"><div style="padding:30px;text-align:center;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Memuat...</div></div>
             </div>
         </div>
 
@@ -199,13 +308,15 @@
             <button onclick="document.getElementById('sendModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
         </div>
         <div class="form-group">
-            <label>Pilih Pelanggan atau Masukkan Nomor</label>
-            <select id="sendCustomer" class="form-control" onchange="fillPhone()">
-                <option value="">-- Ketik nomor manual --</option>
-                <% customers.forEach(c => { %>
-                <option value="<%= c.phone %>" data-name="<%= c.name %>"><%= c.name %> (<%= c.phone %>)</option>
-                <% }) %>
-            </select>
+            <label>Cari Pelanggan</label>
+            <div class="cust-dropdown">
+                <div class="cust-input-wrap">
+                    <input type="text" id="custSearchInput" class="cust-search-input" placeholder="🔍  Ketik nama atau nomor pelanggan..." autocomplete="off"
+                        oninput="filterCustList()" onfocus="openCustList()" onkeydown="custKeyNav(event)">
+                    <button class="cust-clear-btn" id="custClearBtn" onclick="clearCustSelection()" title="Hapus pilihan">✕</button>
+                </div>
+                <div class="cust-list" id="custList"></div>
+            </div>
         </div>
         <div class="form-group">
             <label>Nomor WA *</label>
@@ -216,8 +327,62 @@
             <textarea id="sendMessage" class="form-control" rows="5" placeholder="Tulis pesan di sini..." style="resize:vertical;"></textarea>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px;">
-            <button onclick="document.getElementById('sendModal').style.display='none'" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
+            <button onclick="document.getElementById('sendModal').style.display='none';clearCustSelection()" class="btn" style="background:var(--sub-bg); border:1px solid var(--border);">Batal</button>
             <button onclick="sendToCustomer()" class="btn btn-primary"><i class="fas fa-paper-plane"></i> Kirim</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Template -->
+<div class="modal-overlay" id="tplModal" onclick="if(event.target===this)closeTplModal()">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0" id="tplModalTitle">📝 Tambah Template</h3>
+            <button onclick="closeTplModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+        </div>
+        <input type="hidden" id="tplEditId">
+        <div class="form-group">
+            <label>Nama Template *</label>
+            <input type="text" id="tplName" class="form-control" placeholder="cth: Tagihan Bulanan">
+        </div>
+        <div class="form-group">
+            <label>Isi Pesan *</label>
+            <textarea id="tplContent" class="form-control" rows="6" placeholder="Halo {nama}, tagihan Anda sebesar {jumlah} jatuh tempo {tanggal}. Terima kasih." style="resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px">
+            <button onclick="closeTplModal()" class="btn" style="background:var(--sub-bg);border:1px solid var(--border)">Batal</button>
+            <button onclick="saveTpl()" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Auto Reply -->
+<div class="modal-overlay" id="arModal" onclick="if(event.target===this)closeArModal()">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0" id="arModalTitle">🤖 Tambah Auto Reply</h3>
+            <button onclick="closeArModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+        </div>
+        <input type="hidden" id="arEditId">
+        <div class="form-group">
+            <label>Keyword (Kata Pemicu) *</label>
+            <input type="text" id="arKeyword" class="form-control" placeholder="cth: tagihan, bayar, isolir">
+        </div>
+        <div class="form-group">
+            <label>Tipe Pencocokan</label>
+            <select id="arMatchType" class="form-control">
+                <option value="contains">Contains — pesan mengandung kata ini</option>
+                <option value="exact">Exact — pesan sama persis</option>
+                <option value="startswith">Starts With — pesan diawali kata ini</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Balasan Otomatis *</label>
+            <textarea id="arReply" class="form-control" rows="6" placeholder="Halo {nama}! Tagihan Anda sebesar {jumlah} jatuh tempo {tanggal}. Hubungi kami untuk info lebih lanjut." style="resize:vertical"></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px">
+            <button onclick="closeArModal()" class="btn" style="background:var(--sub-bg);border:1px solid var(--border)">Batal</button>
+            <button onclick="saveAr()" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
         </div>
     </div>
 </div>
@@ -382,11 +547,99 @@ function autoResize(el) {
     el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
-// ── Kirim ke pelanggan (broadcast) ──
-function fillPhone() {
-    const sel = document.getElementById('sendCustomer');
-    const opt = sel.options[sel.selectedIndex];
-    if (opt.value) document.getElementById('sendPhone').value = opt.value;
+// ── Searchable customer dropdown ──
+const allCustomers = <%- JSON.stringify(customers.map(c => ({ name: c.name, phone: c.phone }))) %>;
+let custHighlight = -1;
+
+function normalizeName(s) { return (s||'').toLowerCase(); }
+
+function filterCustList() {
+    const q = normalizeName(document.getElementById('custSearchInput').value);
+    openCustList(q);
+}
+
+function openCustList(q) {
+    const list = document.getElementById('custList');
+    const query = q !== undefined ? q : normalizeName(document.getElementById('custSearchInput').value);
+    const filtered = query
+        ? allCustomers.filter(c => normalizeName(c.name).includes(query) || (c.phone||'').includes(query))
+        : allCustomers;
+
+    if (!filtered.length) {
+        list.innerHTML = '<div class="cust-no-result">Pelanggan tidak ditemukan</div>';
+    } else {
+        list.innerHTML = filtered.slice(0, 80).map((c, i) => `
+            <div class="cust-list-item" data-phone="${c.phone}" data-name="${escHtml(c.name)}" data-idx="${i}"
+                 onmousedown="selectCust('${c.phone}','${escHtml(c.name).replace(/'/g,"\\'")}')">
+                <div class="cust-item-name">${highlight(c.name, query)}</div>
+                <div class="cust-item-phone">${c.phone||''}</div>
+            </div>`).join('');
+    }
+    list.classList.add('open');
+    custHighlight = -1;
+}
+
+function highlight(text, q) {
+    if (!q) return escHtml(text);
+    const idx = normalizeName(text).indexOf(q);
+    if (idx < 0) return escHtml(text);
+    return escHtml(text.slice(0, idx)) +
+           '<mark style="background:rgba(59,130,246,.25);color:inherit;border-radius:2px">' +
+           escHtml(text.slice(idx, idx + q.length)) + '</mark>' +
+           escHtml(text.slice(idx + q.length));
+}
+
+function selectCust(phone, name) {
+    document.getElementById('sendPhone').value          = phone;
+    document.getElementById('custSearchInput').value    = name;
+    document.getElementById('custClearBtn').style.display = 'block';
+    document.getElementById('custList').classList.remove('open');
+}
+
+function clearCustSelection() {
+    document.getElementById('sendPhone').value          = '';
+    document.getElementById('custSearchInput').value    = '';
+    document.getElementById('custClearBtn').style.display = 'none';
+    document.getElementById('custList').classList.remove('open');
+    document.getElementById('custSearchInput').focus();
+}
+
+function custKeyNav(e) {
+    const items = document.querySelectorAll('#custList .cust-list-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        custHighlight = Math.min(custHighlight + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        custHighlight = Math.max(custHighlight - 1, 0);
+    } else if (e.key === 'Enter' && custHighlight >= 0) {
+        e.preventDefault();
+        const el = items[custHighlight];
+        selectCust(el.dataset.phone, el.dataset.name);
+        return;
+    } else if (e.key === 'Escape') {
+        document.getElementById('custList').classList.remove('open');
+        return;
+    } else { return; }
+    items.forEach((el, i) => el.classList.toggle('highlighted', i === custHighlight));
+    items[custHighlight]?.scrollIntoView({ block:'nearest' });
+}
+
+// Tutup dropdown saat klik di luar
+document.addEventListener('click', e => {
+    if (!e.target.closest('.cust-dropdown')) {
+        document.getElementById('custList')?.classList.remove('open');
+    }
+});
+
+// Reset dropdown saat modal dibuka
+document.getElementById('sendModal').addEventListener('click', () => {});
+function openSendModal() {
+    clearCustSelection();
+    document.getElementById('sendMessage').value = '';
+    document.getElementById('sendModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('custSearchInput').focus(), 100);
 }
 
 async function sendToCustomer() {
@@ -403,6 +656,7 @@ async function sendToCustomer() {
     if (d.success) {
         document.getElementById('sendModal').style.display = 'none';
         document.getElementById('sendMessage').value = '';
+        clearCustSelection();
     }
 }
 
@@ -485,6 +739,201 @@ function showToast(msg, type) {
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3500);
 }
+
+// ── Tab switching ──
+function switchWaTab(tab, btn) {
+    document.querySelectorAll('.wa-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('pane-' + tab).classList.add('active');
+    if (tab === 'templates') loadTemplates();
+    if (tab === 'autoreply') loadAutoReplies();
+}
+
+// ──────────────────────────────────────────
+// TEMPLATE PESAN
+// ──────────────────────────────────────────
+let templates = [];
+
+async function loadTemplates() {
+    const res = await fetch('/wa/api/templates');
+    const d   = await res.json();
+    templates = d.data || [];
+    renderTemplates();
+    renderTplPicker();
+}
+
+function renderTemplates() {
+    const el = document.getElementById('tplList');
+    if (!templates.length) {
+        el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;"><i class="fas fa-file-alt" style="font-size:32px;opacity:.2;display:block;margin-bottom:10px"></i>Belum ada template. Klik "+ Tambah Template".</div>';
+        return;
+    }
+    el.innerHTML = templates.map(t => `
+        <div class="tpl-row">
+            <div class="tpl-body">
+                <div class="tpl-name">${escHtml(t.name)}</div>
+                <div class="tpl-content">${escHtml(t.content)}</div>
+            </div>
+            <div class="tpl-actions">
+                <button class="btn btn-sm" style="background:var(--sub-bg);border:1px solid var(--border)" onclick="editTpl(${t.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.2)" onclick="deleteTpl(${t.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`).join('');
+}
+
+function renderTplPicker() {
+    const el = document.getElementById('tplPicker');
+    if (!templates.length) {
+        el.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:12px;">Belum ada template</div>';
+        return;
+    }
+    el.innerHTML = templates.map(t => `
+        <div class="tpl-pick-item" onclick="applyTemplate(${JSON.stringify(t.content).replace(/</g,'&lt;')})">
+            <div class="tpl-pick-name">${escHtml(t.name)}</div>
+            <div class="tpl-pick-preview">${escHtml(t.content.substring(0,60))}${t.content.length>60?'…':''}</div>
+        </div>`).join('');
+}
+
+function applyTemplate(content) {
+    document.getElementById('chatInput').value = content;
+    autoResize(document.getElementById('chatInput'));
+    document.getElementById('tplPicker').classList.remove('open');
+}
+
+function toggleTplPicker() {
+    const p = document.getElementById('tplPicker');
+    if (!templates.length) loadTemplates().then(() => p.classList.toggle('open'));
+    else p.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+    if (!e.target.closest('.chat-input-wrap') && !e.target.closest('[onclick*="toggleTplPicker"]')) {
+        document.getElementById('tplPicker')?.classList.remove('open');
+    }
+});
+
+function openTplModal(id) {
+    document.getElementById('tplEditId').value = id || '';
+    document.getElementById('tplModalTitle').textContent = id ? '✏️ Edit Template' : '📝 Tambah Template';
+    if (id) {
+        const t = templates.find(x => x.id == id);
+        document.getElementById('tplName').value    = t ? t.name : '';
+        document.getElementById('tplContent').value = t ? t.content : '';
+    } else {
+        document.getElementById('tplName').value    = '';
+        document.getElementById('tplContent').value = '';
+    }
+    document.getElementById('tplModal').style.display = 'flex';
+}
+function closeTplModal() { document.getElementById('tplModal').style.display = 'none'; }
+function editTpl(id) { openTplModal(id); }
+
+async function saveTpl() {
+    const id      = document.getElementById('tplEditId').value;
+    const name    = document.getElementById('tplName').value.trim();
+    const content = document.getElementById('tplContent').value.trim();
+    if (!name || !content) return showToast('Nama dan isi template wajib diisi', 'error');
+    const url    = id ? `/wa/api/templates/${id}` : '/wa/api/templates';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({name, content}) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { closeTplModal(); loadTemplates(); }
+}
+
+async function deleteTpl(id) {
+    if (!confirm('Hapus template ini?')) return;
+    const res = await fetch(`/wa/api/templates/${id}`, { method: 'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) loadTemplates();
+}
+
+// ──────────────────────────────────────────
+// AUTO REPLY
+// ──────────────────────────────────────────
+let autoReplies = [];
+
+async function loadAutoReplies() {
+    const res = await fetch('/wa/api/auto-replies');
+    const d   = await res.json();
+    autoReplies = d.data || [];
+    renderAutoReplies();
+}
+
+function renderAutoReplies() {
+    const el = document.getElementById('arList');
+    if (!autoReplies.length) {
+        el.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;"><i class="fas fa-robot" style="font-size:32px;opacity:.2;display:block;margin-bottom:10px"></i>Belum ada aturan auto-reply.</div>';
+        return;
+    }
+    const matchLabel = { contains:'contains', exact:'exact', startswith:'starts with' };
+    el.innerHTML = autoReplies.map(r => `
+        <div class="tpl-row">
+            <label class="toggle-switch" title="${r.is_active ? 'Aktif – klik untuk nonaktifkan' : 'Nonaktif – klik untuk aktifkan'}">
+                <input type="checkbox" ${r.is_active ? 'checked' : ''} onchange="toggleAr(${r.id})">
+                <span class="toggle-track"></span>
+            </label>
+            <div class="tpl-body">
+                <div class="tpl-name" style="display:flex;align-items:center;gap:8px">
+                    <span style="font-family:'Courier New',monospace;background:var(--sub-bg);border:1px solid var(--border);padding:1px 7px;border-radius:5px;font-size:12px">${escHtml(r.keyword)}</span>
+                    <span class="match-badge match-${r.match_type}">${matchLabel[r.match_type]||r.match_type}</span>
+                </div>
+                <div class="tpl-content" style="margin-top:4px">${escHtml(r.reply)}</div>
+            </div>
+            <div class="tpl-actions">
+                <button class="btn btn-sm" style="background:var(--sub-bg);border:1px solid var(--border)" onclick="editAr(${r.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm" style="background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.2)" onclick="deleteAr(${r.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>`).join('');
+}
+
+function openArModal(id) {
+    document.getElementById('arEditId').value = id || '';
+    document.getElementById('arModalTitle').textContent = id ? '✏️ Edit Auto Reply' : '🤖 Tambah Auto Reply';
+    if (id) {
+        const r = autoReplies.find(x => x.id == id);
+        document.getElementById('arKeyword').value   = r ? r.keyword : '';
+        document.getElementById('arMatchType').value = r ? r.match_type : 'contains';
+        document.getElementById('arReply').value     = r ? r.reply : '';
+    } else {
+        document.getElementById('arKeyword').value   = '';
+        document.getElementById('arMatchType').value = 'contains';
+        document.getElementById('arReply').value     = '';
+    }
+    document.getElementById('arModal').style.display = 'flex';
+}
+function closeArModal() { document.getElementById('arModal').style.display = 'none'; }
+function editAr(id) { openArModal(id); }
+
+async function saveAr() {
+    const id         = document.getElementById('arEditId').value;
+    const keyword    = document.getElementById('arKeyword').value.trim();
+    const match_type = document.getElementById('arMatchType').value;
+    const reply      = document.getElementById('arReply').value.trim();
+    if (!keyword || !reply) return showToast('Keyword dan balasan wajib diisi', 'error');
+    const url    = id ? `/wa/api/auto-replies/${id}` : '/wa/api/auto-replies';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({keyword, match_type, reply}) });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) { closeArModal(); loadAutoReplies(); }
+}
+
+async function toggleAr(id) {
+    await fetch(`/wa/api/auto-replies/${id}/toggle`, { method: 'POST' });
+    loadAutoReplies();
+}
+
+async function deleteAr(id) {
+    if (!confirm('Hapus aturan auto-reply ini?')) return;
+    const res = await fetch(`/wa/api/auto-replies/${id}`, { method: 'DELETE' });
+    const d   = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) loadAutoReplies();
+}
+
+function escHtml(str) { return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 </body>
 </html>

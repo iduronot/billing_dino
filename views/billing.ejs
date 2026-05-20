@@ -346,9 +346,9 @@
                                         <button onclick="closeAllMenus();openEditById(<%= i.id %>)">
                                             <span class="act-icon"><i class="fas fa-edit"></i></span> Edit Invoice
                                         </button>
-                                        <a href="/print/invoice?ids=<%= i.id %>" target="_blank" onclick="closeAllMenus()">
+                                        <button onclick="closeAllMenus();openPrintModal(<%= i.id %>)">
                                             <span class="act-icon"><i class="fas fa-print"></i></span> Cetak Invoice
-                                        </a>
+                                        </button>
                                         <button onclick="closeAllMenus();sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">
                                             <span class="act-icon" style="color:#25D366"><i class="fab fa-whatsapp"></i></span> Kirim WA Tagihan
                                         </button>
@@ -677,6 +677,29 @@ async function runIsolir(){if(!confirm(<%- JSON.stringify(t.confirm_run_isolir) 
 async function sendReminders(){if(!confirm(<%- JSON.stringify(t.confirm_send_reminders) %>))return;showToast(<%- JSON.stringify(t.sending_reminders) %>,'success');try{const res=await fetch('/billing/api/send-reminders',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');}catch(e){showToast('Error: '+e.message,'error');}}
 function sendWA(phone,invNum,amount,dueDate){if(!phone){alert(<%- JSON.stringify(t.no_phone) %>);return;}phone=phone.replace(/[^0-9]/g,'');if(phone.startsWith('0'))phone='62'+phone.substring(1);const rawMsg=<%- JSON.stringify(t.wa_bill_msg||'') %>;const msg=rawMsg.replace('{invNum}',invNum).replace('{amount}',amount).replace('{dueDate}',dueDate);window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');}
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+function openPrintModal(id){
+    const modal=document.getElementById('printModal');
+    const frame=document.getElementById('printFrame');
+    frame.src='/print/invoice?ids='+id;
+    modal.style.display='flex';
+    document.body.style.overflow='hidden';
+}
+function closePrintModal(){
+    const modal=document.getElementById('printModal');
+    modal.style.display='none';
+    document.getElementById('printFrame').src='about:blank';
+    document.body.style.overflow='';
+}
+function doPrint(){document.getElementById('printFrame').contentWindow.print();}
 </script>
+
+<!-- Print Invoice Modal -->
+<div id="printModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="doPrint()" style="background:linear-gradient(135deg,#3B82F6,#6366F1);color:white;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;display:inline-flex;align-items:center;gap:8px"><i class="fas fa-print"></i> Cetak</button>
+        <button onclick="closePrintModal()" style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif">Tutup</button>
+    </div>
+    <iframe id="printFrame" src="about:blank" style="width:min(860px,96vw);height:85vh;border:none;border-radius:16px;background:white;box-shadow:0 25px 60px rgba(0,0,0,0.5)"></iframe>
+</div>
 </body>
 </html>

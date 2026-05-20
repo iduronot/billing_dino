@@ -21,6 +21,21 @@
         .toast{position:fixed;bottom:24px;right:24px;background:var(--toast-bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 20px;z-index:9999;display:none;font-size:14px;}.toast.show{display:block;}
         .update-section{background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:12px;padding:20px;margin-top:8px;}
         @media(max-width:768px){.main{margin-left:0;}.form-row{grid-template-columns:1fr;}}
+
+        /* Logo manager */
+        .logo-manager { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:24px; padding-top:20px; border-top:1px solid var(--border); }
+        .logo-box { background:var(--sub-bg); border:2px dashed var(--border); border-radius:16px; padding:24px; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; transition:border-color .2s; }
+        .logo-box:hover { border-color:var(--primary); }
+        .logo-preview { width:100%; max-height:80px; object-fit:contain; border-radius:8px; display:none; }
+        .logo-preview.visible { display:block; }
+        .logo-placeholder { font-size:36px; opacity:.3; }
+        .logo-label { font-size:13px; font-weight:700; color:var(--text); }
+        .logo-hint  { font-size:11px; color:var(--muted); }
+        .logo-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+        .btn-upload { background:var(--primary); color:white; border:none; border-radius:9px; padding:8px 16px; font-size:12px; font-weight:700; cursor:pointer; font-family:'Outfit',sans-serif; display:inline-flex; align-items:center; gap:6px; }
+        .btn-remove { background:rgba(239,68,68,.1); color:#EF4444; border:1px solid rgba(239,68,68,.25); border-radius:9px; padding:8px 14px; font-size:12px; font-weight:700; cursor:pointer; font-family:'Outfit',sans-serif; display:none; }
+        .btn-remove.visible { display:inline-flex; align-items:center; gap:6px; }
+        @media(max-width:640px){ .logo-manager { grid-template-columns:1fr; } }
     </style>
 </head>
 <body>
@@ -74,6 +89,55 @@
                 </div>
             </div>
             <button class="btn btn-primary" onclick="save(['company_name','company_phone','company_address','company_email','company_website','timezone','currency'])">💾 <%= t.save %></button>
+
+            <!-- Logo & Icon Manager -->
+            <div class="logo-manager">
+                <!-- Logo Perusahaan -->
+                <div class="logo-box" id="logoBox" ondragover="event.preventDefault()" ondrop="handleDrop(event,'company_logo')">
+                    <% if(settings.company_logo) { %>
+                    <img src="<%= settings.company_logo %>" class="logo-preview visible" id="logoPreview" alt="Logo">
+                    <% } else { %>
+                    <img src="" class="logo-preview" id="logoPreview" alt="Logo">
+                    <div class="logo-placeholder" id="logoPlaceholder">🏢</div>
+                    <% } %>
+                    <div>
+                        <div class="logo-label">Logo Perusahaan</div>
+                        <div class="logo-hint">Tampil di sidebar & invoice<br>PNG/SVG transparan, maks 2MB</div>
+                    </div>
+                    <div class="logo-actions">
+                        <label class="btn-upload" for="logoInput">
+                            <i class="fas fa-upload"></i> Upload Logo
+                        </label>
+                        <input type="file" id="logoInput" accept="image/*" style="display:none" onchange="uploadFile(this,'company_logo')">
+                        <button class="btn-remove <%= settings.company_logo?'visible':'' %>" id="logoRemove" onclick="removeFile('company_logo')">
+                            <i class="fas fa-trash"></i> Hapus
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Icon / Favicon -->
+                <div class="logo-box" id="iconBox" ondragover="event.preventDefault()" ondrop="handleDrop(event,'company_icon')">
+                    <% if(settings.company_icon) { %>
+                    <img src="<%= settings.company_icon %>" class="logo-preview visible" id="iconPreview" alt="Icon" style="max-height:64px;width:auto;">
+                    <% } else { %>
+                    <img src="" class="logo-preview" id="iconPreview" alt="Icon" style="max-height:64px;width:auto;">
+                    <div class="logo-placeholder" id="iconPlaceholder">🦖</div>
+                    <% } %>
+                    <div>
+                        <div class="logo-label">Icon / Favicon</div>
+                        <div class="logo-hint">Tampil di browser tab & sidebar<br>PNG/ICO/SVG kotak, maks 2MB</div>
+                    </div>
+                    <div class="logo-actions">
+                        <label class="btn-upload" for="iconInput">
+                            <i class="fas fa-upload"></i> Upload Icon
+                        </label>
+                        <input type="file" id="iconInput" accept="image/*,.ico" style="display:none" onchange="uploadFile(this,'company_icon')">
+                        <button class="btn-remove <%= settings.company_icon?'visible':'' %>" id="iconRemove" onclick="removeFile('company_icon')">
+                            <i class="fas fa-trash"></i> Hapus
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <!-- Pusat Koordinat Peta -->
             <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
@@ -473,6 +537,87 @@ function showTab(name){
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
     document.getElementById('tab-'+name).style.display='block';
     event.target.classList.add('active');
+}
+
+// ── Logo / Icon Upload ──
+async function uploadFile(input, type) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return showToast('File terlalu besar (maks 2MB)', 'error');
+
+    const isLogo = type === 'company_logo';
+    const previewId = isLogo ? 'logoPreview' : 'iconPreview';
+    const phId     = isLogo ? 'logoPlaceholder' : 'iconPlaceholder';
+    const removeId = isLogo ? 'logoRemove' : 'iconRemove';
+
+    // Preview lokal dulu
+    const reader = new FileReader();
+    reader.onload = e => {
+        const img = document.getElementById(previewId);
+        img.src = e.target.result;
+        img.classList.add('visible');
+        const ph = document.getElementById(phId);
+        if (ph) ph.style.display = 'none';
+        document.getElementById(removeId).classList.add('visible');
+    };
+    reader.readAsDataURL(file);
+
+    // Upload ke server
+    const form = new FormData();
+    form.append('file', file);
+    try {
+        const res = await fetch(`/settings/api/upload/${type}`, { method: 'POST', body: form });
+        const d = await res.json();
+        if (d.success) {
+            showToast('Berhasil diupload', 'success');
+            // Update favicon jika icon
+            if (type === 'company_icon') {
+                let link = document.querySelector("link[rel*='icon']");
+                if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+                link.href = d.path + '?t=' + Date.now();
+            }
+        } else {
+            showToast(d.message || 'Gagal upload', 'error');
+        }
+    } catch(e) {
+        showToast('Gagal upload: ' + e.message, 'error');
+    }
+    input.value = '';
+}
+
+async function removeFile(type) {
+    if (!confirm('Hapus ' + (type === 'company_logo' ? 'logo' : 'icon') + ' perusahaan?')) return;
+    const isLogo = type === 'company_logo';
+    try {
+        const res = await fetch(`/settings/api/upload/${type}`, { method: 'DELETE' });
+        const d = await res.json();
+        if (d.success) {
+            const previewId = isLogo ? 'logoPreview' : 'iconPreview';
+            const phId      = isLogo ? 'logoPlaceholder' : 'iconPlaceholder';
+            const removeId  = isLogo ? 'logoRemove' : 'iconRemove';
+            const img = document.getElementById(previewId);
+            img.src = ''; img.classList.remove('visible');
+            const ph = document.getElementById(phId);
+            if (ph) ph.style.display = '';
+            document.getElementById(removeId).classList.remove('visible');
+            showToast('Berhasil dihapus', 'success');
+        } else {
+            showToast(d.message, 'error');
+        }
+    } catch(e) {
+        showToast('Gagal hapus', 'error');
+    }
+}
+
+function handleDrop(event, type) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    const inputId = type === 'company_logo' ? 'logoInput' : 'iconInput';
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById(inputId).files = dt.files;
+    uploadFile(document.getElementById(inputId), type);
 }
 async function save(keys){
     const body={};

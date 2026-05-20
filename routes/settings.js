@@ -1,9 +1,74 @@
 const express = require('express');
 const router = express.Router();
 const { sendWhatsApp, sendTelegram } = require('../helpers/notification');
-let pool;
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
+let pool;
 router.setPool = (dbPool) => { pool = dbPool; };
+
+// ── Multer storage config ──
+const uploadStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', 'public', 'uploads');
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        // Nama file tetap (company_logo / company_icon) agar selalu overwrite yang lama
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, req.params.type + ext);
+    }
+});
+const uploadFilter = (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Format tidak didukung. Gunakan JPG, PNG, SVG, atau ICO'), false);
+};
+const upload = multer({ storage: uploadStorage, fileFilter: uploadFilter, limits: { fileSize: 2 * 1024 * 1024 } });
+
+// POST /settings/api/upload/:type  (type = company_logo | company_icon)
+router.post('/api/upload/:type', upload.single('file'), async (req, res) => {
+    try {
+        const type = req.params.type;
+        if (!['company_logo', 'company_icon'].includes(type))
+            return res.status(400).json({ success: false, message: 'Tipe tidak valid' });
+        if (!req.file)
+            return res.status(400).json({ success: false, message: 'File tidak ditemukan' });
+
+        const filePath = '/uploads/' + req.file.filename;
+        await pool.query(
+            'INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?',
+            [type, filePath, filePath]
+        );
+        if (global.invalidateSettingsCache) global.invalidateSettingsCache();
+        res.json({ success: true, path: filePath });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// DELETE /settings/api/upload/:type
+router.delete('/api/upload/:type', async (req, res) => {
+    try {
+        const type = req.params.type;
+        if (!['company_logo', 'company_icon'].includes(type))
+            return res.status(400).json({ success: false, message: 'Tipe tidak valid' });
+
+        const [[row]] = await pool.query('SELECT setting_value FROM settings WHERE setting_key=?', [type]);
+        if (row && row.setting_value) {
+            const filePath = path.join(__dirname, '..', 'public', row.setting_value);
+            fs.unlink(filePath, () => {});
+        }
+        await pool.query('DELETE FROM settings WHERE setting_key=?', [type]);
+        if (global.invalidateSettingsCache) global.invalidateSettingsCache();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
 
 router.get('/', async (req, res) => {
     try {

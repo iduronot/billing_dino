@@ -678,6 +678,26 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     )
   `).catch(console.error);
 
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS wa_templates (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(console.error);
+
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS wa_auto_replies (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      keyword VARCHAR(100) NOT NULL,
+      reply TEXT NOT NULL,
+      match_type ENUM('contains','exact','startswith') DEFAULT 'contains',
+      is_active TINYINT(1) DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(console.error);
+
   // Tabel Pengeluaran / Dana Operasional
   pool.query(`
     CREATE TABLE IF NOT EXISTS expense_categories (
@@ -1913,12 +1933,16 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       if (!ids.length) return res.redirect('/billing');
       const placeholders = ids.map(() => '?').join(',');
       const [invoices] = await pool.query(
-        `SELECT i.*, c.name as customer_name, c.address as customer_address, c.pppoe_username,
-                p.name as package_name
+        `SELECT i.*,
+                c.name as customer_name, c.address as customer_address,
+                c.phone as customer_phone, c.email as customer_email,
+                c.pppoe_username,
+                p.name as package_name, p.speed_limit, p.price as package_price
          FROM invoices i
          LEFT JOIN customers c ON i.customer_id = c.id
          LEFT JOIN packages p ON c.package_id = p.id
-         WHERE i.id IN (${placeholders})`, ids
+         WHERE i.id IN (${placeholders})
+         ORDER BY i.id ASC`, ids
       );
       const [rows] = await pool.query('SELECT * FROM settings');
       const settings = {};

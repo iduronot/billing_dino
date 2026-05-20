@@ -104,7 +104,7 @@
                                  <button class="btn btn-sm" title="<%= t.defer %>" style="background:rgba(245,158,11,.15);color:var(--warning);border:1px solid rgba(245,158,11,.3)" onclick="deferInvoice(<%= i.id %>)">📅</button>
                                  <% } %>
                                  <button class="btn btn-sm btn-info" title="<%= t.edit %>" onclick="openEditById(<%= i.id %>)">✏</button>
-                                 <a href="/print/invoice?ids=<%= i.id %>" target="_blank" class="btn btn-sm" title="<%= t.print %>" style="background:rgba(96,165,250,.15);color:#60A5FA;border:1px solid rgba(96,165,250,.3)">🖨</a>
+                                 <button class="btn btn-sm" title="<%= t.print %>" style="background:rgba(96,165,250,.15);color:#60A5FA;border:1px solid rgba(96,165,250,.3)" onclick="openPrintModal(<%= i.id %>)">🖨</button>
                                  <button class="btn btn-sm" title="<%= t.send_wa %>" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">💬</button>
                                  <% if(i.status !== 'paid') { %>
                                  <button class="btn btn-sm btn-danger" title="<%= t.delete %>" onclick="deleteItem('/billing/api/<%= i.id %>','<%= t.delete_confirm %>')">🗑</button>
@@ -237,7 +237,30 @@ async function sendReminders(){
     }
 }
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+function openPrintModal(id){
+    const modal=document.getElementById('printModal');
+    const frame=document.getElementById('printFrame');
+    frame.src='/print/invoice?ids='+id;
+    modal.style.display='flex';
+    document.body.style.overflow='hidden';
+}
+function closePrintModal(){
+    const modal=document.getElementById('printModal');
+    modal.style.display='none';
+    document.getElementById('printFrame').src='about:blank';
+    document.body.style.overflow='';
+}
+function doPrint(){document.getElementById('printFrame').contentWindow.print();}
 </script>
+
+<!-- Print Invoice Modal -->
+<div id="printModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="doPrint()" style="background:linear-gradient(135deg,#3B82F6,#6366F1);color:white;border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;display:inline-flex;align-items:center;gap:8px"><i class="fas fa-print"></i> Cetak</button>
+        <button onclick="closePrintModal()" style="background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif">Tutup</button>
+    </div>
+    <iframe id="printFrame" src="about:blank" style="width:min(860px,96vw);height:85vh;border:none;border-radius:16px;background:white;box-shadow:0 25px 60px rgba(0,0,0,0.5)"></iframe>
+</div>
 </body>
 </html>
 
