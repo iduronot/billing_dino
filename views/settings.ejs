@@ -272,6 +272,24 @@
             <div class="form-group"><label><%= t.account_holder %></label><input type="text" id="bank_holder" class="form-control" value="<%=settings.bank_holder||''%>" placeholder="Contoh: ITO SOLUTION"></div>
             <div style="margin-bottom:20px"><button class="btn btn-primary" onclick="save(['bank_name','bank_account','bank_holder'])">💾 <%= t.save_bank_data %></button></div>
             <hr style="border-color:var(--border);margin:16px 0">
+            <h3 style="font-size:14px;color:var(--muted);margin:0 0 8px">🔲 QRIS Statis</h3>
+            <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Upload gambar QRIS statis yang akan ditampilkan di portal pelanggan sebagai alternatif pembayaran transfer bank.</p>
+            <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+                <div id="qris-preview-wrap" style="display:<%= settings.qris_image ? 'block' : 'none' %>">
+                    <img id="qris-preview" src="<%= settings.qris_image || '' %>" alt="QRIS" style="width:160px;height:160px;object-fit:contain;border:1px solid var(--border);border-radius:12px;background:#fff;padding:8px">
+                    <div style="margin-top:6px;text-align:center">
+                        <button onclick="deleteUpload('qris_image')" style="font-size:11px;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:4px 10px;cursor:pointer">Hapus</button>
+                    </div>
+                </div>
+                <div style="flex:1;min-width:200px">
+                    <label class="btn btn-primary" for="qris-upload-input" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;width:auto;padding:10px 18px">
+                        <i class="fas fa-upload"></i> Upload Gambar QRIS
+                    </label>
+                    <input type="file" id="qris-upload-input" accept="image/*" style="display:none" onchange="uploadQrisImage(this)">
+                    <p style="font-size:11px;color:var(--muted);margin:8px 0 0">Format: JPG, PNG. Maks 2MB.</p>
+                </div>
+            </div>
+            <hr style="border-color:var(--border);margin:16px 0">
             <h3 style="font-size:14px;color:var(--muted);margin:0 0 12px">Tripay</h3>
             <div class="form-row">
                 <div class="form-group"><label>API Key</label><input type="text" id="tripay_api_key" class="form-control" value="<%=settings.tripay_api_key||''%>"></div>
@@ -600,6 +618,46 @@ async function removeFile(type) {
             const ph = document.getElementById(phId);
             if (ph) ph.style.display = '';
             document.getElementById(removeId).classList.remove('visible');
+            showToast('Berhasil dihapus', 'success');
+        } else {
+            showToast(d.message, 'error');
+        }
+    } catch(e) {
+        showToast('Gagal hapus', 'error');
+    }
+}
+
+// ── QRIS Image Upload ──
+async function uploadQrisImage(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) return showToast('File terlalu besar (maks 2MB)', 'error');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+        const res = await fetch('/settings/api/upload/qris_image', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (d.success) {
+            document.getElementById('qris-preview').src = d.path + '?t=' + Date.now();
+            document.getElementById('qris-preview-wrap').style.display = 'block';
+            showToast('✅ Gambar QRIS berhasil diupload', 'success');
+        } else {
+            showToast(d.message || 'Gagal upload', 'error');
+        }
+    } catch(e) {
+        showToast('Gagal upload: ' + e.message, 'error');
+    }
+    input.value = '';
+}
+
+async function deleteUpload(type) {
+    if (!confirm('Hapus gambar QRIS?')) return;
+    try {
+        const res = await fetch(`/settings/api/upload/${type}`, { method: 'DELETE' });
+        const d = await res.json();
+        if (d.success) {
+            document.getElementById('qris-preview').src = '';
+            document.getElementById('qris-preview-wrap').style.display = 'none';
             showToast('Berhasil dihapus', 'success');
         } else {
             showToast(d.message, 'error');

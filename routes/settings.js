@@ -33,7 +33,7 @@ const upload = multer({ storage: uploadStorage, fileFilter: uploadFilter, limits
 router.post('/api/upload/:type', upload.single('file'), async (req, res) => {
     try {
         const type = req.params.type;
-        if (!['company_logo', 'company_icon'].includes(type))
+        if (!['company_logo', 'company_icon', 'qris_image'].includes(type))
             return res.status(400).json({ success: false, message: 'Tipe tidak valid' });
         if (!req.file)
             return res.status(400).json({ success: false, message: 'File tidak ditemukan' });
@@ -54,7 +54,7 @@ router.post('/api/upload/:type', upload.single('file'), async (req, res) => {
 router.delete('/api/upload/:type', async (req, res) => {
     try {
         const type = req.params.type;
-        if (!['company_logo', 'company_icon'].includes(type))
+        if (!['company_logo', 'company_icon', 'qris_image'].includes(type))
             return res.status(400).json({ success: false, message: 'Tipe tidak valid' });
 
         const [[row]] = await pool.query('SELECT setting_value FROM settings WHERE setting_key=?', [type]);

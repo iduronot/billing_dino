@@ -227,6 +227,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   checkAndAddColumn('invoices', 'description', 'TEXT');
   checkAndAddColumn('invoices', 'payment_method', "VARCHAR(50) DEFAULT 'Manual'");
   checkAndAddColumn('invoices', 'invoice_number', "VARCHAR(50) DEFAULT ''");
+  checkAndAddColumn('invoices', 'proof_image', 'VARCHAR(255) NULL');
   checkAndAddColumn('routers', 'status', "VARCHAR(20) DEFAULT 'active'");
   checkAndAddColumn('customers', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
   checkAndAddColumn('trouble_tickets', 'closed_at', 'TIMESTAMP NULL');

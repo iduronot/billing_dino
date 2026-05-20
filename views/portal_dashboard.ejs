@@ -49,6 +49,7 @@
         .badge { padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; }
         .badge-unpaid { background:rgba(245,158,11,0.15); color:var(--warning); border:1px solid rgba(245,158,11,0.3); }
         .badge-paid { background:rgba(16,185,129,0.15); color:var(--success); border:1px solid rgba(16,185,129,0.3); }
+        .badge-inprog { background:rgba(59,130,246,0.15); color:var(--primary); border:1px solid rgba(59,130,246,0.3); }
 
         .btn { padding:12px 16px; border-radius:12px; border:none; font-weight:700; cursor:pointer; font-family:'Outfit',sans-serif; transition:all 0.2s; font-size:14px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; }
         .btn-primary { background:linear-gradient(135deg,var(--primary),#6366F1); color:white; box-shadow:0 8px 16px rgba(59,130,246,0.25); }
@@ -100,7 +101,11 @@
 <div class="container">
     <!-- Header -->
     <div class="header">
+        <% if (company.company_logo) { %>
+        <img src="<%= company.company_logo %>" alt="<%= company.company_name %>" style="max-height:36px;max-width:140px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(59,130,246,0.25))">
+        <% } else { %>
         <span class="brand">🦖 <%= company.company_name || 'Dino-Net' %></span>
+        <% } %>
         <div style="display:flex; align-items:center; gap:12px;">
             <button id="themeToggle" style="background:var(--card); border:1px solid var(--border); color:var(--text); width:32px; height:32px; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center;">
                 <i class="fas fa-moon"></i>
@@ -141,22 +146,9 @@
         </div>
         <% } %>
 
-        <% if (paymentGateway === 'manual') { %>
-        <div class="info-card" style="text-align:left; margin-bottom:20px; border-color:var(--warning);">
-            <div style="color:var(--warning); font-weight:700; font-size:14px; margin-bottom:10px;">💳 Transfer Pembayaran Manual</div>
-            <div style="font-size:13px; color:var(--text); line-height:1.6;">
-                Silahkan transfer ke rekening berikut:<br>
-                <strong style="color:var(--primary)"><%= company.bank_name || 'BANK BCA' %>: <%= company.bank_account || '1234567890' %></strong><br>
-                A/N: <%= company.bank_holder || company.company_name || 'Dino-Net' %><br><br>
-                Bukti bayar kirim ke WhatsApp Admin:
-                <a href="https://wa.me/<%= String(company.company_phone||'').replace(/[^0-9]/g,'') %>" style="color:var(--success); font-weight:700; text-decoration:none;"><%= company.company_phone || '-' %></a>
-            </div>
-        </div>
-        <% } %>
-
         <div class="section-title">Tagihan Terakhir</div>
         <% if (invoices.length > 0) { %>
-            <% invoices.slice(0, 3).forEach(inv => { %>
+            <% invoices.slice(0, 3).forEach((inv, invIdx) => { %>
             <div class="invoice-card">
                 <div class="inv-top">
                     <div class="inv-info">
@@ -168,10 +160,66 @@
                         <%= inv.status === 'paid' ? 'Lunas' : 'Belum Bayar' %>
                     </span>
                 </div>
-                <% if (inv.status === 'unpaid' && paymentGateway === 'xendit') { %>
+
+                <% if (inv.status === 'unpaid') { %>
+                <!-- Payment info inside unpaid invoice card -->
+                <% if (paymentGateway === 'xendit') { %>
                 <button class="btn btn-qris" onclick="openQRIS(<%= inv.id %>, <%= inv.amount %>)">
                     <i class="fas fa-qrcode"></i> Bayar dengan QRIS
                 </button>
+                <% } else { %>
+                <!-- Tab switcher per invoice -->
+                <div style="margin-top:14px">
+                    <div style="display:flex;gap:5px;background:var(--input-bg);border:1px solid var(--border);border-radius:12px;padding:3px;margin-bottom:12px">
+                        <button id="ptab-transfer-<%= inv.id %>" onclick="switchPayTab(<%= inv.id %>,'transfer')" style="flex:1;padding:8px;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;background:var(--primary);color:#fff;transition:all .2s">🏦 Transfer Bank</button>
+                        <button id="ptab-qris-<%= inv.id %>" onclick="switchPayTab(<%= inv.id %>,'qris')" style="flex:1;padding:8px;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;background:none;color:var(--muted);transition:all .2s">🔲 QRIS</button>
+                    </div>
+                    <!-- Transfer Bank pane -->
+                    <div id="ppane-transfer-<%= inv.id %>" style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:14px">
+                        <div style="color:var(--warning);font-weight:700;font-size:13px;margin-bottom:8px">💳 Transfer Bank</div>
+                        <div style="font-size:13px;color:var(--text);line-height:1.9">
+                            Bank: <strong style="color:var(--primary)"><%= company.bank_name %></strong><br>
+                            No. Rek: <strong style="color:var(--primary);font-size:15px;letter-spacing:.5px"><%= company.bank_account %></strong>
+                            <button onclick="copyText('<%= company.bank_account %>')" style="margin-left:6px;background:rgba(59,130,246,.15);color:var(--primary);border:1px solid rgba(59,130,246,.3);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">Salin</button><br>
+                            A/N: <strong><%= company.bank_holder %></strong>
+                        </div>
+                    </div>
+                    <!-- QRIS pane -->
+                    <div id="ppane-qris-<%= inv.id %>" style="display:none;text-align:center">
+                        <% if (company.qris_image) { %>
+                        <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:14px">
+                            <div style="color:var(--success);font-weight:700;font-size:13px;margin-bottom:10px">🔲 Scan QRIS untuk Bayar</div>
+                            <img src="<%= company.qris_image %>" alt="QRIS" style="max-width:220px;width:100%;border-radius:10px;border:1px solid var(--border);background:#fff;padding:6px">
+                            <div style="font-size:11px;color:var(--muted);margin-top:8px">Scan menggunakan aplikasi bank / e-wallet manapun</div>
+                        </div>
+                        <% } else { %>
+                        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;color:var(--muted);font-size:13px">
+                            <div style="font-size:24px;margin-bottom:6px">🔲</div>
+                            QRIS belum dikonfigurasi admin
+                        </div>
+                        <% } %>
+                    </div>
+                </div>
+                <% } %>
+
+                <!-- Upload bukti bayar -->
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                    <% if (inv.proof_image) { %>
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
+                        <img src="<%= inv.proof_image %>" alt="Bukti" onclick="openProofViewer('<%= inv.proof_image %>')" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;flex-shrink:0">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:700;color:var(--success)">✅ Bukti Terupload</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Menunggu konfirmasi admin</div>
+                            <button onclick="openProofViewer('<%= inv.proof_image %>')" style="margin-top:4px;font-size:11px;background:none;border:none;color:var(--primary);cursor:pointer;padding:0;font-family:'Outfit',sans-serif">Lihat selengkapnya →</button>
+                        </div>
+                    </div>
+                    <% } %>
+                    <label for="proof-<%= inv.id %>" style="display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.1);color:var(--primary);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">
+                        <i class="fas fa-camera"></i> <%= inv.proof_image ? 'Ganti Bukti Bayar' : 'Upload Bukti Bayar' %>
+                    </label>
+                    <input type="file" id="proof-<%= inv.id %>" accept="image/*,.pdf" style="display:none" onchange="uploadProof(<%= inv.id %>, this)">
+                    <span id="proof-status-<%= inv.id %>" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+                </div>
                 <% } %>
             </div>
             <% }); %>
@@ -211,26 +259,80 @@
     <div id="section-billing" class="page-section">
         <div class="section-title">Riwayat Tagihan</div>
         <% invoices.forEach(inv => { %>
-        <div class="invoice-card">
+        <div class="invoice-card" style="<%= inv.status === 'unpaid' ? 'cursor:pointer' : '' %>" onclick="<%= inv.status === 'unpaid' ? 'toggleInvDetail(' + inv.id + ')' : '' %>">
             <div class="inv-top">
                 <div class="inv-info">
                     <h4>Invoice #<%= String(inv.id).padStart(6, '0') %></h4>
                     <p><%= new Date(inv.due_date).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) %></p>
                     <p style="font-weight:700;margin-top:4px;color:var(--text)">Rp <%= parseFloat(inv.amount).toLocaleString('id-ID') %></p>
                 </div>
-                <span class="badge <%= inv.status === 'paid' ? 'badge-paid' : 'badge-unpaid' %>">
-                    <%= inv.status === 'paid' ? 'Lunas' : 'Belum Bayar' %>
-                </span>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                    <span class="badge <%= inv.status === 'paid' ? 'badge-paid' : 'badge-unpaid' %>">
+                        <%= inv.status === 'paid' ? 'Lunas' : 'Belum Bayar' %>
+                    </span>
+                    <% if (inv.status === 'unpaid') { %><span style="font-size:10px;color:var(--muted)">ketuk untuk bayar ▾</span><% } %>
+                </div>
             </div>
             <% if (inv.status === 'paid') { %>
             <div style="font-size:11px;color:var(--success);margin-top:10px;display:flex;align-items:center;gap:4px;">
                 <i class="fas fa-check-circle"></i>
                 Dibayar via <%= inv.payment_method || 'Manual' %> · <%= inv.paid_at ? new Date(inv.paid_at).toLocaleDateString('id-ID') : '-' %>
             </div>
-            <% } else if (paymentGateway === 'xendit') { %>
-            <button class="btn btn-qris" onclick="openQRIS(<%= inv.id %>, <%= inv.amount %>)">
-                <i class="fas fa-qrcode"></i> Bayar dengan QRIS
-            </button>
+            <% } else { %>
+            <!-- Expandable payment detail (hidden by default) -->
+            <div id="inv-detail-<%= inv.id %>" style="display:none;margin-top:14px">
+                <% if (paymentGateway === 'xendit') { %>
+                <button class="btn btn-qris" onclick="event.stopPropagation();openQRIS(<%= inv.id %>, <%= inv.amount %>)">
+                    <i class="fas fa-qrcode"></i> Bayar dengan QRIS
+                </button>
+                <% } else { %>
+                <div style="display:flex;gap:5px;background:var(--input-bg);border:1px solid var(--border);border-radius:12px;padding:3px;margin-bottom:12px">
+                    <button id="htab-transfer-<%= inv.id %>" onclick="event.stopPropagation();switchPayTab(<%= inv.id %>,'transfer','h')" style="flex:1;padding:8px;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;background:var(--primary);color:#fff;transition:all .2s">🏦 Transfer Bank</button>
+                    <button id="htab-qris-<%= inv.id %>" onclick="event.stopPropagation();switchPayTab(<%= inv.id %>,'qris','h')" style="flex:1;padding:8px;border:none;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;background:none;color:var(--muted);transition:all .2s">🔲 QRIS</button>
+                </div>
+                <div id="hpane-transfer-<%= inv.id %>" style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:14px">
+                    <div style="color:var(--warning);font-weight:700;font-size:13px;margin-bottom:8px">💳 Transfer Bank</div>
+                    <div style="font-size:13px;color:var(--text);line-height:1.9">
+                        Bank: <strong style="color:var(--primary)"><%= company.bank_name %></strong><br>
+                        No. Rek: <strong style="color:var(--primary);font-size:15px;letter-spacing:.5px"><%= company.bank_account %></strong>
+                        <button onclick="event.stopPropagation();copyText('<%= company.bank_account %>')" style="margin-left:6px;background:rgba(59,130,246,.15);color:var(--primary);border:1px solid rgba(59,130,246,.3);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer">Salin</button><br>
+                        A/N: <strong><%= company.bank_holder %></strong>
+                    </div>
+                </div>
+                <div id="hpane-qris-<%= inv.id %>" style="display:none;text-align:center">
+                    <% if (company.qris_image) { %>
+                    <div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:14px">
+                        <div style="color:var(--success);font-weight:700;font-size:13px;margin-bottom:10px">🔲 Scan QRIS untuk Bayar</div>
+                        <img src="<%= company.qris_image %>" alt="QRIS" style="max-width:220px;width:100%;border-radius:10px;border:1px solid var(--border);background:#fff;padding:6px">
+                        <div style="font-size:11px;color:var(--muted);margin-top:8px">Scan menggunakan aplikasi bank / e-wallet manapun</div>
+                    </div>
+                    <% } else { %>
+                    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;color:var(--muted);font-size:13px">
+                        <div style="font-size:24px;margin-bottom:6px">🔲</div>
+                        QRIS belum dikonfigurasi admin
+                    </div>
+                    <% } %>
+                </div>
+                <% } %>
+                <!-- Upload bukti bayar -->
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+                    <% if (inv.proof_image) { %>
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
+                        <img src="<%= inv.proof_image %>" alt="Bukti" onclick="openProofViewer('<%= inv.proof_image %>')" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;flex-shrink:0">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:700;color:var(--success)">✅ Bukti Terupload</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Menunggu konfirmasi admin</div>
+                            <button onclick="openProofViewer('<%= inv.proof_image %>')" style="margin-top:4px;font-size:11px;background:none;border:none;color:var(--primary);cursor:pointer;padding:0;font-family:'Outfit',sans-serif">Lihat selengkapnya →</button>
+                        </div>
+                    </div>
+                    <% } %>
+                    <label for="hproof-<%= inv.id %>" style="display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.1);color:var(--primary);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">
+                        <i class="fas fa-camera"></i> <%= inv.proof_image ? 'Ganti Bukti Bayar' : 'Upload Bukti Bayar' %>
+                    </label>
+                    <input type="file" id="hproof-<%= inv.id %>" accept="image/*,.pdf" style="display:none" onchange="uploadProof(<%= inv.id %>, this)">
+                    <span style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+                </div>
+            </div>
             <% } %>
         </div>
         <% }); %>
@@ -314,11 +416,7 @@
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             <span>Tagihan</span>
         </div>
-        <div class="nav-item" onclick="loadWifi(); showSection('wifi', this)">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.758 9.172c5.623-5.623 14.86-5.623 20.484 0"/></svg>
-            <span>WiFi</span>
-        </div>
-        <div class="nav-item" onclick="showSection('support', this)">
+<div class="nav-item" onclick="showSection('support', this)">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
             <span>Bantuan</span>
         </div>
@@ -385,6 +483,39 @@
             </button>
         </div>
     </div>
+</div>
+
+<!-- Ticket Detail Modal -->
+<div id="ticketDetailOverlay" onclick="if(event.target===this)closeTicketDetail()" style="display:none;position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.8);backdrop-filter:blur(6px);align-items:flex-end;justify-content:center;padding:0">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:28px 28px 0 0;width:100%;max-width:500px;max-height:90vh;display:flex;flex-direction:column;animation:slideUp .25s ease">
+        <div style="padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+            <div style="font-size:16px;font-weight:700" id="tdTitle">Detail Laporan</div>
+            <button onclick="closeTicketDetail()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif">✕ Tutup</button>
+        </div>
+        <!-- Meta info -->
+        <div id="tdMeta" style="padding:12px 20px;flex-shrink:0;border-bottom:1px solid var(--border)"></div>
+        <!-- Timeline/comments -->
+        <div id="tdTimeline" style="flex:1;overflow-y:auto;padding:14px 20px;display:flex;flex-direction:column;gap:10px"></div>
+        <!-- Reply box (only if not closed) -->
+        <div id="tdReplyBox" style="padding:12px 20px 20px;flex-shrink:0;border-top:1px solid var(--border)">
+            <div style="display:flex;gap:8px">
+                <textarea id="tdReplyInput" rows="2" class="form-control" placeholder="Tulis balasan atau info tambahan..." style="resize:none;flex:1;font-size:13px"></textarea>
+                <button id="tdReplySend" onclick="sendTicketReply()" style="background:var(--primary);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;flex-shrink:0">Kirim</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+@keyframes slideUp { from { transform:translateY(60px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+</style>
+
+<!-- Proof Viewer Modal -->
+<div id="proofViewerOverlay" onclick="if(event.target===this)closeProofViewer()" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,0.9);backdrop-filter:blur(8px);align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px">
+    <div style="display:flex;gap:10px;align-items:center">
+        <span style="color:white;font-size:13px;font-weight:600">Bukti Pembayaran</span>
+        <button onclick="closeProofViewer()" style="background:rgba(239,68,68,.2);color:#FCA5A5;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif">✕ Tutup</button>
+    </div>
+    <img id="proofViewerImg" src="" alt="Bukti" style="max-width:min(480px,92vw);max-height:78vh;border-radius:14px;object-fit:contain;background:#fff;padding:6px;box-shadow:0 20px 50px rgba(0,0,0,.7)">
 </div>
 
 <div class="toast" id="toast"></div>
@@ -530,33 +661,163 @@
         if (d.success) { e.target.reset(); loadTickets(); }
     });
 
+    const TICKET_STATUS = {
+        open:        { label: 'Menunggu',  cls: 'badge-unpaid',  color: 'var(--warning)' },
+        in_progress: { label: 'Diproses',  cls: 'badge-inprog',  color: 'var(--primary)' },
+        closed:      { label: 'Selesai',   cls: 'badge-paid',    color: 'var(--success)' }
+    };
+
     async function loadTickets() {
         const list = document.getElementById('ticketList');
         try {
             const res = await fetch('/portal/tickets');
             const d = await res.json();
-            if (d.success) {
-                if (d.tickets.length === 0) {
-                    list.innerHTML = '<div class="info-card" style="color:var(--muted); font-size:13px;">Belum ada riwayat laporan.</div>';
-                    return;
-                }
-                list.innerHTML = d.tickets.map(t => `
-                    <div class="invoice-card" style="padding:14px; margin-bottom:10px;">
-                        <div class="inv-top">
-                            <div class="inv-info">
-                                <h4 style="font-size:14px;">${t.title}</h4>
-                                <p style="font-size:11px;">${new Date(t.created_at).toLocaleDateString('id-ID')}</p>
-                            </div>
-                            <span class="badge ${t.status === 'open' ? 'badge-unpaid' : 'badge-paid'}">
-                                ${t.status === 'open' ? 'Proses' : 'Selesai'}
-                            </span>
+            if (!d.success) { list.innerHTML = '<div class="info-card" style="color:var(--muted);font-size:13px;">Gagal memuat laporan.</div>'; return; }
+            if (d.tickets.length === 0) {
+                list.innerHTML = '<div class="info-card" style="color:var(--muted);font-size:13px;">Belum ada riwayat laporan.</div>';
+                return;
+            }
+            list.innerHTML = d.tickets.map(t => {
+                const st = TICKET_STATUS[t.status] || TICKET_STATUS.open;
+                const techHtml = t.technician_names ? `<span style="font-size:11px;color:var(--primary)"><i class="fas fa-user-hard-hat" style="margin-right:3px"></i>${t.technician_names}</span>` : '';
+                const commentBadge = t.comment_count > 0 ? `<span style="font-size:11px;color:var(--muted);margin-left:6px"><i class="fas fa-comment"></i> ${t.comment_count}</span>` : '';
+                return `
+                <div class="invoice-card" style="padding:14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor=''" onclick="openTicketDetail(${t.id})">
+                    <div class="inv-top">
+                        <div class="inv-info" style="flex:1;min-width:0">
+                            <h4 style="font-size:14px;margin:0 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.title}</h4>
+                            <p style="font-size:11px;color:var(--muted);margin:0">${new Date(t.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</p>
+                            <div style="margin-top:5px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">${techHtml}${commentBadge}</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;margin-left:10px">
+                            <span class="badge ${st.cls}">${st.label}</span>
+                            <span style="font-size:10px;color:var(--muted)">ketuk detail ›</span>
                         </div>
                     </div>
-                `).join('');
-            }
+                </div>`;
+            }).join('');
         } catch (_) {}
     }
     loadTickets();
+
+    let _currentTicketId = null;
+
+    async function openTicketDetail(ticketId) {
+        _currentTicketId = ticketId;
+        const overlay = document.getElementById('ticketDetailOverlay');
+        overlay.style.display = 'flex';
+        document.getElementById('tdTitle').textContent = 'Memuat...';
+        document.getElementById('tdMeta').innerHTML = '<div class="spinner" style="width:24px;height:24px;margin:8px auto"></div>';
+        document.getElementById('tdTimeline').innerHTML = '';
+        document.getElementById('tdReplyBox').style.display = 'none';
+
+        try {
+            const res = await fetch(`/portal/ticket/${ticketId}`);
+            const d = await res.json();
+            if (!d.success) { document.getElementById('tdTitle').textContent = 'Gagal memuat'; return; }
+            renderTicketDetail(d.ticket, d.comments);
+        } catch(e) {
+            document.getElementById('tdTitle').textContent = 'Error: ' + e.message;
+        }
+    }
+
+    function renderTicketDetail(t, comments) {
+        const st = TICKET_STATUS[t.status] || TICKET_STATUS.open;
+        document.getElementById('tdTitle').textContent = t.title;
+
+        // Meta
+        const techLine = t.technician_names
+            ? `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text)"><i class="fas fa-user-hard-hat" style="color:var(--primary)"></i> Teknisi: <strong>${t.technician_names}</strong></div>`
+            : `<div style="font-size:12px;color:var(--muted)">Belum ada teknisi yang ditugaskan</div>`;
+        const catLine = t.category ? `<span style="font-size:11px;background:rgba(139,92,246,.15);color:#A78BFA;border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:2px 8px">${t.category}</span>` : '';
+        const locLine = t.location ? `<div style="font-size:12px;color:var(--muted);margin-top:4px"><i class="fas fa-map-marker-alt" style="margin-right:4px"></i>${t.location}</div>` : '';
+        document.getElementById('tdMeta').innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                <span class="badge ${st.cls}" style="font-size:11px">${st.label}</span>
+                ${catLine}
+                <span style="font-size:11px;color:var(--muted)">${new Date(t.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</span>
+            </div>
+            ${techLine}${locLine}
+            ${t.description ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5">${t.description}</div>` : ''}`;
+
+        // Timeline
+        const timeline = document.getElementById('tdTimeline');
+        const entries = [];
+
+        // Ticket created
+        entries.push({ time: t.created_at, role: 'customer', username: 'Anda', text: '📋 Laporan dikirim: ' + t.title, isSystem: false });
+
+        // Comments
+        comments.forEach(c => {
+            entries.push({ time: c.created_at, role: c.role, username: c.username, text: c.comment, isSystem: false });
+        });
+
+        // Resolved note
+        if (t.status === 'closed' && t.response_note) {
+            entries.push({ time: t.resolved_at, role: 'system', username: 'Sistem', text: '✅ Selesai: ' + t.response_note, isSystem: true });
+        }
+
+        if (entries.length === 0) {
+            timeline.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:20px">Belum ada aktivitas</div>';
+        } else {
+            timeline.innerHTML = entries.map(e => {
+                const isCustomer = e.role === 'customer';
+                const isTech = e.role === 'technician' || e.role === 'admin';
+                const isSystem = e.role === 'system';
+                const bg = isCustomer ? 'rgba(59,130,246,.1)' : isSystem ? 'rgba(16,185,129,.08)' : 'rgba(139,92,246,.1)';
+                const border = isCustomer ? 'rgba(59,130,246,.3)' : isSystem ? 'rgba(16,185,129,.25)' : 'rgba(139,92,246,.3)';
+                const nameColor = isCustomer ? 'var(--primary)' : isSystem ? 'var(--success)' : '#A78BFA';
+                const align = isCustomer ? 'flex-end' : 'flex-start';
+                const timeStr = e.time ? new Date(e.time).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+                return `<div style="display:flex;flex-direction:column;align-items:${align}">
+                    <div style="max-width:88%;background:${bg};border:1px solid ${border};border-radius:12px;padding:10px 13px">
+                        <div style="font-size:11px;color:${nameColor};font-weight:700;margin-bottom:4px">${e.username}${timeStr ? ' · ' + timeStr : ''}</div>
+                        <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${e.text}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Scroll to bottom of timeline
+        setTimeout(() => { timeline.scrollTop = timeline.scrollHeight; }, 50);
+
+        // Show reply box only if ticket is not closed
+        const replyBox = document.getElementById('tdReplyBox');
+        replyBox.style.display = t.status === 'closed' ? 'none' : '';
+        document.getElementById('tdReplyInput').value = '';
+    }
+
+    async function sendTicketReply() {
+        const input = document.getElementById('tdReplyInput');
+        const btn = document.getElementById('tdReplySend');
+        const text = input.value.trim();
+        if (!text || !_currentTicketId) return;
+        btn.disabled = true; btn.textContent = '...';
+        try {
+            const res = await fetch(`/portal/ticket/${_currentTicketId}/comment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comment: text })
+            });
+            const d = await res.json();
+            if (d.success) {
+                input.value = '';
+                // Reload detail
+                const res2 = await fetch(`/portal/ticket/${_currentTicketId}`);
+                const d2 = await res2.json();
+                if (d2.success) renderTicketDetail(d2.ticket, d2.comments);
+            } else {
+                showToast(d.message, 'error');
+            }
+        } catch(e) { showToast('Gagal mengirim', 'error'); }
+        btn.disabled = false; btn.textContent = 'Kirim';
+    }
+
+    function closeTicketDetail() {
+        document.getElementById('ticketDetailOverlay').style.display = 'none';
+        _currentTicketId = null;
+        loadTickets(); // refresh status list
+    }
 
     // ── Profile ──
     document.getElementById('profileForm').addEventListener('submit', async (e) => {
@@ -612,6 +873,73 @@
         } catch (_) { showToast('Error jaringan', 'error'); }
         finally { btn.disabled = false; btn.textContent = 'Update WiFi'; }
     });
+
+    // ── Payment tabs (per invoice) ──
+    // prefix: 'p' for beranda section, 'h' for history section
+    function switchPayTab(invId, tab, prefix) {
+        prefix = prefix || 'p';
+        const isTransfer = tab === 'transfer';
+        document.getElementById(prefix + 'pane-transfer-' + invId).style.display = isTransfer ? '' : 'none';
+        document.getElementById(prefix + 'pane-qris-'     + invId).style.display = isTransfer ? 'none' : '';
+        const btnT = document.getElementById(prefix + 'tab-transfer-' + invId);
+        const btnQ = document.getElementById(prefix + 'tab-qris-'     + invId);
+        btnT.style.background = isTransfer ? 'var(--primary)' : 'none';
+        btnT.style.color      = isTransfer ? '#fff' : 'var(--muted)';
+        btnQ.style.background = !isTransfer ? 'var(--primary)' : 'none';
+        btnQ.style.color      = !isTransfer ? '#fff' : 'var(--muted)';
+    }
+
+    // ── Toggle invoice detail in billing history ──
+    function toggleInvDetail(invId) {
+        const detail = document.getElementById('inv-detail-' + invId);
+        if (!detail) return;
+        detail.style.display = detail.style.display === 'none' ? '' : 'none';
+    }
+
+    // ── Proof viewer modal ──
+    function openProofViewer(src) {
+        document.getElementById('proofViewerImg').src = src;
+        document.getElementById('proofViewerOverlay').style.display = 'flex';
+    }
+    function closeProofViewer() {
+        document.getElementById('proofViewerOverlay').style.display = 'none';
+    }
+
+    // ── Copy text ──
+    function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => showToast('Disalin!', 'success')).catch(() => {
+            const el = document.createElement('textarea');
+            el.value = text; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+            showToast('Disalin!', 'success');
+        });
+    }
+
+    // ── Upload bukti pembayaran ──
+    async function uploadProof(invoiceId, input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) return showToast('File terlalu besar (maks 5MB)', 'error');
+        const statusEl = input.nextElementSibling;
+        if (statusEl) statusEl.textContent = 'Mengupload...';
+        const fd = new FormData();
+        fd.append('proof', file);
+        try {
+            const res = await fetch(`/portal/upload-proof/${invoiceId}`, { method: 'POST', body: fd });
+            const d = await res.json();
+            if (statusEl) statusEl.textContent = '';
+            if (d.success) {
+                showToast('✅ Bukti pembayaran berhasil diupload!', 'success');
+                const label = input.previousElementSibling;
+                if (label) label.innerHTML = '<i class="fas fa-camera"></i> Ganti Bukti Bayar';
+            } else {
+                showToast('❌ ' + d.message, 'error');
+            }
+        } catch(e) {
+            if (statusEl) statusEl.textContent = '';
+            showToast('❌ Gagal upload: ' + e.message, 'error');
+        }
+        input.value = '';
+    }
 
     // ── Toast ──
     function showToast(msg, type) {

@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Portal Pelanggan</title>
+    <title><%= (settings && settings.company_name) ? settings.company_name : 'Dino-Net' %> | Login Portal</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
         :root{--primary:#3B82F6;--secondary:#8B5CF6;--bg:#0B0F19;--border:rgba(255,255,255,0.08);--text:#F8FAFC;--muted:#94A3B8;}
@@ -12,7 +12,8 @@
         .login-card{background:rgba(17,24,39,0.8);backdrop-filter:blur(24px);border:1px solid var(--border);border-radius:32px;width:100%;max-width:380px;padding:45px 35px;box-shadow:0 30px 60px rgba(0,0,0,0.6);animation:slideIn 0.7s cubic-bezier(0.16,1,0.3,1);}
         @keyframes slideIn{from{opacity:0;transform:translateY(30px);}to{opacity:1;transform:translateY(0);}}
         .brand{text-align:center;margin-bottom:35px;}
-        .brand-logo{font-size:30px;font-weight:800;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;display:block;line-height:1.2;text-transform:uppercase;}
+        .brand-logo-img{max-height:80px;max-width:220px;object-fit:contain;margin-bottom:10px;filter:drop-shadow(0 4px 12px rgba(59,130,246,0.3));}
+        .brand-logo-text{font-size:30px;font-weight:800;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;display:block;line-height:1.2;text-transform:uppercase;}
         .brand-tag{color:var(--muted);font-size:14px;font-weight:500;}
         .form-group{margin-bottom:22px;}
         .form-group label{display:block;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:0.3px;}
@@ -30,12 +31,16 @@
     <div class="bg-glow"></div>
     <div class="login-card">
         <div class="brand">
-            <span class="brand-logo">🦖 <%= (typeof settings !== 'undefined' && settings.company_name) ? settings.company_name : 'Dino-Net' %></span>
+            <% if (settings && settings.logo) { %>
+            <img src="<%= settings.logo %>" alt="<%= settings.company_name || 'Logo' %>" class="brand-logo-img"><br>
+            <% } else { %>
+            <span class="brand-logo-text">🦖 <%= (settings && settings.company_name) ? settings.company_name : 'Dino-Net' %></span>
+            <% } %>
             <span class="brand-tag">Portal Layanan Pelanggan</span>
         </div>
-        
+
         <% if (typeof error !== 'undefined' && error) { %> <div class="error">⚠️ <%= error %></div> <% } %>
-        
+
         <form action="/portal/login" method="POST">
             <div class="form-group">
                 <label>NOMOR HP / USERNAME</label>
@@ -47,7 +52,7 @@
             </div>
             <button type="submit" class="btn">Masuk Ke Portal</button>
         </form>
-        
+
         <div class="footer">
             Butuh bantuan akses?<br>
             <a href="#">Hubungi Layanan Pelanggan</a>

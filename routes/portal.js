@@ -3,9 +3,35 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const xendit = require('../helpers/xendit');
 const axios = require('axios');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 let pool;
 
 router.setPool = (dbPool) => { pool = dbPool; };
+
+// Multer for payment proof uploads
+const proofStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', 'public', 'uploads', 'proofs');
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `proof_${req.session.customerId}_${Date.now()}${ext}`);
+    }
+});
+const proofUpload = multer({
+    storage: proofStorage,
+    fileFilter: (req, file, cb) => {
+        const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowed.includes(ext)) cb(null, true);
+        else cb(new Error('Format tidak didukung. Gunakan JPG, PNG, atau PDF'), false);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 // Middleware for Portal Auth
 const requirePortalAuth = (req, res, next) => {
@@ -16,9 +42,18 @@ const requirePortalAuth = (req, res, next) => {
 };
 
 // GET /portal/login
-router.get('/login', (req, res) => {
+router.get('/login', async (req, res) => {
     if (req.session.customerId) return res.redirect('/portal');
-    res.render('portal_login', { error: null });
+    try {
+        const [rows] = await pool.query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('company_name','company_logo','company_icon')");
+        const settings = {};
+        rows.forEach(r => settings[r.setting_key] = r.setting_value);
+        // Gunakan company_logo jika ada, fallback ke company_icon
+        settings.logo = settings.company_logo || settings.company_icon || '';
+        res.render('portal_login', { error: null, settings });
+    } catch (_) {
+        res.render('portal_login', { error: null, settings: {} });
+    }
 });
 
 // POST /portal/login
@@ -95,7 +130,9 @@ router.get('/', requirePortalAuth, async (req, res) => {
             company_address: settings.company_address || '',
             bank_name: settings.bank_name || 'BANK BCA',
             bank_account: settings.bank_account || '1234567890',
-            bank_holder: settings.bank_holder || settings.company_name || 'Dino-Net'
+            bank_holder: settings.bank_holder || settings.company_name || 'Dino-Net',
+            qris_image: settings.qris_image || '',
+            company_logo: settings.company_logo || settings.company_icon || ''
         };
 
         res.render('portal_dashboard', { 
@@ -183,11 +220,67 @@ router.post('/ticket', requirePortalAuth, async (req, res) => {
     }
 });
 
-// GET /portal/tickets — Fetch customer's own tickets
+// GET /portal/tickets — Fetch customer's own tickets (with technician name)
 router.get('/tickets', requirePortalAuth, async (req, res) => {
     try {
-        const [tickets] = await pool.query('SELECT * FROM trouble_tickets WHERE customer_id = ? ORDER BY created_at DESC', [req.session.customerId]);
+        const [tickets] = await pool.query(`
+            SELECT t.*,
+                   COALESCE(
+                       (SELECT GROUP_CONCAT(us.username ORDER BY us.username SEPARATOR ', ')
+                        FROM ticket_technicians tt JOIN users us ON us.id=tt.technician_id
+                        WHERE tt.ticket_id=t.id),
+                       u.username
+                   ) as technician_names,
+                   (SELECT COUNT(*) FROM ticket_comments tc WHERE tc.ticket_id=t.id AND (tc.is_internal=0 OR tc.is_internal IS NULL)) as comment_count
+            FROM trouble_tickets t
+            LEFT JOIN users u ON u.id=t.technician_id
+            WHERE t.customer_id=? ORDER BY t.created_at DESC`, [req.session.customerId]);
         res.json({ success: true, tickets });
+    } catch (e) {
+        res.json({ success: false, message: e.message });
+    }
+});
+
+// GET /portal/ticket/:id — Detail tiket + komentar publik
+router.get('/ticket/:id', requirePortalAuth, async (req, res) => {
+    try {
+        const [[ticket]] = await pool.query(`
+            SELECT t.*,
+                   COALESCE(
+                       (SELECT GROUP_CONCAT(us.username ORDER BY us.username SEPARATOR ', ')
+                        FROM ticket_technicians tt JOIN users us ON us.id=tt.technician_id
+                        WHERE tt.ticket_id=t.id),
+                       u.username
+                   ) as technician_names
+            FROM trouble_tickets t
+            LEFT JOIN users u ON u.id=t.technician_id
+            WHERE t.id=? AND t.customer_id=?`, [req.params.id, req.session.customerId]);
+        if (!ticket) return res.json({ success: false, message: 'Tiket tidak ditemukan' });
+
+        const [comments] = await pool.query(
+            'SELECT * FROM ticket_comments WHERE ticket_id=? AND (is_internal=0 OR is_internal IS NULL) ORDER BY created_at ASC',
+            [req.params.id]);
+
+        res.json({ success: true, ticket, comments });
+    } catch (e) {
+        res.json({ success: false, message: e.message });
+    }
+});
+
+// POST /portal/ticket/:id/comment — Pelanggan kirim balasan ke tiket
+router.post('/ticket/:id/comment', requirePortalAuth, async (req, res) => {
+    const { comment } = req.body;
+    if (!comment || !comment.trim()) return res.json({ success: false, message: 'Pesan tidak boleh kosong' });
+    try {
+        const [[ticket]] = await pool.query(
+            'SELECT id FROM trouble_tickets WHERE id=? AND customer_id=?',
+            [req.params.id, req.session.customerId]);
+        if (!ticket) return res.json({ success: false, message: 'Tiket tidak ditemukan' });
+
+        await pool.query(
+            'INSERT INTO ticket_comments (ticket_id, username, role, comment, is_internal) VALUES (?, ?, "customer", ?, 0)',
+            [req.params.id, req.session.customerName, comment.trim()]);
+        res.json({ success: true, message: 'Pesan terkirim' });
     } catch (e) {
         res.json({ success: false, message: e.message });
     }
@@ -282,6 +375,22 @@ router.get('/qr-status/:referenceId', requirePortalAuth, async (req, res) => {
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /portal/upload-proof/:invoiceId — Upload payment proof image
+router.post('/upload-proof/:invoiceId', requirePortalAuth, proofUpload.single('proof'), async (req, res) => {
+    try {
+        const invoiceId = req.params.invoiceId;
+        const [[inv]] = await pool.query('SELECT id FROM invoices WHERE id = ? AND customer_id = ?', [invoiceId, req.session.customerId]);
+        if (!inv) return res.json({ success: false, message: 'Invoice tidak ditemukan' });
+        if (!req.file) return res.json({ success: false, message: 'File tidak ditemukan' });
+
+        const filePath = '/uploads/proofs/' + req.file.filename;
+        await pool.query('UPDATE invoices SET proof_image = ? WHERE id = ?', [filePath, invoiceId]);
+        res.json({ success: true, message: 'Bukti pembayaran berhasil diupload.', path: filePath });
+    } catch (e) {
+        res.json({ success: false, message: e.message });
     }
 });
 

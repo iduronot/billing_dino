@@ -24,9 +24,12 @@ router.get('/', async (req, res) => {
         const dateField   = req.query.dateField   || 'created_at'; // created_at | due_date | paid_at
         const useDate     = !!(dateFrom || dateTo);
 
+        const proofFilter = req.query.proof || '';  // 'has_proof' | ''
+
         let conditions = [];
         let params = [];
         if (statusFilter !== 'all') { conditions.push('i.status = ?'); params.push(statusFilter); }
+        if (proofFilter === 'has_proof') { conditions.push('i.proof_image IS NOT NULL AND i.proof_image != ""'); }
         if (search) { conditions.push('(c.name LIKE ? OR c.pppoe_username LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
         const safeField = ['created_at','due_date','paid_at'].includes(dateField) ? dateField : 'created_at';
         if (dateFrom) { conditions.push(`DATE(i.${safeField}) >= ?`); params.push(dateFrom); }
@@ -82,7 +85,7 @@ router.get('/', async (req, res) => {
             stats: { paid, unpaid, overdue, totalRevenue },
             filteredStats: useDate ? { revenue: filteredRevenue, paid: filteredPaid, unpaid: filteredUnpaid } : null,
             pagination: { total, page, perPage, totalPages: Math.ceil(total / perPage) },
-            search, statusFilter,
+            search, statusFilter, proofFilter,
             dateFrom, dateTo, dateField: safeField, useDate,
             currentPage: 'billing'
         });

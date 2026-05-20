@@ -265,8 +265,12 @@
                 <option value="paid"   <%= statusFilter==='paid'  ?'selected':'' %>><%= t.paid %></option>
                 <option value="unpaid" <%= statusFilter==='unpaid'?'selected':'' %>><%= t.unpaid %></option>
             </select>
+            <select name="proof" class="form-control" style="width:160px;flex-shrink:0;">
+                <option value=""          <%= proofFilter===''          ?'selected':'' %>>Semua</option>
+                <option value="has_proof" <%= proofFilter==='has_proof' ?'selected':'' %>>📎 Ada Bukti Bayar</option>
+            </select>
             <button type="submit" class="btn btn-primary" style="white-space:nowrap;flex-shrink:0;"><i class="fas fa-search"></i> <%= t.search_btn %></button>
-            <% if (search || statusFilter !== 'all') { %>
+            <% if (search || statusFilter !== 'all' || proofFilter) { %>
             <a href="/billing?dateFrom=<%= dateFrom %>&dateTo=<%= dateTo %>&dateField=<%= dateField %>" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--muted);flex-shrink:0;white-space:nowrap;">✕ Reset</a>
             <% } %>
         </form>
@@ -316,6 +320,18 @@
                             <% if(i.status === 'paid' && i.paid_at) { %>
                             <div style="font-size:11px;color:var(--muted);margin-top:3px;">
                                 <%= new Date(i.paid_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %>
+                            </div>
+                            <% } %>
+                            <% if(i.proof_image) { %>
+                            <div style="margin-top:5px">
+                                <button onclick="openProofModal('<%= i.proof_image %>','<%= (i.customer_name||'').replace(/'/g,'') %>')" style="font-size:11px;color:#06B6D4;background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.35);border-radius:6px;padding:3px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+                                    <i class="fas fa-image"></i> Lihat Bukti
+                                </button>
+                            </div>
+                            <% } %>
+                            <% if(i.status === 'unpaid' && i.proof_image) { %>
+                            <div style="margin-top:4px">
+                                <span style="font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#F59E0B;border:1px solid rgba(245,158,11,.3);border-radius:5px;padding:2px 7px">⏳ Menunggu Konfirmasi</span>
                             </div>
                             <% } %>
                         </td>
@@ -677,6 +693,13 @@ async function runIsolir(){if(!confirm(<%- JSON.stringify(t.confirm_run_isolir) 
 async function sendReminders(){if(!confirm(<%- JSON.stringify(t.confirm_send_reminders) %>))return;showToast(<%- JSON.stringify(t.sending_reminders) %>,'success');try{const res=await fetch('/billing/api/send-reminders',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');}catch(e){showToast('Error: '+e.message,'error');}}
 function sendWA(phone,invNum,amount,dueDate){if(!phone){alert(<%- JSON.stringify(t.no_phone) %>);return;}phone=phone.replace(/[^0-9]/g,'');if(phone.startsWith('0'))phone='62'+phone.substring(1);const rawMsg=<%- JSON.stringify(t.wa_bill_msg||'') %>;const msg=rawMsg.replace('{invNum}',invNum).replace('{amount}',amount).replace('{dueDate}',dueDate);window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');}
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
+function openProofModal(src, name) {
+    document.getElementById('proofModalImg').src = src;
+    document.getElementById('proofModalName').textContent = name;
+    document.getElementById('proofModalLink').href = src;
+    document.getElementById('proofModal').style.display = 'flex';
+}
+function closeProofModal() { document.getElementById('proofModal').style.display = 'none'; }
 function openPrintModal(id){
     const modal=document.getElementById('printModal');
     const frame=document.getElementById('printFrame');
@@ -692,6 +715,16 @@ function closePrintModal(){
 }
 function doPrint(){document.getElementById('printFrame').contentWindow.print();}
 </script>
+
+<!-- Proof of Payment Modal -->
+<div id="proofModal" onclick="if(event.target===this)closeProofModal()" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;flex-direction:column;gap:14px">
+    <div style="display:flex;align-items:center;gap:10px">
+        <span id="proofModalName" style="color:white;font-weight:700;font-size:15px"></span>
+        <a id="proofModalLink" href="#" target="_blank" style="background:rgba(255,255,255,.12);color:white;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 14px;font-size:12px;text-decoration:none">↗ Buka Tab Baru</a>
+        <button onclick="closeProofModal()" style="background:rgba(239,68,68,.2);color:#FCA5A5;border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer">✕ Tutup</button>
+    </div>
+    <img id="proofModalImg" src="" alt="Bukti Bayar" style="max-width:min(720px,94vw);max-height:80vh;border-radius:14px;object-fit:contain;background:#fff;padding:6px;box-shadow:0 20px 50px rgba(0,0,0,.6)">
+</div>
 
 <!-- Print Invoice Modal -->
 <div id="printModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;flex-direction:column;gap:12px">
