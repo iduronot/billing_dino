@@ -38,7 +38,8 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Filter invoice: status (unpaid/paid/overdue), rentang tanggal, nama pelanggan
 - Catat pembayaran manual (cash/transfer)
 - Tunda (defer) invoice tanpa menghapus tagihan
-- Cetak invoice (template siap print)
+- Cetak invoice dengan pratinjau in-page (modal + iframe, tanpa buka tab baru)
+- Layout cetak kompak — muat 1 halaman A4 saat disimpan sebagai PDF
 - Export invoice ke CSV
 - Statistik pendapatan bulanan
 - Riwayat pembayaran per pelanggan
@@ -67,6 +68,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Tambah, edit, hapus konfigurasi router
 - Test koneksi ke router langsung dari dashboard
 - Lihat daftar PPPoE active sessions secara real-time
+- Ping & Traceroute IP user langsung dari tabel PPPoE aktif (output terminal real-time)
 - Sync PPPoE secrets dari MikroTik ke database
 - Fetch daftar PPP Profile dari MikroTik untuk assign ke paket
 - Auto disable/enable PPPoE saat isolir/reaktivasi
@@ -89,8 +91,11 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Tampilkan status online/offline berdasarkan waktu `last_inform`
 - Lihat IP WAN, serial number, manufacturer, PPPoE username tiap perangkat
 - Fetch SSID & Password WiFi real-time dari GenieACS
+- Ubah nama WiFi (SSID) & password WiFi via modal dari dashboard admin GenieACS
 - Ubah SSID & Password WiFi langsung dari portal pelanggan atau portal teknisi
+- Pre-fill nilai SSID & password saat ini saat modal dibuka (auto-fetch dari ACS)
 - Reboot ONT dari dashboard admin
+- Refresh parameter ONT dari dashboard admin
 - Factory reset ONT dari dashboard admin
 - Hapus device dari tracking ACS
 - Konfigurasi path virtual parameters (PPPoE, IP WAN, dll) dari Settings
@@ -152,7 +157,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Update nomor telepon & email profil
 - Ganti password portal
 
-### 13. 💬 Notifikasi WhatsApp
+### 13. 💬 Notifikasi & Manager WhatsApp
 - **Provider lokal**: whatsapp-web.js (scan QR, gratis, butuh Google Chrome)
 - **Provider eksternal**: Fonnte, MPWA, Wablas (API berbayar, lebih stabil untuk skala besar)
 - Notifikasi otomatis yang dikirim:
@@ -169,6 +174,9 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Restart koneksi WhatsApp dari Settings tanpa restart server
 - Status koneksi WhatsApp real-time: QR Code, Connecting, Ready
 - Template semua pesan dapat dikustomisasi dari Settings
+- **Template Pesan**: buat & kelola template pesan dengan variabel dinamis (`{nama}`, `{nomor}`, `{paket}`, `{jumlah}`, `{tanggal}`) — pilih template langsung dari input chat
+- **Auto Reply**: balas pesan masuk secara otomatis berdasarkan kata kunci, dengan mode pencocokan `contains`, `exact`, atau `startswith`; variabel pelanggan otomatis terisi dari database
+- **Kirim ke Pelanggan**: dropdown pencarian pelanggan by nama langsung dari panel chat
 
 ### 14. ✈️ Notifikasi Telegram
 - Integrasi Telegram Bot
