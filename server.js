@@ -236,6 +236,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   checkAndAddColumn('customers', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
   checkAndAddColumn('trouble_tickets', 'closed_at', 'TIMESTAMP NULL');
   checkAndAddColumn('customers', 'portal_password', 'VARCHAR(255) NULL');
+  checkAndAddColumn('customers', 'inactive_at', 'DATETIME NULL');
+  checkAndAddColumn('customers', 'inactive_reason', 'VARCHAR(255) NULL');
   checkAndAddColumn('customers', 'pppoe_password', "VARCHAR(100) DEFAULT '123456'");
   checkAndAddColumn('customers', 'email', 'VARCHAR(100)');
   checkAndAddColumn('trouble_tickets', 'description', 'TEXT');

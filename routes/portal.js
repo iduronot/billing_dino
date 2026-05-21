@@ -50,7 +50,10 @@ router.get('/login', async (req, res) => {
         rows.forEach(r => settings[r.setting_key] = r.setting_value);
         // Gunakan company_logo jika ada, fallback ke company_icon
         settings.logo = settings.company_logo || settings.company_icon || '';
-        res.render('portal_login', { error: null, settings });
+        const inactiveMsg = req.query.reason === 'inactive'
+            ? 'Akun Anda sudah tidak aktif. Silakan hubungi admin untuk informasi lebih lanjut.'
+            : null;
+        res.render('portal_login', { error: inactiveMsg, settings });
     } catch (_) {
         res.render('portal_login', { error: null, settings: {} });
     }
@@ -82,6 +85,9 @@ router.post('/login', async (req, res) => {
                 (password === '1234');
 
             if (validPass) {
+                if (customer.status === 'inactive') {
+                    return res.render('portal_login', { error: 'Akun Anda sudah tidak aktif. Silakan hubungi admin untuk informasi lebih lanjut.', settings });
+                }
                 req.session.customerId = customer.id;
                 req.session.customerName = customer.name;
                 return res.redirect('/portal');
@@ -105,6 +111,12 @@ router.get('/', requirePortalAuth, async (req, res) => {
         if (!customer) {
             req.session.customerId = null;
             return res.redirect('/portal/login');
+        }
+        // Block inactive customer — auto-logout
+        if (customer.status === 'inactive') {
+            req.session.customerId = null;
+            req.session.customerName = null;
+            return res.redirect('/portal/login?reason=inactive');
         }
         
         const [invoiceRows] = await pool.query('SELECT * FROM invoices WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10', [req.session.customerId]);

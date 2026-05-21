@@ -194,23 +194,23 @@
                         <div class="stat-card blue <%= filter === 'all' ? 'active-filter' : '' %>"
                             onclick="window.location.href='/customers?filter=all<%= search ? '&search='+search : '' %>'">
                             <div class="stat-label"><%= t.total_customers %></div>
-                            <div class="stat-value">
-                                <%= stats.total || 0 %>
-                            </div>
+                            <div class="stat-value"><%= stats.total || 0 %></div>
                         </div>
                         <div class="stat-card green <%= filter === 'active' ? 'active-filter' : '' %>"
                             onclick="window.location.href='/customers?filter=active<%= search ? '&search='+search : '' %>'">
                             <div class="stat-label"><%= t.active %></div>
-                            <div class="stat-value">
-                                <%= stats.active || 0 %>
-                            </div>
+                            <div class="stat-value"><%= stats.active || 0 %></div>
                         </div>
                         <div class="stat-card red <%= filter === 'isolated' ? 'active-filter' : '' %>"
                             onclick="window.location.href='/customers?filter=isolated<%= search ? '&search='+search : '' %>'">
                             <div class="stat-label"><%= t.isolated_short %></div>
-                            <div class="stat-value">
-                                <%= stats.isolated || 0 %>
-                            </div>
+                            <div class="stat-value"><%= stats.isolated || 0 %></div>
+                        </div>
+                        <div class="stat-card <%= filter === 'inactive' ? 'active-filter' : '' %>"
+                             style="cursor:pointer;background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);"
+                             onclick="window.location.href='/customers?filter=inactive<%= search ? '&search='+search : '' %>'">
+                            <div class="stat-label" style="color:#94A3B8;">Non-Aktif</div>
+                            <div class="stat-value" style="color:#64748B;"><%= stats.inactive || 0 %></div>
                         </div>
                     </div>
 
@@ -275,10 +275,19 @@
                                             </td>
                                             <td>
                                                 <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-                                                    <span class="badge badge-<%= c.status %>">
-                                                        <%= c.status==='active' ? t.active : t.isolated_short %>
-                                                    </span>
-                                                    <% if(c.installation_status === 'pending') { %>
+                                                    <% if(c.status==='active') { %>
+                                                        <span class="badge badge-active"><%= t.active %></span>
+                                                    <% } else if(c.status==='isolated') { %>
+                                                        <span class="badge badge-isolated"><%= t.isolated_short %></span>
+                                                    <% } else if(c.status==='inactive') { %>
+                                                        <span class="badge" style="background:rgba(100,116,139,.15);color:#94A3B8;border:1px solid rgba(100,116,139,.3);">⛔ Non-Aktif</span>
+                                                        <% if(c.inactive_at) { %>
+                                                            <span style="font-size:10px;color:var(--muted);" title="<%= c.inactive_reason||'' %>">
+                                                                sejak <%= new Date(c.inactive_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) %>
+                                                            </span>
+                                                        <% } %>
+                                                    <% } %>
+                                                    <% if(c.installation_status === 'pending' && c.status !== 'inactive') { %>
                                                         <span onclick="markInstalled(<%= c.id %>)" title="Klik untuk tandai sudah terpasang"
                                                             class="badge" style="background:rgba(245,158,11,0.15); color:#F59E0B; font-size:10px; border:1px solid rgba(245,158,11,0.3); white-space:nowrap; cursor:pointer;">
                                                             ⚠ PENDING INSTALL
@@ -288,38 +297,55 @@
                                             </td>
                                             <td>
                                                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                                                    <!-- Bayar -->
+                                                <% if(c.status === 'inactive') { %>
+                                                    <!-- Non-aktif: hanya Aktifkan Kembali & Edit & Hapus -->
+                                                    <button onclick="reactivateCustomer(<%= c.id %>, '<%= c.name.replace(/'/g,\"\\\\'\" ) %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Aktifkan kembali pelanggan ini">
+                                                        ✅ Aktifkan Kembali
+                                                    </button>
+                                                    <button onclick='editCustomer(<%- JSON.stringify(c) %>)'
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;">
+                                                        ✏️ Edit
+                                                    </button>
+                                                    <button onclick="deleteItem('/customers/<%= c.id %>','<%= t.confirm_delete_cust %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;">
+                                                        🗑 Hapus
+                                                    </button>
+                                                <% } else { %>
+                                                    <!-- Aktif / Isolir: tampilkan semua tombol -->
                                                     <a href="/customers/<%= c.id %>/pay"
                                                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;"
                                                         title="Buat tagihan / pembayaran">
                                                         💰 Bayar
                                                     </a>
-                                                    <!-- Edit -->
                                                     <button onclick='editCustomer(<%- JSON.stringify(c) %>)'
                                                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
                                                         title="Edit data pelanggan">
                                                         ✏️ Edit
                                                     </button>
-                                                    <!-- Isolir / Aktifkan -->
                                                     <% if(c.status==='isolated') { %>
                                                     <button onclick="doAction('/customers/<%= c.id %>/unisolate','<%= t.confirm_unisolate_cust %>')"
-                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
-                                                        title="Aktifkan kembali pelanggan">
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;">
                                                         🔓 Aktifkan
                                                     </button>
                                                     <% } else { %>
                                                     <button onclick="doAction('/customers/<%= c.id %>/isolate','<%= t.confirm_isolate_cust %>')"
-                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(245,158,11,.12);color:#F59E0B;border:1px solid rgba(245,158,11,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
-                                                        title="Isolir pelanggan (putus layanan)">
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(245,158,11,.12);color:#F59E0B;border:1px solid rgba(245,158,11,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;">
                                                         🔒 Isolir
                                                     </button>
                                                     <% } %>
-                                                    <!-- Hapus -->
+                                                    <!-- Nonaktifkan -->
+                                                    <button onclick="openDeactivateModal(<%= c.id %>, '<%= c.name.replace(/'/g,\"\\\\'\" ) %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(100,116,139,.12);color:#94A3B8;border:1px solid rgba(100,116,139,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Nonaktifkan (berhenti berlangganan)">
+                                                        ⛔ Nonaktifkan
+                                                    </button>
                                                     <button onclick="deleteItem('/customers/<%= c.id %>','<%= t.confirm_delete_cust %>')"
-                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
-                                                        title="Hapus pelanggan permanen">
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;">
                                                         🗑 Hapus
                                                     </button>
+                                                <% } %>
                                                 </div>
                                             </td>
                                         </tr>
@@ -664,7 +690,85 @@ async function markInstalled(id) {
     if (d.success) location.reload();
     else alert(d.message || 'Gagal update');
 }
+
+// ── Nonaktifkan Pelanggan ──
+let _deactivateId = null;
+function openDeactivateModal(id, name) {
+    _deactivateId = id;
+    document.getElementById('deactivateName').textContent = name;
+    document.getElementById('deactivateReason').value = '';
+    document.getElementById('modalDeactivate').style.display = 'flex';
+}
+function closeDeactivateModal() {
+    document.getElementById('modalDeactivate').style.display = 'none';
+    _deactivateId = null;
+}
+async function confirmDeactivate() {
+    if (!_deactivateId) return;
+    const reason = document.getElementById('deactivateReason').value.trim();
+    try {
+        const res = await fetch(`/customers/${_deactivateId}/deactivate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        closeDeactivateModal();
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) setTimeout(() => location.reload(), 1200);
+    } catch (e) { showToast('Terjadi kesalahan', 'error'); }
+}
+
+// ── Aktifkan Kembali ──
+async function reactivateCustomer(id, name) {
+    if (!confirm(`Aktifkan kembali pelanggan "${name}"?\nStatus akan kembali menjadi Aktif dan PPPoE akan diaktifkan.`)) return;
+    try {
+        const res = await fetch(`/customers/${id}/reactivate`, { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'error');
+        if (data.success) setTimeout(() => location.reload(), 1200);
+    } catch (e) { showToast('Terjadi kesalahan', 'error'); }
+}
 </script>
+
+<!-- Modal Nonaktifkan Pelanggan -->
+<div id="modalDeactivate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:28px 30px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+            <div style="width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.12);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">⛔</div>
+            <div>
+                <div style="font-weight:700;font-size:16px;">Nonaktifkan Pelanggan</div>
+                <div id="deactivateName" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
+            </div>
+        </div>
+
+        <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13px;line-height:1.6;">
+            Pelanggan yang dinonaktifkan akan:
+            <ul style="margin:6px 0 0 16px;padding:0;">
+                <li>Tidak bisa login ke portal pelanggan</li>
+                <li>Tidak mendapat tagihan bulanan otomatis</li>
+                <li>Koneksi PPPoE diputus di MikroTik</li>
+                <li>Data tetap tersimpan (bisa diaktifkan kembali)</li>
+            </ul>
+        </div>
+
+        <label style="font-size:13px;font-weight:600;margin-bottom:6px;display:block;">Alasan Penonaktifan <span style="color:var(--muted);font-weight:400;">(opsional)</span></label>
+        <textarea id="deactivateReason" rows="3" placeholder="Contoh: Pindah rumah, ganti provider, tunggakan tidak dibayar..."
+            style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--sub-bg);color:var(--text);font-size:13px;font-family:'Outfit',sans-serif;resize:vertical;box-sizing:border-box;margin-bottom:18px;"></textarea>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="closeDeactivateModal()"
+                style="padding:10px 20px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;">
+                Batal
+            </button>
+            <button onclick="confirmDeactivate()"
+                style="padding:10px 20px;border-radius:10px;border:none;background:linear-gradient(135deg,#EF4444,#DC2626);color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                ⛔ Ya, Nonaktifkan
+            </button>
+        </div>
+    </div>
+</div>
+
 </body>
 
 </html>

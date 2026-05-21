@@ -18,12 +18,15 @@ router.get('/', async (req, res) => {
         let conditions = [];
         let params = [];
 
-        if (filter === 'active') conditions.push("c.status = 'active'");
+        if (filter === 'active')   conditions.push("c.status = 'active'");
         else if (filter === 'isolated') conditions.push("c.status = 'isolated'");
+        else if (filter === 'inactive') conditions.push("c.status = 'inactive'");
         else if (filter === 'unpaid') {
             const m = new Date().getMonth() + 1;
             const y = new Date().getFullYear();
             conditions.push(`c.status = 'active' AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id = c.id AND MONTH(i.due_date) = ${m} AND YEAR(i.due_date) = ${y} AND i.status = 'paid')`);
+        } else {
+            // default 'all' — exclude nothing, show all statuses
         }
         if (search) {
             conditions.push("(c.name LIKE ? OR c.phone LIKE ? OR c.pppoe_username LIKE ?)");
@@ -34,26 +37,27 @@ router.get('/', async (req, res) => {
 
         const [customers] = await pool.query(
             `SELECT c.*, p.name as package_name, p.price as package_price, r.name as router_name
-             FROM customers c 
+             FROM customers c
              LEFT JOIN packages p ON c.package_id = p.id
              LEFT JOIN routers r ON c.router_id = r.id
              ${whereClause} ORDER BY c.created_at DESC LIMIT ${perPage} OFFSET ${offset}`,
             params
         );
 
-        const [[{ total }]] = await pool.query(`SELECT COUNT(*) as total FROM customers c ${whereClause}`, params);
-        const [[{ activeCount }]] = await pool.query("SELECT COUNT(*) as activeCount FROM customers WHERE status = 'active'");
+        const [[{ total }]]        = await pool.query(`SELECT COUNT(*) as total FROM customers c ${whereClause}`, params);
+        const [[{ activeCount }]]   = await pool.query("SELECT COUNT(*) as activeCount   FROM customers WHERE status = 'active'");
         const [[{ isolatedCount }]] = await pool.query("SELECT COUNT(*) as isolatedCount FROM customers WHERE status = 'isolated'");
-        const [[{ totalCount }]] = await pool.query("SELECT COUNT(*) as totalCount FROM customers");
-        const [packages] = await pool.query('SELECT * FROM packages ORDER BY name ASC');
-        const [routers] = await pool.query('SELECT * FROM routers ORDER BY name ASC');
-        const [odps] = await pool.query("SELECT id, name FROM map_objects WHERE type = 'odp' ORDER BY name ASC");
+        const [[{ inactiveCount }]] = await pool.query("SELECT COUNT(*) as inactiveCount FROM customers WHERE status = 'inactive'");
+        const [[{ totalCount }]]    = await pool.query("SELECT COUNT(*) as totalCount FROM customers");
+        const [packages]    = await pool.query('SELECT * FROM packages ORDER BY name ASC');
+        const [routers]     = await pool.query('SELECT * FROM routers ORDER BY name ASC');
+        const [odps]        = await pool.query("SELECT id, name FROM map_objects WHERE type = 'odp' ORDER BY name ASC");
         const [technicians] = await pool.query("SELECT id, username, telegram_id FROM users WHERE role = 'technician' ORDER BY username ASC");
 
         res.render('customers', {
             user: req.session, customers, packages, routers, odps, technicians,
             pagination: { total, page, perPage, totalPages: Math.ceil(total / perPage) },
-            stats: { total: totalCount, active: activeCount, isolated: isolatedCount },
+            stats: { total: totalCount, active: activeCount, isolated: isolatedCount, inactive: inactiveCount },
             search, filter, currentPage: 'customers'
         });
     } catch (err) {
@@ -141,6 +145,62 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// POST - Deactivate customer (berhenti berlangganan)
+router.post('/:id/deactivate', async (req, res) => {
+    try {
+        const { reason } = req.body;
+        const [[customer]] = await pool.query(
+            'SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?',
+            [req.params.id]
+        );
+        if (!customer) return res.status(404).json({ success: false, message: 'Customer tidak ditemukan' });
+        if (customer.status === 'inactive') return res.json({ success: false, message: 'Customer sudah non-aktif' });
+
+        // Set inactive in DB
+        await pool.query(
+            "UPDATE customers SET status='inactive', inactive_at=NOW(), inactive_reason=? WHERE id=?",
+            [reason || null, req.params.id]
+        );
+
+        // Disable PPPoE on MikroTik (same as isolate)
+        if (customer.pppoe_username && customer.r_ip) {
+            const routerData = { ip_address: customer.r_ip, username: customer.r_user, password: customer.r_pass, port: customer.r_port };
+            await mikrotik.disablePPPoESecret(routerData, customer.pppoe_username).catch(() => {});
+        }
+
+        res.json({ success: true, message: `Pelanggan ${customer.name} berhasil dinonaktifkan` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST - Reactivate customer
+router.post('/:id/reactivate', async (req, res) => {
+    try {
+        const [[customer]] = await pool.query(
+            'SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?',
+            [req.params.id]
+        );
+        if (!customer) return res.status(404).json({ success: false, message: 'Customer tidak ditemukan' });
+        if (customer.status !== 'inactive') return res.json({ success: false, message: 'Customer bukan non-aktif' });
+
+        await pool.query(
+            "UPDATE customers SET status='active', inactive_at=NULL, inactive_reason=NULL WHERE id=?",
+            [req.params.id]
+        );
+
+        // Re-enable PPPoE on MikroTik
+        if (customer.pppoe_username && customer.r_ip) {
+            const routerData = { ip_address: customer.r_ip, username: customer.r_user, password: customer.r_pass, port: customer.r_port };
+            await mikrotik.enablePPPoESecret(routerData, customer.pppoe_username).catch(() => {});
+        }
+
+        res.json({ success: true, message: `Pelanggan ${customer.name} berhasil diaktifkan kembali` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // POST - Isolate (also disable in MikroTik + send WA)
 router.post('/:id/isolate', async (req, res) => {
     try {
@@ -149,6 +209,7 @@ router.post('/:id/isolate', async (req, res) => {
             [req.params.id]
         );
         if (!customer) return res.status(404).json({ success: false, message: 'Customer tidak ditemukan' });
+        if (customer.status === 'inactive') return res.status(400).json({ success: false, message: 'Tidak bisa isolir: pelanggan sudah non-aktif' });
 
         await pool.query("UPDATE customers SET status='isolated' WHERE id=?", [req.params.id]);
 
