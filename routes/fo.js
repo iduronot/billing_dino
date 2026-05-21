@@ -75,8 +75,9 @@ router.get('/nodes', async (req, res) => {
             LEFT JOIN fo_cores  co ON co.id=n.feed_core_id
             ${where} ORDER BY n.type, n.name ASC`, params);
         const [[nstats]] = await pool.query(`SELECT COUNT(*) as total, SUM(type='ODP') as odp, SUM(type='ODC') as odc, SUM(type='OLT') as olt, SUM(type='Tiang') as tiang, SUM(status='damaged') as damaged FROM fo_nodes`);
-        const [allNodes] = await pool.query('SELECT id,name,type FROM fo_nodes ORDER BY type,name ASC');
-        res.render('fo_nodes', { user: req.session, nodes, nstats: nstats||{}, allNodes, typeFilter:type, statusFilter:status, search, currentPage:'fo' });
+        const [allNodes]   = await pool.query('SELECT id,name,type FROM fo_nodes ORDER BY type,name ASC');
+        const [nodeTypes]  = await pool.query('SELECT * FROM fo_node_types ORDER BY is_default DESC, name ASC');
+        res.render('fo_nodes', { user: req.session, nodes, nstats: nstats||{}, allNodes, nodeTypes, typeFilter:type, statusFilter:status, search, currentPage:'fo' });
     } catch(err) { res.status(500).send("Error: " + err.message); }
 });
 
@@ -245,6 +246,59 @@ router.delete('/api/nodes/:id', requireAdmin, async (req, res) => {
         for (const a of assignments) await updateCoreStatus(a.core_id);
         res.json({ success:true, message:'Node dihapus' });
     } catch(e) { res.status(500).json({ success:false, message:e.message }); }
+});
+
+// ══════════════════════ API NODE TYPES ══════════════════════
+
+router.get('/api/node-types', async (req, res) => {
+    try {
+        const [types] = await pool.query('SELECT * FROM fo_node_types ORDER BY is_default DESC, name ASC');
+        res.json({ success: true, types });
+    } catch(e) { res.json({ success: false, message: e.message }); }
+});
+
+router.post('/api/node-types', requireAdmin, async (req, res) => {
+    try {
+        const { name, icon, color } = req.body;
+        if (!name) return res.json({ success: false, message: 'Nama tipe wajib diisi' });
+        await pool.query('INSERT INTO fo_node_types (name, icon, color) VALUES (?,?,?)',
+            [name.trim(), icon || '📍', color || '#94A3B8']);
+        res.json({ success: true, message: `Tipe "${name}" berhasil ditambahkan` });
+    } catch(e) {
+        if (e.code === 'ER_DUP_ENTRY') return res.json({ success: false, message: 'Nama tipe sudah ada' });
+        res.json({ success: false, message: e.message });
+    }
+});
+
+router.put('/api/node-types/:id', requireAdmin, async (req, res) => {
+    try {
+        const { name, icon, color } = req.body;
+        if (!name) return res.json({ success: false, message: 'Nama tipe wajib diisi' });
+        const [[existing]] = await pool.query('SELECT * FROM fo_node_types WHERE id=?', [req.params.id]);
+        if (!existing) return res.json({ success: false, message: 'Tipe tidak ditemukan' });
+        // Jika nama berubah, update juga di fo_nodes
+        if (existing.name !== name.trim()) {
+            await pool.query('UPDATE fo_nodes SET type=? WHERE type=?', [name.trim(), existing.name]);
+        }
+        await pool.query('UPDATE fo_node_types SET name=?, icon=?, color=? WHERE id=?',
+            [name.trim(), icon || '📍', color || '#94A3B8', req.params.id]);
+        res.json({ success: true, message: 'Tipe berhasil diperbarui' });
+    } catch(e) {
+        if (e.code === 'ER_DUP_ENTRY') return res.json({ success: false, message: 'Nama tipe sudah ada' });
+        res.json({ success: false, message: e.message });
+    }
+});
+
+router.delete('/api/node-types/:id', requireAdmin, async (req, res) => {
+    try {
+        const [[t]] = await pool.query('SELECT * FROM fo_node_types WHERE id=?', [req.params.id]);
+        if (!t) return res.json({ success: false, message: 'Tipe tidak ditemukan' });
+        if (t.is_default) return res.json({ success: false, message: 'Tipe bawaan tidak dapat dihapus' });
+        const [[used]] = await pool.query('SELECT COUNT(*) as c FROM fo_nodes WHERE type=?', [t.name]);
+        if (used.c > 0) return res.json({ success: false, message: `Tipe "${t.name}" masih digunakan oleh ${used.c} node` });
+        await pool.query('DELETE FROM fo_node_types WHERE id=?', [req.params.id]);
+        res.json({ success: true, message: `Tipe "${t.name}" dihapus` });
+    } catch(e) { res.json({ success: false, message: e.message }); }
 });
 
 // ══════════════════════ API CABLES ══════════════════════

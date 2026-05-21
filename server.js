@@ -537,7 +537,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     CREATE TABLE IF NOT EXISTS fo_nodes (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(150) NOT NULL,
-      type ENUM('OLT','ODC','ODP','Splitter','Tiang','Closure','HandHole') NOT NULL,
+      type VARCHAR(50) NOT NULL DEFAULT 'ODP',
       lat DECIMAL(10,8) NULL,
       lng DECIMAL(11,8) NULL,
       address TEXT NULL,
@@ -561,6 +561,41 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
 
   // Tambah kolom relasi kabel ke fo_nodes yang sudah ada
   checkAndAddColumn('users', 'phone', 'VARCHAR(20) NULL');
+
+  // ── Tabel Tipe Node FO (dinamis) ──
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS fo_node_types (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(50) NOT NULL UNIQUE,
+      icon VARCHAR(10) DEFAULT '📍',
+      color VARCHAR(20) DEFAULT '#94A3B8',
+      is_default TINYINT(1) DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).then(() => {
+    // Seed default types jika belum ada
+    const defaults = [
+      ['OLT',      '🏢', '#10B981', 1],
+      ['ODC',      '📦', '#8B5CF6', 1],
+      ['ODP',      '📍', '#3B82F6', 1],
+      ['Splitter', '🔀', '#F59E0B', 1],
+      ['Tiang',    '🪝', '#94A3B8', 1],
+      ['Closure',  '🔒', '#06B6D4', 1],
+      ['HandHole', '🕳', '#EF4444', 1],
+    ];
+    for (const [name, icon, color, is_default] of defaults) {
+      pool.query('INSERT IGNORE INTO fo_node_types (name, icon, color, is_default) VALUES (?,?,?,?)', [name, icon, color, is_default]).catch(()=>{});
+    }
+  }).catch(console.error);
+
+  // Migrasi: ubah fo_nodes.type dari ENUM ke VARCHAR agar bisa pakai tipe custom
+  pool.query(`SHOW COLUMNS FROM fo_nodes LIKE 'type'`).then(([rows]) => {
+    if (rows.length > 0 && rows[0].Type.toLowerCase().startsWith('enum')) {
+      pool.query(`ALTER TABLE fo_nodes MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'ODP'`)
+        .then(() => console.log('[DB Migration] fo_nodes.type: ENUM → VARCHAR(50)'))
+        .catch(e => console.error('[DB Migration] fo_nodes.type modify failed:', e.message));
+    }
+  }).catch(()=>{});
 
   // ── Tabel Presensi Teknisi ──
   pool.query(`

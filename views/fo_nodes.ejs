@@ -42,10 +42,11 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
             <div>
                 <h1 class="page-title" style="margin:0;">📍 Manajemen Node FO</h1>
-                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">OLT, ODC, ODP, Splitter, Tiang, Closure</p>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);"><%= nodeTypes.map(t=>t.icon+' '+t.name).join(', ') %></p>
             </div>
             <div style="display:flex;gap:8px;">
                 <a href="/fo" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;">🗺 Kembali ke Peta</a>
+                <button class="btn" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);font-size:12px;" onclick="openTypeModal()">⚙ Kelola Tipe</button>
                 <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Node</button>
             </div>
         </div>
@@ -71,8 +72,8 @@
             <input type="text" name="search" value="<%= search %>" placeholder="Cari nama, alamat...">
             <select name="type">
                 <option value="">Semua Tipe</option>
-                <% ['OLT','ODC','ODP','Splitter','Tiang','Closure','HandHole'].forEach(t => { %>
-                <option value="<%= t %>" <%= typeFilter===t?'selected':'' %>><%= t %></option>
+                <% nodeTypes.forEach(t => { %>
+                <option value="<%= t.name %>" <%= typeFilter===t.name?'selected':'' %>><%= t.icon %> <%= t.name %></option>
                 <% }) %>
             </select>
             <select name="status">
@@ -92,14 +93,19 @@
                     <th>Kabel Induk</th><th>Kapasitas Port</th><th>Brand/Model</th><th>Status</th><th>Aksi</th>
                 </tr></thead>
                 <tbody>
+                <%
+                const typeColorMap={};
+                const typeIconMap={};
+                nodeTypes.forEach(t=>{ typeColorMap[t.name]=t.color; typeIconMap[t.name]=t.icon; });
+                %>
                 <% if(nodes.length > 0){ %><% nodes.forEach(n => {
-                    const typeColors={OLT:'#10B981',ODC:'#8B5CF6',ODP:'#3B82F6',Splitter:'#F59E0B',Tiang:'#94A3B8',Closure:'#06B6D4',HandHole:'#EF4444'};
                     const pct=n.capacity>0?Math.round((n.used_ports_count/n.capacity)*100):0;
                     const barColor=pct>=80?'#EF4444':pct>=60?'#F59E0B':'#10B981';
-                    const emojis={OLT:'🏢',ODC:'📦',ODP:'📍',Splitter:'🔀',Tiang:'🪝',Closure:'🔒',HandHole:'🕳'};
+                    const tColor=typeColorMap[n.type]||'#94A3B8';
+                    const tIcon=typeIconMap[n.type]||'📍';
                 %><tr>
-                    <td style="font-weight:600;"><%= emojis[n.type]||'📍' %> <%= n.name %></td>
-                    <td><span class="type-badge" style="background:<%=typeColors[n.type]||'#94A3B8'%>22;color:<%=typeColors[n.type]||'#94A3B8'%>;border:1px solid <%=typeColors[n.type]||'#94A3B8'%>44;"><%= n.type %></span></td>
+                    <td style="font-weight:600;"><%= tIcon %> <%= n.name %></td>
+                    <td><span class="type-badge" style="background:<%= tColor %>22;color:<%= tColor %>;border:1px solid <%= tColor %>44;"><%= n.type %></span></td>
                     <td style="font-size:12px;color:var(--muted);max-width:160px;"><%= n.address||'-' %></td>
                     <td style="font-size:12px;color:var(--muted);"><%= n.parent_name||'-' %></td>
                     <td>
@@ -146,7 +152,7 @@
             <input type="hidden" id="nId">
             <div class="form-grid">
                 <div class="form-group full"><label>Nama *</label><input type="text" id="nName" class="form-control" required placeholder="ODP-JlMerdeka-01"></div>
-                <div class="form-group"><label>Tipe *</label><select id="nType" class="form-control"><% ['OLT','ODC','ODP','Splitter','Tiang','Closure','HandHole'].forEach(t=>{%><option value="<%= t %>"><%= t %></option><%})%></select></div>
+                <div class="form-group"><label>Tipe *</label><select id="nType" class="form-control"><% nodeTypes.forEach(t=>{%><option value="<%= t.name %>"><%= t.icon %> <%= t.name %></option><%})%></select></div>
                 <div class="form-group"><label>Kapasitas Port</label><input type="number" id="nCap" class="form-control" placeholder="0" min="0"></div>
                 <div class="form-group"><label>Brand</label><input type="text" id="nBrand" class="form-control" placeholder="Fiberhome"></div>
                 <div class="form-group"><label>Model</label><input type="text" id="nModel" class="form-control" placeholder="ODP-T08"></div>
@@ -245,6 +251,108 @@ function getNodeGPS() {
 }
 
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+// ── Manajemen Tipe Node ──
+function openTypeModal(){ loadNodeTypes(); document.getElementById('typeModal').style.display='flex'; }
+function closeTypeModal(){ document.getElementById('typeModal').style.display='none'; }
+
+async function loadNodeTypes(){
+    const res  = await fetch('/fo/api/node-types');
+    const data = await res.json();
+    if(!data.success) return;
+    const list = document.getElementById('typeList');
+    list.innerHTML = data.types.map(t => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--sub-bg);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;">
+            <div style="width:14px;height:14px;border-radius:4px;background:${t.color};flex-shrink:0;"></div>
+            <span style="font-size:18px;line-height:1;">${t.icon}</span>
+            <span style="font-weight:600;font-size:14px;flex:1;">${t.name}</span>
+            ${t.is_default ? '<span style="font-size:10px;color:var(--muted);padding:2px 7px;background:var(--hover-bg);border-radius:10px;">bawaan</span>' : ''}
+            <button onclick="editTypeRow(${t.id},'${t.name}','${t.icon}','${t.color}')" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--card-bg);color:var(--muted);cursor:pointer;font-size:11px;"><i class="fas fa-edit"></i></button>
+            ${!t.is_default ? `<button onclick="deleteNodeType(${t.id},'${t.name}')" style="width:28px;height:28px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;cursor:pointer;font-size:11px;"><i class="fas fa-trash"></i></button>` : '<div style="width:28px;"></div>'}
+        </div>`).join('');
+}
+
+function editTypeRow(id,name,icon,color){
+    document.getElementById('tId').value    = id;
+    document.getElementById('tName').value  = name;
+    document.getElementById('tIcon').value  = icon;
+    document.getElementById('tColor').value = color;
+    document.getElementById('typeFormTitle').textContent = 'Edit Tipe';
+    document.getElementById('typeFormSection').style.display = '';
+}
+
+function newTypeRow(){
+    document.getElementById('tId').value    = '';
+    document.getElementById('tName').value  = '';
+    document.getElementById('tIcon').value  = '📍';
+    document.getElementById('tColor').value = '#94A3B8';
+    document.getElementById('typeFormTitle').textContent = 'Tambah Tipe Baru';
+    document.getElementById('typeFormSection').style.display = '';
+    document.getElementById('tName').focus();
+}
+
+async function saveNodeType(){
+    const id    = document.getElementById('tId').value;
+    const name  = document.getElementById('tName').value.trim();
+    const icon  = document.getElementById('tIcon').value.trim() || '📍';
+    const color = document.getElementById('tColor').value;
+    if(!name) return showToast('Nama tipe wajib diisi','error');
+    const url    = id ? `/fo/api/node-types/${id}` : '/fo/api/node-types';
+    const method = id ? 'PUT' : 'POST';
+    const res    = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,icon,color})});
+    const d      = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success){
+        document.getElementById('typeFormSection').style.display='none';
+        loadNodeTypes();
+        // Refresh dropdown di form node
+        const sel = document.getElementById('nType');
+        if(sel){ const opt=document.createElement('option'); opt.value=name; opt.textContent=icon+' '+name; if(!id) sel.appendChild(opt); }
+    }
+}
+
+async function deleteNodeType(id, name){
+    if(!confirm(`Hapus tipe "${name}"?`)) return;
+    const res = await fetch(`/fo/api/node-types/${id}`,{method:'DELETE'});
+    const d   = await res.json();
+    showToast(d.message, d.success?'success':'error');
+    if(d.success) loadNodeTypes();
+}
 </script>
+
+<!-- Modal Tipe Node -->
+<div class="modal-overlay" id="typeModal" onclick="if(event.target===this)closeTypeModal()">
+    <div class="modal-card" style="max-width:480px;">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;">⚙ Kelola Tipe Node</h3>
+            <button onclick="closeTypeModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div id="typeList" style="max-height:280px;overflow-y:auto;margin-bottom:14px;"></div>
+        <button onclick="newTypeRow()" class="btn btn-primary" style="width:100%;margin-bottom:14px;"><i class="fas fa-plus"></i> Tambah Tipe Baru</button>
+        <!-- Form tambah/edit tipe -->
+        <div id="typeFormSection" style="display:none;background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:14px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:10px;" id="typeFormTitle">Tambah Tipe Baru</div>
+            <input type="hidden" id="tId">
+            <div style="display:grid;grid-template-columns:1fr 60px 80px;gap:8px;margin-bottom:10px;">
+                <div>
+                    <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">NAMA TIPE *</label>
+                    <input id="tName" class="form-control" placeholder="Contoh: Rumah Kabel" style="width:100%">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">IKON</label>
+                    <input id="tIcon" class="form-control" placeholder="📍" maxlength="4" style="text-align:center;font-size:18px;">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">WARNA</label>
+                    <input id="tColor" type="color" class="form-control" style="padding:2px 4px;height:38px;cursor:pointer;">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button onclick="document.getElementById('typeFormSection').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
+                <button onclick="saveNodeType()" class="btn btn-primary"><i class="fas fa-save"></i> Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
 </body>
 </html>
