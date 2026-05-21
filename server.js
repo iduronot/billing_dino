@@ -1298,7 +1298,39 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
 
       const [[oltStats]]    = await pool.query('SELECT COUNT(*) as total, SUM(CASE WHEN status="Up" THEN 1 ELSE 0 END) as online FROM hioso_onus');
       const [[routerStats]] = await pool.query('SELECT COUNT(*) as total, SUM(CASE WHEN status="active" THEN 1 ELSE 0 END) as online FROM routers');
-      const [[acsStats]]    = await pool.query('SELECT COUNT(*) as total, SUM(CASE WHEN status="online" THEN 1 ELSE 0 END) as online, SUM(CASE WHEN customer_id IS NOT NULL THEN 1 ELSE 0 END) as linked FROM acs_devices');
+
+      // Fetch ACS stats live from GenieACS API (same source as /acs menu)
+      let acsStats = { total: 0, online: 0, linked: 0 };
+      try {
+        const [acsSettingsRows] = await pool.query(
+          "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('acs_url','acs_user','acs_pass')"
+        );
+        const acsSets = {};
+        acsSettingsRows.forEach(r => { acsSets[r.setting_key] = r.setting_value; });
+        if (acsSets.acs_url) {
+          const _axios = require('axios');
+          const acsResp = await _axios.get(`${acsSets.acs_url}/devices`, {
+            timeout: 8000,
+            auth: acsSets.acs_user ? { username: acsSets.acs_user, password: acsSets.acs_pass } : undefined,
+            params: { projection: '_id,_lastInform' }
+          });
+          if (Array.isArray(acsResp.data)) {
+            const _now = Date.now();
+            acsStats.total  = acsResp.data.length;
+            acsStats.online = acsResp.data.filter(d => d._lastInform && (_now - new Date(d._lastInform).getTime() < 300000)).length;
+          }
+        }
+        // linked count from local DB (customer association)
+        const [[{ linked }]] = await pool.query('SELECT COALESCE(SUM(CASE WHEN customer_id IS NOT NULL THEN 1 ELSE 0 END),0) as linked FROM acs_devices');
+        acsStats.linked = parseInt(linked) || 0;
+      } catch (acsErr) {
+        console.error('[Dashboard] GenieACS live stats error:', acsErr.message);
+        // Fallback to local DB
+        try {
+          const [[dbAcs]] = await pool.query('SELECT COUNT(*) as total, SUM(CASE WHEN status="online" THEN 1 ELSE 0 END) as online, SUM(CASE WHEN customer_id IS NOT NULL THEN 1 ELSE 0 END) as linked FROM acs_devices');
+          if (dbAcs) acsStats = { total: parseInt(dbAcs.total)||0, online: parseInt(dbAcs.online)||0, linked: parseInt(dbAcs.linked)||0 };
+        } catch(_) {}
+      }
 
       // Pengeluaran bulan berjalan
       const [[expenseStats]] = await pool.query(`
@@ -1488,6 +1520,33 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         dateFrom: '', dateTo: '',
         currentPage: 'dashboard'
       });
+    }
+  });
+
+  // ── API: Live PPPoE active sessions per router (for dashboard card) ──
+  app.get('/api/dashboard/pppoe-live', adminOnly, async (req, res) => {
+    try {
+      const [routers] = await pool.query(
+        "SELECT id, name as router_name, ip_address, username, password, port, status FROM routers WHERE status='active'"
+      );
+      const results = await Promise.all(routers.map(async (r) => {
+        try {
+          const result = await mikrotikHelper.getActiveConnections(r);
+          return {
+            id: r.id,
+            router_name: r.router_name,
+            ip_address: r.ip_address,
+            status: r.status,
+            active_live: result.success ? result.data.length : null,
+            error: result.success ? null : result.message
+          };
+        } catch (e) {
+          return { id: r.id, router_name: r.router_name, ip_address: r.ip_address, status: r.status, active_live: null, error: e.message };
+        }
+      }));
+      res.json({ success: true, data: results });
+    } catch (e) {
+      res.json({ success: false, message: e.message });
     }
   });
 
