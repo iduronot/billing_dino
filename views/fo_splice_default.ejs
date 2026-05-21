@@ -131,9 +131,9 @@
         <div class="splice-wrap">
             <% tubes.forEach(tube => {
                 const tubeColorMap = {
-                    'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
-                    'Putih':'#E2E8F0','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
-                    'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+                    'Biru':'#3B82F6','Oranye':'#F97316','Hijau':'#22C55E','Cokelat':'#92400E',
+                    'Abu-abu':'#94A3B8','Putih':'#E2E8F0','Merah':'#EF4444','Hitam':'#1E293B',
+                    'Kuning':'#EAB308','Ungu':'#8B5CF6','Merah Muda':'#EC4899','Toska':'#06B6D4'
                 };
                 const tColor = tubeColorMap[tube.tube_color] || '#94A3B8';
                 const tDark  = tube.tube_color === 'Putih' || tube.tube_color === 'Kuning';
@@ -152,9 +152,9 @@
                 <div class="core-grid">
                     <% tube.cores.forEach(core => {
                         const cColorMap = {
-                            'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
-                            'Putih':'#CBD5E1','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
-                            'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+                            'Biru':'#3B82F6','Oranye':'#F97316','Hijau':'#22C55E','Cokelat':'#92400E',
+                            'Abu-abu':'#94A3B8','Putih':'#CBD5E1','Merah':'#EF4444','Hitam':'#1E293B',
+                            'Kuning':'#EAB308','Ungu':'#8B5CF6','Merah Muda':'#EC4899','Toska':'#06B6D4'
                         };
                         const cColor = cColorMap[core.core_color] || '#94A3B8';
                         const statusLabel = { available:'Bebas', spliced:'Splice', used:'Drop', broken:'Putus' };
@@ -195,7 +195,7 @@
         <div style="background:var(--sub-bg); border-radius:12px; padding:16px; margin-bottom:16px; font-size:13px; color:var(--muted);">
             <strong style="color:var(--text);">Kabel:</strong> <%= cable.name %><br>
             <strong style="color:var(--text);">Total Core:</strong> <%= cable.core_count %> core<br>
-            Warna tube dan core mengikuti standar ITU-T (Merah, Hijau, Biru, Kuning, Putih, Abu, Coklat, Ungu, Tosca, Hitam, Oranye, Pink)
+            Warna tube dan core mengikuti standar ITU-T (Biru, Oranye, Hijau, Cokelat, Abu-abu, Putih, Merah, Hitam, Kuning, Ungu, Merah Muda, Toska)
         </div>
         <div class="form-group">
             <label>Core per Tube</label>
@@ -304,9 +304,9 @@ function openCoreModal(core) {
     document.getElementById('dropTarget').value   = core.drop_to_node_id || '';
 
     const colorMap = {
-        'Merah':'#EF4444','Hijau':'#22C55E','Biru':'#3B82F6','Kuning':'#EAB308',
-        'Putih':'#CBD5E1','Abu-abu':'#94A3B8','Coklat':'#A16207','Ungu':'#8B5CF6',
-        'Tosca':'#06B6D4','Hitam':'#334155','Oranye':'#F97316','Pink':'#EC4899'
+        'Biru':'#3B82F6','Oranye':'#F97316','Hijau':'#22C55E','Cokelat':'#92400E',
+        'Abu-abu':'#94A3B8','Putih':'#CBD5E1','Merah':'#EF4444','Hitam':'#1E293B',
+        'Kuning':'#EAB308','Ungu':'#8B5CF6','Merah Muda':'#EC4899','Toska':'#06B6D4'
     };
     const cColor = colorMap[core.core_color] || '#94A3B8';
     document.getElementById('coreModalTitle').textContent = `Core #${core.core_number} — ${core.core_color}`;

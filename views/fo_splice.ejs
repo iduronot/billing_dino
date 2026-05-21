@@ -96,7 +96,7 @@
 
         <!-- Tube & Core -->
         <% tubes.forEach(tube => {
-            const TC = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+            const TC = {Biru:'#3B82F6',Oranye:'#F97316',Hijau:'#22C55E',Cokelat:'#92400E','Abu-abu':'#94A3B8',Putih:'#CBD5E1',Merah:'#EF4444',Hitam:'#1E293B',Kuning:'#EAB308',Ungu:'#8B5CF6','Merah Muda':'#EC4899',Toska:'#06B6D4'};
             const tColor = TC[tube.tube_color] || '#94A3B8';
             const tAvail = tube.cores.filter(c=>c.status==='available').length;
         %>
@@ -110,7 +110,7 @@
             </div>
             <div class="core-grid">
             <% tube.cores.forEach(core => {
-                const CC = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+                const CC = {Biru:'#3B82F6',Oranye:'#F97316',Hijau:'#22C55E',Cokelat:'#92400E','Abu-abu':'#94A3B8',Putih:'#CBD5E1',Merah:'#EF4444',Hitam:'#1E293B',Kuning:'#EAB308',Ungu:'#8B5CF6','Merah Muda':'#EC4899',Toska:'#06B6D4'};
                 const cColor = CC[core.core_color] || '#94A3B8';
                 const assigns = core.assignments || [];
             %>
@@ -177,7 +177,7 @@
         </div>
         <div style="background:var(--sub-bg); border-radius:12px; padding:14px; margin-bottom:16px; font-size:13px; color:var(--muted);">
             <b style="color:var(--text);">Kabel:</b> <%= cable.name %> · <b style="color:var(--text);"><%= cable.core_count %> core</b><br>
-            Warna tube & core mengikuti standar ITU-T.
+            Warna tube & core: Biru, Oranye, Hijau, Cokelat, Abu-abu, Putih, Merah, Hitam, Kuning, Ungu, Merah Muda, Toska.
         </div>
         <div class="form-group">
             <label>Core per Tube</label>
@@ -248,7 +248,7 @@
 
 <script>
 const CABLE_ID = <%= cable.id %>;
-const CMAP = {Merah:'#EF4444',Hijau:'#22C55E',Biru:'#3B82F6',Kuning:'#EAB308',Putih:'#CBD5E1','Abu-abu':'#94A3B8',Coklat:'#92400E',Ungu:'#8B5CF6',Tosca:'#06B6D4',Hitam:'#334155',Oranye:'#F97316',Pink:'#EC4899'};
+const CMAP = {Biru:'#3B82F6',Oranye:'#F97316',Hijau:'#22C55E',Cokelat:'#92400E','Abu-abu':'#94A3B8',Putih:'#CBD5E1',Merah:'#EF4444',Hitam:'#1E293B',Kuning:'#EAB308',Ungu:'#8B5CF6','Merah Muda':'#EC4899',Toska:'#06B6D4'};
 
 // ── Generate ──
 function openGenModal() { document.getElementById('genModal').style.display='flex'; }

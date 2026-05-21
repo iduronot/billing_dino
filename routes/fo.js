@@ -9,8 +9,9 @@ const requireAdmin = (req, res, next) => {
     return res.status(403).json({ success: false, message: 'Hanya admin yang dapat melakukan operasi ini' });
 };
 
-const TUBE_COLORS = ['Merah','Hijau','Biru','Kuning','Putih','Abu-abu','Coklat','Ungu','Tosca','Hitam','Oranye','Pink'];
-const CORE_COLORS = ['Merah','Hijau','Biru','Kuning','Putih','Abu-abu','Coklat','Ungu','Tosca','Hitam','Oranye','Pink'];
+// Urutan warna standar ITU-T G.652 untuk tube & core FO
+const TUBE_COLORS = ['Biru','Oranye','Hijau','Cokelat','Abu-abu','Putih','Merah','Hitam','Kuning','Ungu','Merah Muda','Toska'];
+const CORE_COLORS = ['Biru','Oranye','Hijau','Cokelat','Abu-abu','Putih','Merah','Hitam','Kuning','Ungu','Merah Muda','Toska'];
 
 // ══════════════════════ PAGES ══════════════════════
 
