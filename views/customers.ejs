@@ -299,7 +299,8 @@
                                                 <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                                                 <% if(c.status === 'inactive') { %>
                                                     <!-- Non-aktif: hanya Aktifkan Kembali & Edit & Hapus -->
-                                                    <button onclick="reactivateCustomer(<%= c.id %>, '<%= c.name.replace(/'/g,\"\\\\'\" ) %>')"
+                                                    <button onclick="reactivateCustomer(this)"
+                                                        data-id="<%= c.id %>" data-name="<%- c.name.replace(/"/g,'&quot;') %>"
                                                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
                                                         title="Aktifkan kembali pelanggan ini">
                                                         ✅ Aktifkan Kembali
@@ -336,7 +337,8 @@
                                                     </button>
                                                     <% } %>
                                                     <!-- Nonaktifkan -->
-                                                    <button onclick="openDeactivateModal(<%= c.id %>, '<%= c.name.replace(/'/g,\"\\\\'\" ) %>')"
+                                                    <button onclick="openDeactivateModal(this)"
+                                                        data-id="<%= c.id %>" data-name="<%- c.name.replace(/"/g,'&quot;') %>"
                                                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(100,116,139,.12);color:#94A3B8;border:1px solid rgba(100,116,139,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
                                                         title="Nonaktifkan (berhenti berlangganan)">
                                                         ⛔ Nonaktifkan
@@ -693,9 +695,9 @@ async function markInstalled(id) {
 
 // ── Nonaktifkan Pelanggan ──
 let _deactivateId = null;
-function openDeactivateModal(id, name) {
-    _deactivateId = id;
-    document.getElementById('deactivateName').textContent = name;
+function openDeactivateModal(btn) {
+    _deactivateId = btn.dataset.id;
+    document.getElementById('deactivateName').textContent = btn.dataset.name;
     document.getElementById('deactivateReason').value = '';
     document.getElementById('modalDeactivate').style.display = 'flex';
 }
@@ -720,7 +722,9 @@ async function confirmDeactivate() {
 }
 
 // ── Aktifkan Kembali ──
-async function reactivateCustomer(id, name) {
+async function reactivateCustomer(btn) {
+    const id   = btn.dataset.id;
+    const name = btn.dataset.name;
     if (!confirm(`Aktifkan kembali pelanggan "${name}"?\nStatus akan kembali menjadi Aktif dan PPPoE akan diaktifkan.`)) return;
     try {
         const res = await fetch(`/customers/${id}/reactivate`, { method: 'POST' });
