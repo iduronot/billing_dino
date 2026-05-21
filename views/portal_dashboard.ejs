@@ -203,9 +203,9 @@
                 <% } %>
 
                 <!-- Upload bukti bayar -->
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                <div class="proof-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
                     <% if (inv.proof_image) { %>
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
+                    <div class="proof-preview-box" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
                         <img src="<%= inv.proof_image %>" alt="Bukti" onclick="openProofViewer('<%= inv.proof_image %>')" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;flex-shrink:0">
                         <div style="flex:1;min-width:0">
                             <div style="font-size:12px;font-weight:700;color:var(--success)">✅ Bukti Terupload</div>
@@ -218,7 +218,7 @@
                         <i class="fas fa-camera"></i> <%= inv.proof_image ? 'Ganti Bukti Bayar' : 'Upload Bukti Bayar' %>
                     </label>
                     <input type="file" id="proof-<%= inv.id %>" accept="image/*,.pdf" style="display:none" onchange="uploadProof(<%= inv.id %>, this)">
-                    <span id="proof-status-<%= inv.id %>" style="font-size:11px;color:var(--muted);margin-left:8px"></span>
+                    <span style="font-size:11px;color:var(--muted);margin-left:8px"></span>
                 </div>
                 <% } %>
             </div>
@@ -315,9 +315,9 @@
                 </div>
                 <% } %>
                 <!-- Upload bukti bayar -->
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
+                <div class="proof-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)" onclick="event.stopPropagation()">
                     <% if (inv.proof_image) { %>
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
+                    <div class="proof-preview-box" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px">
                         <img src="<%= inv.proof_image %>" alt="Bukti" onclick="openProofViewer('<%= inv.proof_image %>')" style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;flex-shrink:0">
                         <div style="flex:1;min-width:0">
                             <div style="font-size:12px;font-weight:700;color:var(--success)">✅ Bukti Terupload</div>
@@ -929,8 +929,32 @@
             if (statusEl) statusEl.textContent = '';
             if (d.success) {
                 showToast('✅ Bukti pembayaran berhasil diupload!', 'success');
-                const label = input.previousElementSibling;
-                if (label) label.innerHTML = '<i class="fas fa-camera"></i> Ganti Bukti Bayar';
+
+                // Tampilkan preview bukti langsung tanpa reload
+                const wrap = input.closest('.proof-wrap');
+                if (wrap) {
+                    // Hapus preview lama jika ada
+                    const oldPreview = wrap.querySelector('.proof-preview-box');
+                    if (oldPreview) oldPreview.remove();
+
+                    // Buat preview baru
+                    const previewDiv = document.createElement('div');
+                    previewDiv.className = 'proof-preview-box';
+                    previewDiv.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:10px;padding:10px';
+                    previewDiv.innerHTML = `
+                        <img src="${d.path}" alt="Bukti" onclick="openProofViewer('${d.path}')"
+                            style="width:52px;height:52px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;flex-shrink:0">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:12px;font-weight:700;color:var(--success)">✅ Bukti Terupload</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px">Menunggu konfirmasi admin</div>
+                            <button onclick="openProofViewer('${d.path}')" style="margin-top:4px;font-size:11px;background:none;border:none;color:var(--primary);cursor:pointer;padding:0;font-family:'Outfit',sans-serif">Lihat selengkapnya →</button>
+                        </div>`;
+                    wrap.insertBefore(previewDiv, wrap.firstChild);
+
+                    // Ganti teks tombol upload
+                    const label = wrap.querySelector('label');
+                    if (label) label.innerHTML = '<i class="fas fa-camera"></i> Ganti Bukti Bayar';
+                }
             } else {
                 showToast('❌ ' + d.message, 'error');
             }
