@@ -259,6 +259,26 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   checkAndAddColumn('trouble_tickets', 'technician_id', 'INT');
   checkAndAddColumn('inventory', 'price', 'DECIMAL(15,2) DEFAULT 0');
   checkAndAddColumn('inventory', 'min_stock', 'INT DEFAULT 5');
+
+  // ── Perbaiki tipe kolom yang berbeda di DB lama (MODIFY COLUMN) ──
+  const checkAndModifyColumn = async (table, column, definition) => {
+    try {
+      const [rows] = await pool.query(`SHOW COLUMNS FROM ${table} LIKE '${column}'`);
+      if (rows.length > 0) {
+        const current = rows[0].Type.toLowerCase();
+        const needed  = definition.split(' ')[0].toLowerCase();
+        if (!current.startsWith(needed)) {
+          await pool.query(`ALTER TABLE ${table} MODIFY COLUMN ${column} ${definition}`);
+          console.log(`[DB Migration] Modified column ${column} in ${table}: ${current} → ${definition}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[DB Migration] Failed to modify column ${column} in ${table}:`, e.message);
+    }
+  };
+  checkAndModifyColumn('customers', 'pppoe_password', "VARCHAR(100) DEFAULT '123456'");
+  checkAndModifyColumn('customers', 'pppoe_username', 'VARCHAR(100)');
+  checkAndModifyColumn('invoices', 'amount', 'DECIMAL(15,2) NOT NULL DEFAULT 0');
   pool.query(`
     CREATE TABLE IF NOT EXISTS inventory_mutations (
       id INT AUTO_INCREMENT PRIMARY KEY,
