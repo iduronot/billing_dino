@@ -533,7 +533,7 @@
                 </div>
 
                 <% if ((pppoePerRouter||[]).length > 0) { %>
-                <div id="pppoe-router-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;padding:4px 0 6px;">
+                <div id="pppoe-router-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;padding:4px 0 6px;">
                 <% pppoePerRouter.forEach(r => {
                     const total    = n(r.total_users);
                     const active   = n(r.active_users);
@@ -543,17 +543,16 @@
                     const barColor = pct >= 80 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
                 %>
                 <div class="pppoe-router-card" data-router-id="<%= r.id %>"
-                     style="background:var(--sub-bg);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden;">
+                     data-total="<%= total %>" data-active="<%= active %>" data-isolated="<%= isolated %>"
+                     style="background:var(--sub-bg);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:13px;position:relative;overflow:hidden;">
 
                     <!-- Accent bar top -->
-                    <div style="position:absolute;top:0;left:0;right:0;height:3px;background:<%= isUp?'linear-gradient(90deg,#10B981,#34D399)':'linear-gradient(90deg,#EF4444,#F87171)' %>;border-radius:14px 14px 0 0;"></div>
+                    <div class="pppoe-accent" style="position:absolute;top:0;left:0;right:0;height:3px;background:<%= isUp?'linear-gradient(90deg,#10B981,#34D399)':'linear-gradient(90deg,#EF4444,#F87171)' %>;border-radius:14px 14px 0 0;"></div>
 
                     <!-- Header: nama + status -->
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
                         <div style="display:flex;align-items:center;gap:9px;">
-                            <div style="width:36px;height:36px;border-radius:10px;background:<%= isUp?'rgba(16,185,129,.15)':'rgba(239,68,68,.12)' %>;display:flex;align-items:center;justify-content:center;font-size:18px;">
-                                🖥️
-                            </div>
+                            <div style="width:36px;height:36px;border-radius:10px;background:<%= isUp?'rgba(16,185,129,.15)':'rgba(239,68,68,.12)' %>;display:flex;align-items:center;justify-content:center;font-size:18px;">🖥️</div>
                             <div>
                                 <div style="font-weight:700;font-size:14px;line-height:1.2;"><%= r.router_name %></div>
                                 <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:1px;"><%= r.ip_address||'-' %></div>
@@ -565,43 +564,59 @@
                         </span>
                     </div>
 
-                    <!-- Sesi Live — angka besar -->
-                    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--card-bg);border-radius:10px;padding:10px 14px;">
-                        <div>
-                            <div style="font-size:11px;color:var(--muted);margin-bottom:2px;">Sesi PPPoE Live</div>
-                            <div class="live-pppoe-val" data-router-id="<%= r.id %>" style="font-size:28px;font-weight:800;color:#818CF8;line-height:1;">—</div>
+                    <!-- Donut chart + Stats list -->
+                    <div style="display:flex;gap:14px;align-items:center;">
+                        <!-- Donut -->
+                        <div style="position:relative;width:110px;height:110px;flex-shrink:0;">
+                            <canvas id="pppoe-chart-<%= r.id %>" width="110" height="110"></canvas>
+                            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;line-height:1;">
+                                <div class="live-pppoe-val" data-router-id="<%= r.id %>" style="font-size:24px;font-weight:800;color:#818CF8;">—</div>
+                                <div style="font-size:9px;color:var(--muted);margin-top:1px;">live</div>
+                            </div>
                         </div>
-                        <div style="text-align:right;">
-                            <div style="font-size:11px;color:var(--muted);margin-bottom:2px;">dari total akun</div>
-                            <div style="font-size:22px;font-weight:800;color:var(--text);line-height:1;"><%= total %></div>
+
+                        <!-- Stats list -->
+                        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                                    <span style="width:9px;height:9px;border-radius:50%;background:#818CF8;display:inline-block;flex-shrink:0;"></span>Sesi Live
+                                </span>
+                                <span class="live-stat-active" data-router-id="<%= r.id %>" style="font-weight:700;color:#818CF8;font-size:15px;">—</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                                    <span style="width:9px;height:9px;border-radius:50%;background:#10B981;display:inline-block;flex-shrink:0;"></span>Aktif DB
+                                </span>
+                                <span style="font-weight:700;color:#10B981;font-size:15px;"><%= active %></span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                                    <span style="width:9px;height:9px;border-radius:50%;background:#EF4444;display:inline-block;flex-shrink:0;"></span>Isolir
+                                </span>
+                                <span style="font-weight:700;color:#EF4444;font-size:15px;"><%= isolated %></span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:12px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                                    <span style="width:9px;height:9px;border-radius:50%;background:#94A3B8;display:inline-block;flex-shrink:0;"></span>Offline
+                                </span>
+                                <span class="live-stat-offline" data-router-id="<%= r.id %>" style="font-weight:700;color:#94A3B8;font-size:15px;">—</span>
+                            </div>
+                            <div style="border-top:1px solid var(--border);padding-top:5px;display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:11px;color:var(--muted);">Total Akun</span>
+                                <span style="font-weight:800;font-size:15px;"><%= total %></span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Utilisasi bar -->
                     <div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-                            <span style="font-size:11px;color:var(--muted);">Utilisasi (Live)</span>
+                            <span style="font-size:11px;color:var(--muted);">Utilisasi Live</span>
                             <span class="live-util-pct" data-router-id="<%= r.id %>" style="font-size:12px;font-weight:700;color:<%= barColor %>;"><%= pct %>%</span>
                         </div>
                         <div style="height:8px;background:var(--card-bg);border-radius:4px;overflow:hidden;">
                             <div class="live-util-bar" data-router-id="<%= r.id %>"
-                                 style="height:100%;width:<%= pct %>%;background:<%= barColor %>;border-radius:4px;transition:width .5s ease,background .3s;"></div>
-                        </div>
-                    </div>
-
-                    <!-- Stats baris bawah -->
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                        <div style="text-align:center;background:var(--card-bg);border-radius:8px;padding:7px 4px;">
-                            <div style="font-size:18px;font-weight:800;color:#10B981;"><%= active %></div>
-                            <div style="font-size:10px;color:var(--muted);margin-top:1px;">Aktif DB</div>
-                        </div>
-                        <div style="text-align:center;background:var(--card-bg);border-radius:8px;padding:7px 4px;">
-                            <div class="live-stat-active" data-router-id="<%= r.id %>" style="font-size:18px;font-weight:800;color:#818CF8;">—</div>
-                            <div style="font-size:10px;color:var(--muted);margin-top:1px;">Sesi Live</div>
-                        </div>
-                        <div style="text-align:center;background:var(--card-bg);border-radius:8px;padding:7px 4px;">
-                            <div style="font-size:18px;font-weight:800;color:#EF4444;"><%= isolated %></div>
-                            <div style="font-size:10px;color:var(--muted);margin-top:1px;">Isolir</div>
+                                 style="height:100%;width:<%= pct %>%;background:<%= barColor %>;border-radius:4px;transition:width .6s ease,background .3s;"></div>
                         </div>
                     </div>
                 </div>
@@ -1012,12 +1027,62 @@ function initTicketChart() {
 if (localStorage.getItem('dashTab') === 'olt') initOltCharts();
 if (localStorage.getItem('dashTab') === 'tickets') initTicketChart();
 
+// ── PPPoE Router donut charts ──
+const _pppoeCharts = {};
+
+function initPPPoECharts() {
+    if (window._pppoeChartsInited) return;
+    window._pppoeChartsInited = true;
+
+    document.querySelectorAll('.pppoe-router-card').forEach(card => {
+        const rid      = card.dataset.routerId;
+        const total    = parseInt(card.dataset.total)    || 0;
+        const active   = parseInt(card.dataset.active)   || 0;
+        const isolated = parseInt(card.dataset.isolated) || 0;
+        const inactive = Math.max(0, total - active - isolated);
+        const canvas   = document.getElementById(`pppoe-chart-${rid}`);
+        if (!canvas || _pppoeCharts[rid]) return;
+
+        _pppoeCharts[rid] = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Aktif DB', 'Isolir', 'Tidak Aktif'],
+                datasets: [{
+                    data: total > 0 ? [active, isolated, inactive] : [1],
+                    backgroundColor: total > 0
+                        ? ['#10B981', '#EF4444', 'rgba(148,163,184,.25)']
+                        : ['rgba(148,163,184,.15)'],
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                cutout: '70%',
+                responsive: false,
+                animation: { duration: 700, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `  ${ctx.label}: ${ctx.raw}`
+                        }
+                    }
+                }
+            }
+        });
+
+        // Init offline stat (DB: total - active - isolated)
+        const offEl = card.querySelector(`.live-stat-offline[data-router-id="${rid}"]`);
+        if (offEl) offEl.textContent = inactive;
+    });
+}
+
 // ── Live PPPoE active sessions per router ──
 async function loadPPPoELive() {
     const btn = document.getElementById('btnRefreshPPPoE');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...'; }
 
-    // Show loading skeleton in all live value elements
+    // Show loading spinners
     document.querySelectorAll('.live-pppoe-val, .live-stat-active').forEach(el => {
         el.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:11px;opacity:.4;"></i>';
     });
@@ -1027,40 +1092,44 @@ async function loadPPPoELive() {
         const json = await resp.json();
         if (json.success && Array.isArray(json.data)) {
             json.data.forEach(r => {
-                // Large number in card header
+                const card    = document.querySelector(`.pppoe-router-card[data-router-id="${r.id}"]`);
                 const bigVal  = document.querySelector(`.live-pppoe-val[data-router-id="${r.id}"]`);
-                // Small stat in bottom grid
                 const statVal = document.querySelector(`.live-stat-active[data-router-id="${r.id}"]`);
+                const offVal  = document.querySelector(`.live-stat-offline[data-router-id="${r.id}"]`);
                 const bar     = document.querySelector(`.live-util-bar[data-router-id="${r.id}"]`);
                 const pctEl   = document.querySelector(`.live-util-pct[data-router-id="${r.id}"]`);
-                // Card border accent (top strip)
-                const card    = document.querySelector(`.pppoe-router-card[data-router-id="${r.id}"]`);
 
                 if (r.active_live === null) {
-                    const errTip = r.error || 'Tidak terhubung';
-                    if (bigVal)  bigVal.innerHTML  = `<span title="${errTip}" style="color:#EF4444;font-size:20px;cursor:help;">✗</span>`;
-                    if (statVal) statVal.innerHTML = `<span title="${errTip}" style="color:#EF4444;cursor:help;">✗</span>`;
-                    // Dim accent bar to red
-                    if (card) {
-                        const accent = card.querySelector('div[style*="position:absolute"]');
-                        if (accent) accent.style.background = 'linear-gradient(90deg,#EF4444,#F87171)';
-                    }
+                    const tip = r.error || 'Tidak terhubung';
+                    if (bigVal)  bigVal.innerHTML  = `<span title="${tip}" style="color:#EF4444;font-size:18px;cursor:help;">✗</span>`;
+                    if (statVal) statVal.innerHTML = `<span title="${tip}" style="color:#EF4444;cursor:help;">✗</span>`;
+                    if (offVal)  offVal.textContent = '—';
                 } else {
+                    const total    = card ? (parseInt(card.dataset.total)    || 0) : 0;
+                    const isolated = card ? (parseInt(card.dataset.isolated) || 0) : 0;
+                    const offline  = Math.max(0, total - r.active_live - isolated);
+
                     if (bigVal)  bigVal.textContent  = r.active_live;
                     if (statVal) statVal.textContent = r.active_live;
+                    if (offVal)  offVal.textContent  = offline;
 
-                    // Update utilisasi bar from live data
-                    const cardEl = document.querySelector(`.pppoe-router-card[data-router-id="${r.id}"]`);
-                    if (cardEl && bar && pctEl) {
-                        // Total from the big right number in the live box
-                        const totalEl = cardEl.querySelector('[style*="font-size:22px"]');
-                        const total   = totalEl ? parseInt(totalEl.textContent) || 0 : 0;
+                    // Update utilisasi bar
+                    if (bar && pctEl) {
                         const livePct = total > 0 ? Math.min(100, Math.round((r.active_live / total) * 100)) : 0;
                         const barClr  = livePct >= 80 ? '#10B981' : livePct >= 50 ? '#F59E0B' : '#EF4444';
                         bar.style.width      = livePct + '%';
                         bar.style.background = barClr;
                         pctEl.textContent    = livePct + '%';
                         pctEl.style.color    = barClr;
+                    }
+
+                    // Update donut chart with live data
+                    const chart = _pppoeCharts[r.id];
+                    if (chart && total > 0) {
+                        chart.data.labels = ['Sesi Live', 'Isolir', 'Offline'];
+                        chart.data.datasets[0].data            = [r.active_live, isolated, offline];
+                        chart.data.datasets[0].backgroundColor = ['#818CF8', '#EF4444', 'rgba(148,163,184,.25)'];
+                        chart.update();
                     }
                 }
             });
@@ -1069,7 +1138,7 @@ async function loadPPPoELive() {
             const ts = document.getElementById('pppoe-last-update');
             if (ts) {
                 const now = new Date();
-                ts.textContent = `⏱ Diperbarui ${now.toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+                ts.textContent = `⏱ Diperbarui ${now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
             }
         }
     } catch(e) {
@@ -1081,14 +1150,17 @@ async function loadPPPoELive() {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Live'; }
 }
 
-// Auto-load PPPoE live data when OLT tab is visible
+// Auto-init charts & load live data when OLT tab is visible
 (function() {
     const savedTab = localStorage.getItem('dashTab');
-    if (savedTab === 'olt') { setTimeout(loadPPPoELive, 500); }
-    // Also hook into tab switch
+    if (savedTab === 'olt') {
+        setTimeout(() => { initPPPoECharts(); loadPPPoELive(); }, 400);
+    }
     document.querySelectorAll('.dash-tab').forEach(btn => {
         btn.addEventListener('click', function() {
-            if (this.dataset.tab === 'olt') { setTimeout(loadPPPoELive, 300); }
+            if (this.dataset.tab === 'olt') {
+                setTimeout(() => { initPPPoECharts(); loadPPPoELive(); }, 300);
+            }
         });
     });
 })();
