@@ -101,19 +101,21 @@ if (!isInstalled) {
           id INT AUTO_INCREMENT PRIMARY KEY,
           username VARCHAR(50) NOT NULL UNIQUE,
           password VARCHAR(255) NOT NULL,
+          name VARCHAR(100) DEFAULT NULL,
+          phone VARCHAR(20) DEFAULT NULL,
           role VARCHAR(20) DEFAULT 'admin',
           telegram_id VARCHAR(50),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       const bcrypt = require('bcryptjs');
       const hashedPass = await bcrypt.hash('admin', 10);
-      
+
       // Check if admin exists
       const [rows] = await connection.query(`SELECT * FROM users WHERE username = 'admin'`);
       if (rows.length === 0) {
-        await connection.query(`INSERT INTO users (username, password, role) VALUES ('admin', ?, 'admin')`, [hashedPass]);
+        await connection.query(`INSERT INTO users (username, password, name, role) VALUES ('admin', ?, 'Administrator', 'admin')`, [hashedPass]);
       }
       
       // Generate .env file
@@ -314,6 +316,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       INDEX idx_ticket (ticket_id)
     )
   `).catch(console.error);
+  checkAndAddColumn('users', 'name', 'VARCHAR(100) DEFAULT NULL');
   checkAndAddColumn('users', 'telegram_id', 'VARCHAR(50)');
 
   pool.query(`

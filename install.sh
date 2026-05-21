@@ -101,17 +101,24 @@ cd "$APP_DIR"
 PUPPETEER_SKIP_DOWNLOAD=true npm install --silent
 success "Dependensi terinstall"
 
+# ─── Buat direktori yang dibutuhkan ───────────
+info "Menyiapkan direktori..."
+mkdir -p "$APP_DIR/logs"
+mkdir -p "$APP_DIR/public/uploads"
+mkdir -p "$APP_DIR/public/uploads/proofs"
+chmod -R 755 "$APP_DIR/public/uploads"
+success "Direktori siap"
+
 # ─── Setup PM2 ────────────────────────────────
 info "Konfigurasi PM2..."
 pm2 delete dino-bill 2>/dev/null || true
-pm2 start "$APP_DIR/server.js" --name dino-bill \
-    --env production \
-    -e "$APP_DIR/logs/error.log" \
-    -o "$APP_DIR/logs/out.log" \
-    -- 2>/dev/null || pm2 start "$APP_DIR/server.js" --name dino-bill
-
+pm2 start "$APP_DIR/server.js" \
+    --name dino-bill \
+    --error "$APP_DIR/logs/error.log" \
+    --output "$APP_DIR/logs/out.log" \
+    --env production
 pm2 save
-pm2 startup | tail -1 | bash 2>/dev/null || true
+pm2 startup 2>/dev/null | grep "sudo\|systemctl" | bash 2>/dev/null || true
 
 # ─── Firewall (UFW) ───────────────────────────
 if command -v ufw &>/dev/null && ufw status | grep -q "active"; then
