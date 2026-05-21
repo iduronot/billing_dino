@@ -11,7 +11,7 @@ const PRIORITIES  = ['low','normal','high','critical'];
 router.get('/', async (req, res) => {
     try {
         const isTechnicianRole = req.session.role === 'technician';
-        const statusFilter   = req.query.status   || (isTechnicianRole ? 'all' : 'open');
+        const statusFilter   = req.query.status   || 'all';
         const priorityFilter = req.query.priority || '';
         const catFilter      = req.query.category || '';
         const techFilter     = req.query.tech     || '';
