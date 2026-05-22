@@ -1922,6 +1922,19 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         synced++;
       }
 
+      // Hapus device dari acs_devices yang sudah tidak ada di GenieACS
+      const activeIds = allDevices.map(d => d._id);
+      if (activeIds.length > 0) {
+        const placeholders = activeIds.map(() => '?').join(',');
+        const [delResult] = await pool.query(
+          `DELETE FROM acs_devices WHERE device_id NOT IN (${placeholders})`,
+          activeIds
+        );
+        if (delResult.affectedRows > 0) {
+          console.log(`[CRON ACS] Hapus ${delResult.affectedRows} device orphan yang sudah tidak ada di GenieACS`);
+        }
+      }
+
       const onlineCount = allDevices.filter(d => d._lastInform && Date.now()-new Date(d._lastInform).getTime()<acsThresholdMs).length;
       console.log(`[CRON ACS] Sync selesai — ${synced} device (${onlineCount} online, ${synced - onlineCount} offline, threshold: ${s.acs_online_threshold||15} mnt)`);
     } catch (e) {
