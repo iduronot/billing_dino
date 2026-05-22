@@ -1625,34 +1625,37 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       const waLimit = parseInt(s.wa_limit) || 50;
       const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
       let sentCount = 0;
-      let count = 0;
+      let isolatedCount = 0;
 
       for (const row of overdueRows) {
-        if (sentCount >= waLimit) break;
+        // Selalu jalankan isolir & MikroTik — tidak dibatasi wa_limit
         const [result] = await pool.query(
           "UPDATE customers SET status='isolated' WHERE id=? AND status='active'", [row.customer_id]
         );
         if (result.affectedRows > 0) {
-          count++;
-          // Disable on MikroTik + send WA
+          isolatedCount++;
           const [[cust]] = await pool.query(
             "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
             [row.customer_id]
           );
           if (cust) {
+            // Putus PPPoE di MikroTik (selalu, tidak dibatasi)
             if (cust.pppoe_username && cust.r_ip) {
               mikrotikHelper.disablePPPoESecret(
                 { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port },
                 cust.pppoe_username
               ).catch(() => {});
             }
-            await notifyIsolation(pool, cust);
-            sentCount++;
-            await new Promise(r => setTimeout(r, waDelay));
+            // Kirim WA hanya jika belum mencapai batas
+            if (sentCount < waLimit) {
+              await notifyIsolation(pool, cust);
+              sentCount++;
+              await new Promise(r => setTimeout(r, waDelay));
+            }
           }
         }
       }
-      console.log(`[CRON] Auto-isolir done. ${count} customers isolated and notified.`);
+      console.log(`[CRON] Auto-isolir done. ${isolatedCount} customers isolated, ${sentCount} WA sent.`);
     } catch (e) {
       console.error('[CRON] Auto-isolir error:', e.message);
     }
@@ -1693,39 +1696,48 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     try {
       console.log('[CRON] Generating monthly invoices...');
       const [customers] = await pool.query(
-        `SELECT c.*, p.price as package_price FROM customers c 
-         LEFT JOIN packages p ON c.package_id = p.id WHERE c.status = 'active' AND (c.billing_method IS NULL OR c.billing_method = 'fixed')`
+        `SELECT c.*, p.price as package_price FROM customers c
+         LEFT JOIN packages p ON c.package_id = p.id
+         WHERE c.status IN ('active','isolated')
+           AND (c.billing_method IS NULL OR c.billing_method = 'fixed')`
       );
+      // status 'inactive' sudah otomatis tidak masuk karena tidak ada di IN()
+
       const month = new Date().getMonth() + 1;
-      const year = new Date().getFullYear();
-      let created = 0;
+      const year  = new Date().getFullYear();
+      let created   = 0;
+      let skipped   = 0;
+      let sentCount = 0;
+
       const { getSettings } = require('./helpers/notification');
       const s = await getSettings(pool, ['wa_delay', 'wa_limit']);
       const waLimit = parseInt(s.wa_limit) || 50;
       const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
-      let sentCount = 0;
 
       for (const c of customers) {
-        if (sentCount >= waLimit) break;
+        // Selalu buat invoice — tidak dibatasi wa_limit
         const [[exists]] = await pool.query(
           'SELECT id FROM invoices WHERE customer_id=? AND MONTH(due_date)=? AND YEAR(due_date)=?',
           [c.id, month, year]
         );
-        if (!exists) {
-          const day = c.isolation_date || 20;
-          const dueDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-          await pool.query(
-            'INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?,?,?,?,?)',
-            [c.id, c.package_id, c.package_price || 0, dueDate, 'unpaid']
-          );
-          created++;
-          // Send WA notification (sequential)
+        if (exists) { skipped++; continue; }
+
+        const day     = c.isolation_date || 20;
+        const dueDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        await pool.query(
+          'INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?,?,?,?,?)',
+          [c.id, c.package_id, c.package_price || 0, dueDate, 'unpaid']
+        );
+        created++;
+
+        // Kirim WA hanya untuk pelanggan aktif & belum mencapai batas
+        if (c.status === 'active' && sentCount < waLimit) {
           await notifyInvoiceCreated(pool, c, c.package_price || 0, dueDate);
           sentCount++;
           await new Promise(r => setTimeout(r, waDelay));
         }
       }
-      console.log(`[CRON] Monthly invoices: ${created} created and notified.`);
+      console.log(`[CRON] Monthly invoices: ${created} created, ${skipped} skipped, ${sentCount} WA sent.`);
     } catch (e) {
       console.error('[CRON] Invoice generation error:', e.message);
     }
