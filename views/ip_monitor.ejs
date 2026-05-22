@@ -129,7 +129,17 @@
                     <div style="font-size:11px;color:var(--muted);margin-top:4px;">Alert DOWN/RECOVERED dikirim ke chat ini. Bot Token diambil dari Pengaturan utama.</div>
                 </div>
             </div>
-            <button class="btn btn-primary" onclick="saveSettings()">💾 Simpan Pengaturan</button>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Simpan Pengaturan</button>
+                <button class="btn" id="btnTestTg" onclick="testTelegram()"
+                    style="background:rgba(99,102,241,.12);color:#6366F1;border:1px solid rgba(99,102,241,.3);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>
+                    </svg>
+                    Test Kirim Telegram
+                </button>
+                <span id="tgTestResult" style="font-size:13px;font-weight:600;display:none;"></span>
+            </div>
         </div>
 
         <!-- Toolbar -->
@@ -300,6 +310,34 @@ const imToast = (msg, ok = true) => {
 function toggleSettings() {
     document.getElementById('settingsPanel').classList.toggle('open');
 }
+
+async function testTelegram() {
+    const btn = document.getElementById('btnTestTg');
+    const res = document.getElementById('tgTestResult');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinning">⟳</span> Mengirim…';
+    res.style.display = 'none';
+    try {
+        const r = await fetch('/ip-monitor/test-telegram', { method: 'POST' });
+        const d = await r.json();
+        res.style.display = 'inline';
+        if (d.success) {
+            res.style.color = '#10B981';
+            res.textContent = '✅ ' + d.message;
+        } else {
+            res.style.color = '#EF4444';
+            res.textContent = '❌ ' + d.message;
+        }
+        imToast(d.message, d.success);
+    } catch(e) {
+        res.style.display = 'inline';
+        res.style.color = '#EF4444';
+        res.textContent = '❌ Error: ' + e.message;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg> Test Kirim Telegram';
+}
+
 async function saveSettings() {
     const body = {
         monitor_check_interval: document.getElementById('cfg_interval').value,

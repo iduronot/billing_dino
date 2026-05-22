@@ -281,6 +281,45 @@ router.post('/:id/check', async (req, res) => {
     }
 });
 
+// ── POST /ip-monitor/test-telegram — kirim pesan uji ke grup ────
+router.post('/test-telegram', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('telegram_bot_token','monitor_telegram_chat','telegram_chat_id')"
+        );
+        const s = {};
+        rows.forEach(r => { s[r.setting_key] = r.setting_value; });
+
+        const token   = s.telegram_bot_token;
+        const chat_id = s.monitor_telegram_chat || s.telegram_chat_id;
+
+        if (!token)   return res.json({ success: false, message: 'Bot Token belum dikonfigurasi di Pengaturan.' });
+        if (!chat_id) return res.json({ success: false, message: 'Chat ID belum dikonfigurasi.' });
+
+        const now = new Date().toLocaleString('id-ID');
+        const text = `✅ <b>TEST NOTIFIKASI — IP Monitor</b>\n\n`
+                   + `📡 Koneksi bot Telegram berhasil!\n`
+                   + `🕐 Waktu  : ${now}\n`
+                   + `🤖 Bot    : <code>${token.split(':')[0]}:***</code>\n`
+                   + `💬 Chat ID: <code>${chat_id}</code>\n\n`
+                   + `Notifikasi DOWN/RECOVERED akan dikirim ke grup ini.`;
+
+        const resp = await axios.post(
+            `https://api.telegram.org/bot${token}/sendMessage`,
+            { chat_id, text, parse_mode: 'HTML' }
+        );
+
+        if (resp.data && resp.data.ok) {
+            res.json({ success: true, message: 'Pesan uji berhasil dikirim ke grup Telegram! ✅' });
+        } else {
+            res.json({ success: false, message: 'Telegram error: ' + JSON.stringify(resp.data) });
+        }
+    } catch (e) {
+        const errMsg = e.response ? JSON.stringify(e.response.data) : e.message;
+        res.json({ success: false, message: 'Gagal mengirim: ' + errMsg });
+    }
+});
+
 // ── POST /ip-monitor/settings — simpan interval & telegram chat ──
 router.post('/settings', async (req, res) => {
     try {
