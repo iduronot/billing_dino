@@ -88,10 +88,16 @@
         <!-- Header -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; flex-wrap:wrap; gap:12px;">
             <h1 class="page-title" style="margin:0;"><%= t.olt_monitor_title || 'OLT Monitor' %></h1>
-            <button class="btn btn-primary" onclick="syncOLT(this)">
-                <i class="fas fa-sync-alt"></i> <%= t.sync_olt_data || 'Sync Data' %>
-            </button>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span id="lastSyncInfo" style="font-size:12px;color:var(--muted);"></span>
+                <button class="btn btn-primary" onclick="syncOLT(this)">
+                    <i class="fas fa-sync-alt"></i> Sync Semua OLT
+                </button>
+            </div>
         </div>
+
+        <!-- Last sync per OLT info bar -->
+        <div id="syncStatusBar" style="display:none;margin-bottom:18px;"></div>
 
         <!-- Stats (dari server, bukan dari array ONU yang sudah difilter) -->
         <div class="stats-grid">
@@ -330,18 +336,34 @@
                         </thead>
                         <tbody>
                         <% olts.forEach(o => { %>
-                            <tr>
-                                <td style="font-weight:600;"><%= o.name %></td>
+                            <tr id="olt-row-<%= o.id %>">
+                                <td style="font-weight:600;">
+                                    <%= o.name %>
+                                    <div id="olt-sync-info-<%= o.id %>" style="font-size:11px;color:var(--muted);margin-top:2px;"></div>
+                                </td>
                                 <td><code><%= o.host %></code></td>
                                 <td>
                                     <span class="olt-brand-tag"><%= o.brand || 'HIOSO' %></span>
                                     <span style="font-size:11px; color:var(--muted); margin-left:6px;"><%= o.model || 'Universal' %></span>
+                                    <% if (o.last_profile) { %>
+                                        <div style="font-size:10px;color:var(--muted);margin-top:2px;">profile: <code><%= o.last_profile %></code></div>
+                                    <% } %>
                                 </td>
                                 <td><code><%= o.community %></code></td>
                                 <td style="font-size:12px; color:var(--muted);"><%= o.web_user %> / ****</td>
                                 <td>
-                                    <div style="display:flex; gap:6px;">
-                                        <button class="btn-action" title="Test Connection" onclick="testOLT('<%= o.host %>', '<%= o.community %>')">
+                                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                        <button class="btn-action" title="Sync OLT ini sekarang"
+                                            id="sync-btn-<%= o.id %>"
+                                            onclick="syncOneOlt(<%= o.id %>, this)">
+                                            <i class="fas fa-sync-alt"></i>
+                                        </button>
+                                        <button class="btn-action" title="Reset profile & Sync ulang"
+                                            onclick="syncOneOltReset(<%= o.id %>)"
+                                            style="font-size:10px;">
+                                            <i class="fas fa-redo"></i>
+                                        </button>
+                                        <button class="btn-action" title="Test Connection SNMP" onclick="testOLT('<%= o.host %>', '<%= o.community %>')">
                                             <i class="fas fa-plug"></i>
                                         </button>
                                         <button class="btn-action" title="Edit" onclick='openEditModal(<%- JSON.stringify(o) %>)'>
@@ -457,12 +479,68 @@ function switchTab(id, btn) {
     btn.classList.add('active');
 }
 
-// Sync OLT (manual, tetap tersedia)
+// ── Load info last sync per OLT ──────────────────────────────
+async function loadLastSyncInfo() {
+    try {
+        const r = await fetch('/olt/api/last-sync');
+        const d = await r.json();
+        if (!d.success || !d.data) return;
+
+        const bar = document.getElementById('syncStatusBar');
+        bar.style.display = 'flex';
+        bar.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;';
+
+        let latestSync = null;
+        d.data.forEach(olt => {
+            // Update info di bawah nama OLT di tab Kelola
+            const infoEl = document.getElementById('olt-sync-info-' + olt.id);
+            if (infoEl && olt.last_sync) {
+                const ago = timeSince(new Date(olt.last_sync));
+                infoEl.textContent = `Sync: ${ago} • ${olt.total} ONU (${olt.up_count || 0} Up)`;
+            }
+
+            // Kartu status di atas tabel ONU
+            if (olt.last_sync) {
+                const syncTime = new Date(olt.last_sync);
+                if (!latestSync || syncTime > latestSync) latestSync = syncTime;
+
+                const age     = Date.now() - syncTime.getTime();
+                const stale   = age > 6 * 60 * 1000; // > 6 menit = stale
+                const color   = stale ? '#F59E0B' : '#10B981';
+                const icon    = stale ? '⚠️' : '✅';
+                const card    = document.createElement('div');
+                card.style.cssText = `background:var(--card-bg);border:1px solid ${stale ? 'rgba(245,158,11,.3)' : 'rgba(16,185,129,.3)'};border-radius:10px;padding:10px 16px;font-size:12px;display:flex;align-items:center;gap:10px;`;
+                card.innerHTML = `
+                    <span style="font-size:16px;">${icon}</span>
+                    <div>
+                        <div style="font-weight:700;color:var(--text);">${olt.name}</div>
+                        <div style="color:${color};">${olt.total} ONU • ${olt.up_count||0} Up • ${olt.down_count||0} Down • ${timeSince(syncTime)}</div>
+                        ${olt.last_profile ? `<div style="color:var(--muted);font-size:10px;">profile: ${olt.last_profile}</div>` : ''}
+                    </div>`;
+                bar.appendChild(card);
+            }
+        });
+
+        if (latestSync) {
+            document.getElementById('lastSyncInfo').textContent =
+                'Sync terakhir: ' + latestSync.toLocaleTimeString('id-ID');
+        }
+    } catch(e) { console.error('loadLastSyncInfo:', e); }
+}
+
+function timeSince(date) {
+    const sec = Math.floor((Date.now() - date) / 1000);
+    if (sec < 60)  return sec + ' dtk lalu';
+    if (sec < 3600) return Math.floor(sec/60) + ' mnt lalu';
+    return Math.floor(sec/3600) + ' jam lalu';
+}
+
+// ── Sync semua OLT ───────────────────────────────────────────
 async function syncOLT(btn) {
     const oldHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
-    showToast('Mengambil data SNMP, harap tunggu...', 'info');
+    showToast('Mengambil data SNMP semua OLT, harap tunggu...', 'info');
     try {
         const res = await fetch('/olt/api/sync', {
             method: 'POST',
@@ -478,6 +556,52 @@ async function syncOLT(btn) {
         btn.innerHTML = oldHtml;
     }
 }
+
+// ── Sync satu OLT ───────────────────────────────────────────
+async function syncOneOlt(id, btn) {
+    const oldHtml = btn.innerHTML;
+    btn.disabled  = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    showToast('Sync OLT...', 'info');
+    try {
+        const r = await fetch(`/olt/api/sync/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+            signal: AbortSignal.timeout(120000)
+        });
+        const d = await r.json();
+        showToast(d.message, d.success ? 'success' : 'error');
+        if (d.success) setTimeout(() => location.reload(), 1200);
+    } catch(e) {
+        showToast('Gagal: ' + e.message, 'error');
+    } finally {
+        btn.disabled  = false;
+        btn.innerHTML = oldHtml;
+    }
+}
+
+// ── Reset profile & sync ulang ─────────────────────────────
+async function syncOneOltReset(id) {
+    if (!confirm('Reset profile OLT dan sync ulang?\nIni akan mendeteksi ulang profile SNMP dari awal.')) return;
+    showToast('Reset profile & sync...', 'info');
+    try {
+        const r = await fetch(`/olt/api/sync/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset_profile: true }),
+            signal: AbortSignal.timeout(120000)
+        });
+        const d = await r.json();
+        showToast(d.message, d.success ? 'success' : 'error');
+        if (d.success) setTimeout(() => location.reload(), 1200);
+    } catch(e) {
+        showToast('Gagal: ' + e.message, 'error');
+    }
+}
+
+// Load last sync saat halaman terbuka
+loadLastSyncInfo();
 
 // ONU Config VLAN
 function openOnuConfig(oltId, index, name) {

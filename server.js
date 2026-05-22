@@ -1756,70 +1756,54 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // CRON: Auto Sync OLT — round-robin satu OLT per interval
-  // Interval default: setiap 5 menit
-  // Bisa diubah lewat settings: olt_sync_interval (dalam menit, min 2)
+  // CRON: Auto Sync OLT — semua OLT aktif setiap 5 menit
   // ═══════════════════════════════════════════════════════════════
-  let _oltSyncIndex = 0;
-
   const doOltSync = async () => {
     try {
       const [olts] = await pool.query(`SELECT * FROM hioso_olts WHERE status = 'active' OR status IS NULL`);
       if (!olts || olts.length === 0) return;
 
-      // Round-robin: ambil satu OLT per giliran
-      const olt = olts[_oltSyncIndex % olts.length];
-      _oltSyncIndex++;
+      // Sync semua OLT secara paralel (tidak round-robin)
+      await Promise.allSettled(olts.map(async (olt) => {
+        try {
+          const profile = (olt.brand && olt.brand !== 'HIOSO') ? olt.brand : (olt.last_profile || null);
+          const HiosoOLT = require('./helpers/olt');
+          const helper   = new HiosoOLT(olt.host, olt.community, olt.port || 161);
 
-      const HiosoOLT = require('./helpers/olt');
-      const helper   = new HiosoOLT(olt.host, olt.community, olt.port || 161);
-      const profile  = (olt.brand && olt.brand !== 'HIOSO') ? olt.brand : (olt.last_profile || null);
+          console.log(`[CRON OLT] Sync "${olt.name}" (profile: ${profile || 'auto-detect'})...`);
+          const { onus, detectedProfile } = await helper.getOnuList(profile);
 
-      console.log(`[CRON OLT] Sync "${olt.name}" (profile: ${profile || 'auto-detect'})...`);
-      const { onus, detectedProfile } = await helper.getOnuList(profile);
+          if (detectedProfile && detectedProfile !== olt.last_profile) {
+            await pool.query('UPDATE hioso_olts SET last_profile = ? WHERE id = ?', [detectedProfile, olt.id]);
+          }
 
-      // Simpan profile yang terdeteksi jika berbeda
-      if (detectedProfile && detectedProfile !== olt.last_profile) {
-        await pool.query('UPDATE hioso_olts SET last_profile = ? WHERE id = ?', [detectedProfile, olt.id]);
-      }
+          if (!onus || onus.length === 0) {
+            console.warn(`[CRON OLT] "${olt.name}" — 0 ONU ditemukan, data lama TETAP DIPERTAHANKAN. Periksa SNMP.`);
+            return;
+          }
 
-      if (onus && onus.length > 0) {
-        // Upsert: update jika sudah ada, insert jika baru
-        for (const o of onus) {
-          await pool.query(`
-            INSERT INTO hioso_onus (olt_id, onu_index, name, sn, mac, tx_power, rx_power, status, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE
-              name        = VALUES(name),
-              tx_power    = VALUES(tx_power),
-              rx_power    = VALUES(rx_power),
-              status      = VALUES(status),
-              last_updated = NOW()
-          `, [olt.id, o.index, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status]);
-        }
-
-        // Hapus ONU yang sudah tidak ada di OLT (sudah dicabut)
-        const activeIndexes = onus.map(o => o.index);
-        if (activeIndexes.length > 0) {
-          const placeholders = activeIndexes.map(() => '?').join(',');
+          // Full replace agar data benar-benar segar (tidak ada stale ONU)
+          await pool.query('DELETE FROM hioso_onus WHERE olt_id = ?', [olt.id]);
+          const values = onus.map(o => [olt.id, o.index, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status, new Date()]);
           await pool.query(
-            `DELETE FROM hioso_onus WHERE olt_id = ? AND onu_index NOT IN (${placeholders})`,
-            [olt.id, ...activeIndexes]
+            `INSERT INTO hioso_onus (olt_id, onu_index, name, sn, mac, tx_power, rx_power, status, last_updated) VALUES ?`,
+            [values]
           );
-        }
 
-        console.log(`[CRON OLT] "${olt.name}" selesai — ${onus.length} ONU (${onus.filter(o=>o.status==='Up').length} Up / ${onus.filter(o=>o.status==='Down').length} Down)`);
-      } else {
-        console.log(`[CRON OLT] "${olt.name}" — tidak ada ONU ditemukan, data lama dipertahankan.`);
-      }
+          const upCnt = onus.filter(o => o.status === 'Up').length;
+          console.log(`[CRON OLT] "${olt.name}" OK — ${onus.length} ONU (${upCnt} Up / ${onus.length - upCnt} Down)`);
+        } catch (e) {
+          console.error(`[CRON OLT] "${olt.name}" error:`, e.message);
+        }
+      }));
     } catch (e) {
       console.error('[CRON OLT] Error:', e.message);
     }
   };
 
-  // Jalankan setiap 5 menit (bisa disesuaikan)
+  // Sync semua OLT setiap 5 menit (paralel)
   cron.schedule('*/5 * * * *', doOltSync);
-  console.log('[CRON OLT] Auto-sync aktif — interval 5 menit (round-robin per OLT)');
+  console.log('[CRON OLT] Auto-sync aktif — semua OLT paralel setiap 5 menit');
 
   // ═══════════════════════════════════════════════════════════════
   // CRON: Auto Sync GenieACS → MySQL (setiap 5 menit)
