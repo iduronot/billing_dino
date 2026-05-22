@@ -1951,6 +1951,38 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // Langsung sync saat server start (tidak tunggu 5 menit pertama)
   setTimeout(doAcsSync, 8000);
 
+  // ═══════════════════════════════════════════════════════════════
+  // IP Monitor — tabel + route + cron
+  // ═══════════════════════════════════════════════════════════════
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS ip_monitors (
+      id                  INT AUTO_INCREMENT PRIMARY KEY,
+      name                VARCHAR(100) NOT NULL,
+      ip_address          VARCHAR(255) NOT NULL,
+      port                INT NULL,
+      check_type          VARCHAR(20)  DEFAULT 'icmp',
+      check_interval      INT          DEFAULT 5,
+      status              VARCHAR(20)  DEFAULT 'unknown',
+      enabled             TINYINT      DEFAULT 1,
+      last_check          DATETIME NULL,
+      last_up             DATETIME NULL,
+      last_down           DATETIME NULL,
+      response_ms         INT NULL,
+      consecutive_failures INT         DEFAULT 0,
+      notes               TEXT NULL,
+      created_at          TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(console.error);
+
+  const ipMonitorRouter = require('./routes/ip_monitor');
+  ipMonitorRouter.setPool(pool);
+  app.use('/ip-monitor', adminOnly, ipMonitorRouter);
+
+  // Cek setiap menit; router.runChecks() sendiri yang memutuskan apakah
+  // sudah waktunya cek tiap target (berdasarkan check_interval per target)
+  cron.schedule('* * * * *', () => ipMonitorRouter.runChecks());
+  console.log('[CRON IP-Monitor] Aktif — cek setiap menit (interval per target)');
+
   // Export CSV - Customers
   app.get('/export/customers', requireAuth, async (req, res) => {
     try {
