@@ -214,16 +214,22 @@ router.post('/:id/isolate', async (req, res) => {
         await pool.query("UPDATE customers SET status='isolated' WHERE id=?", [req.params.id]);
 
         // Disable PPPoE on MikroTik
+        let mikrotikOk = true;
         if (customer.pppoe_username && customer.r_ip) {
             const routerData = { ip_address: customer.r_ip, username: customer.r_user, password: customer.r_pass, port: customer.r_port };
             const result = await mikrotik.disablePPPoESecret(routerData, customer.pppoe_username);
+            mikrotikOk = result.success;
             if (!result.success) console.log(`[MikroTik] Gagal isolir ${customer.pppoe_username}: ${result.message}`);
         }
 
-        // Send WA notification
-        await notifyIsolation(pool, customer);
+        // Send WA notification (cek toggle setting wa_notif_isolir)
+        const [[waNotifRow]] = await pool.query("SELECT setting_value FROM settings WHERE setting_key='wa_notif_isolir'").catch(() => [[null]]);
+        if (!waNotifRow || waNotifRow.setting_value !== '0') {
+            await notifyIsolation(pool, customer);
+        }
 
-        res.json({ success: true, message: 'Customer berhasil di-isolate' });
+        const mtInfo = !customer.pppoe_username ? ' (PPPoE tidak dikonfigurasi)' : !customer.r_ip ? ' (router tidak dikonfigurasi)' : mikrotikOk ? '' : ' (MikroTik gagal dihubungi)';
+        res.json({ success: true, message: `Customer berhasil di-isolate${mtInfo}` });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -241,13 +247,16 @@ router.post('/:id/unisolate', async (req, res) => {
         await pool.query("UPDATE customers SET status='active' WHERE id=?", [req.params.id]);
 
         // Enable PPPoE on MikroTik
+        let mikrotikOk = true;
         if (customer.pppoe_username && customer.r_ip) {
             const routerData = { ip_address: customer.r_ip, username: customer.r_user, password: customer.r_pass, port: customer.r_port };
             const result = await mikrotik.enablePPPoESecret(routerData, customer.pppoe_username);
+            mikrotikOk = result.success;
             if (!result.success) console.log(`[MikroTik] Gagal unisolir ${customer.pppoe_username}: ${result.message}`);
         }
 
-        res.json({ success: true, message: 'Customer berhasil di-unisolate' });
+        const mtInfo = !customer.pppoe_username ? ' (PPPoE tidak dikonfigurasi, aktifkan manual di MikroTik)' : !customer.r_ip ? ' (router tidak dikonfigurasi, aktifkan manual di MikroTik)' : mikrotikOk ? ' & PPPoE diaktifkan di MikroTik' : ' (MikroTik gagal dihubungi, aktifkan manual)';
+        res.json({ success: true, message: `Customer berhasil diaktifkan${mtInfo}` });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
