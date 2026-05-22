@@ -101,10 +101,10 @@ router.runChecks = async () => {
             const intervalMs = (parseInt(m.check_interval) || 5) * 60 * 1000;
             if (now - lastCheck < intervalMs) continue;
 
-            const result = await checkHost(m).catch(() => ({ up: false, ms: null }));
-            const wasUp  = m.status === 'up';
-            const isUp   = result.up;
-            const nowTs  = new Date();
+            const result   = await checkHost(m).catch(() => ({ up: false, ms: null }));
+            const prevStatus = m.status;           // status sebelum update: 'unknown'|'up'|'down'
+            const isUp       = result.up;
+            const nowTs      = new Date();
 
             // Hitung consecutive_failures
             const failures = isUp ? 0 : (parseInt(m.consecutive_failures) || 0) + 1;
@@ -129,18 +129,21 @@ router.runChecks = async () => {
                 ]
             );
 
-            // Kirim Telegram jika status berubah
-            if (wasUp && !isUp) {
-                // DOWN alert
+            console.log(`[IPMonitor] ${m.name} (${m.ip_address}) — prev:${prevStatus} → now:${isUp?'up':'down'} (${result.ms||'—'}ms)`);
+
+            // Kirim Telegram jika status DB berubah
+            // DOWN: sebelumnya bukan 'down' (bisa 'up' atau 'unknown') → sekarang down
+            if (prevStatus !== 'down' && !isUp) {
                 const msg = `🔴 <b>HOST DOWN</b>\n\n`
                     + `📛 Nama   : <b>${m.name}</b>\n`
                     + `🌐 Target : <code>${m.ip_address}${m.port ? ':' + m.port : ''}</code>\n`
-                    + `🔍 Tipe   : ${m.check_type.toUpperCase()}\n`
+                    + `🔍 Tipe   : ${(m.check_type || 'icmp').toUpperCase()}\n`
                     + `🕐 Waktu  : ${nowTs.toLocaleString('id-ID')}\n`
-                    + `${m.notes ? '📝 Catatan: ' + m.notes : ''}`;
+                    + (m.notes ? `📝 Catatan: ${m.notes}` : '');
                 await sendTelegramAlert(pool, msg);
-            } else if (!wasUp && isUp && m.status !== 'unknown') {
-                // RECOVERED alert
+            }
+            // RECOVERED: sebelumnya 'down' → sekarang up
+            else if (prevStatus === 'down' && isUp) {
                 const downSince = m.last_down
                     ? new Date(m.last_down).toLocaleString('id-ID') : '-';
                 const msg = `🟢 <b>HOST RECOVERED</b>\n\n`
@@ -245,11 +248,11 @@ router.post('/:id/check', async (req, res) => {
         const [[m]] = await pool.query('SELECT * FROM ip_monitors WHERE id=?', [req.params.id]);
         if (!m) return res.json({ success: false, message: 'Tidak ditemukan' });
 
-        const result = await checkHost(m).catch(() => ({ up: false, ms: null }));
-        const wasUp  = m.status === 'up';
-        const isUp   = result.up;
-        const nowTs  = new Date();
-        const failures = isUp ? 0 : (parseInt(m.consecutive_failures) || 0) + 1;
+        const result     = await checkHost(m).catch(() => ({ up: false, ms: null }));
+        const prevStatus = m.status;   // 'unknown' | 'up' | 'down'
+        const isUp       = result.up;
+        const nowTs      = new Date();
+        const failures   = isUp ? 0 : (parseInt(m.consecutive_failures) || 0) + 1;
 
         await pool.query(
             `UPDATE ip_monitors SET status=?, last_check=?, response_ms=?, consecutive_failures=?,
@@ -258,14 +261,14 @@ router.post('/:id/check', async (req, res) => {
              isUp ? 1 : 0, isUp ? 1 : 0, m.id]
         );
 
-        // Kirim Telegram jika baru down
-        if (wasUp && !isUp) {
+        // Kirim Telegram jika status berubah (manual check)
+        if (prevStatus !== 'down' && !isUp) {
             await sendTelegramAlert(pool,
-                `🔴 <b>HOST DOWN</b> (manual check)\n\n📛 <b>${m.name}</b>\n🌐 <code>${m.ip_address}</code>\n🕐 ${nowTs.toLocaleString('id-ID')}`
+                `🔴 <b>HOST DOWN</b> (manual check)\n\n📛 <b>${m.name}</b>\n🌐 <code>${m.ip_address}${m.port ? ':'+m.port : ''}</code>\n🔍 ${(m.check_type||'icmp').toUpperCase()}\n🕐 ${nowTs.toLocaleString('id-ID')}`
             );
-        } else if (!wasUp && isUp) {
+        } else if (prevStatus === 'down' && isUp) {
             await sendTelegramAlert(pool,
-                `🟢 <b>HOST RECOVERED</b> (manual check)\n\n📛 <b>${m.name}</b>\n🌐 <code>${m.ip_address}</code>\n⚡ ${result.ms} ms`
+                `🟢 <b>HOST RECOVERED</b> (manual check)\n\n📛 <b>${m.name}</b>\n🌐 <code>${m.ip_address}${m.port ? ':'+m.port : ''}</code>\n⚡ ${result.ms ? result.ms + ' ms' : 'OK'}`
             );
         }
 
