@@ -462,8 +462,19 @@
                 <p class="setting-desc"><%= t.vparams_instruction %><br>Contoh: <code>VirtualParameters.OpticalPower</code>, <code>VirtualParameters.Uptime</code></p>
                 <textarea id="acs_vparams" class="form-control" rows="4" placeholder="VirtualParameters.OpticalPower&#10;VirtualParameters.Uptime"><%=settings.acs_vparams||''%></textarea>
             </div>
+            <div class="form-group" style="margin-top:4px;">
+                <label>⏱️ Threshold Online (menit)</label>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <input type="number" id="acs_online_threshold" class="form-control" style="max-width:120px;"
+                        value="<%=settings.acs_online_threshold||'15'%>" min="1" max="60">
+                    <span style="font-size:12px;color:var(--muted);">
+                        Perangkat dianggap <b>online</b> jika last inform dalam X menit terakhir.<br>
+                        Sesuaikan dengan <b>Periodic Inform Interval</b> di CPE Anda (biasanya 15–30 mnt).
+                    </span>
+                </div>
+            </div>
             <div style="display:flex;gap:10px">
-                <button class="btn btn-primary" onclick="save(['acs_url','acs_user','acs_pass','acs_vparams','acs_path_pppoe','acs_path_ip'])">💾 <%= t.save %></button>
+                <button class="btn btn-primary" onclick="save(['acs_url','acs_user','acs_pass','acs_vparams','acs_path_pppoe','acs_path_ip','acs_online_threshold'])">💾 <%= t.save %></button>
                 <button class="btn" style="background:rgba(139,92,246,.15);color:var(--secondary);border:1px solid rgba(139,92,246,.3)" onclick="testACS()">🌐 <%= t.test_acs_connection %></button>
             </div>
         </div>

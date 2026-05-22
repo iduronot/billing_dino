@@ -399,7 +399,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     ['wa_limit', '50'],
     ['wa_notif_invoice',  '1'],
     ['wa_notif_isolir',   '1'],
-    ['wa_notif_reminder', '1']
+    ['wa_notif_reminder', '1'],
+    ['acs_online_threshold', '15']   // menit — sesuaikan dengan Periodic Inform Interval CPE
 ];
   for (const [key, val] of defaultSettings) {
     pool.query('INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)', [key, val]).catch(() => {});
@@ -1308,10 +1309,11 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       let acsStats = { total: 0, online: 0, linked: 0 };
       try {
         const [acsSettingsRows] = await pool.query(
-          "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('acs_url','acs_user','acs_pass')"
+          "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('acs_url','acs_user','acs_pass','acs_online_threshold')"
         );
         const acsSets = {};
         acsSettingsRows.forEach(r => { acsSets[r.setting_key] = r.setting_value; });
+        const acsThresholdMs = (parseInt(acsSets.acs_online_threshold) || 15) * 60 * 1000;
         if (acsSets.acs_url) {
           const _axios = require('axios');
           const acsResp = await _axios.get(`${acsSets.acs_url}/devices`, {
@@ -1322,7 +1324,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           if (Array.isArray(acsResp.data)) {
             const _now = Date.now();
             acsStats.total  = acsResp.data.length;
-            acsStats.online = acsResp.data.filter(d => d._lastInform && (_now - new Date(d._lastInform).getTime() < 300000)).length;
+            acsStats.online = acsResp.data.filter(d => d._lastInform && (_now - new Date(d._lastInform).getTime() < acsThresholdMs)).length;
           }
         }
         // linked count from local DB (customer association)
@@ -1813,11 +1815,12 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   const doAcsSync = async () => {
     try {
       const [rows] = await pool.query(
-        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('acs_url','acs_user','acs_pass','acs_path_pppoe','acs_path_ip','acs_vparams')"
+        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('acs_url','acs_user','acs_pass','acs_path_pppoe','acs_path_ip','acs_vparams','acs_online_threshold')"
       );
       const s = {};
       rows.forEach(r => s[r.setting_key] = r.setting_value);
       if (!s.acs_url) return;
+      const acsThresholdMs = (parseInt(s.acs_online_threshold) || 15) * 60 * 1000;
 
       const axios = require('axios');
       const vParams = s.acs_vparams ? s.acs_vparams.split(/\r?\n/).filter(p => p.trim()) : [];
@@ -1871,7 +1874,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         const manufacturer= (d._deviceId && d._deviceId._Manufacturer)  ? d._deviceId._Manufacturer  : 'Unknown';
         const productClass= (d._deviceId && d._deviceId._ProductClass)  ? d._deviceId._ProductClass  : 'ONT';
         const lastInform  = d._lastInform ? new Date(d._lastInform) : null;
-        const isOnline    = lastInform ? (Date.now() - lastInform.getTime() < 300000) : false;
+        const isOnline    = lastInform ? (Date.now() - lastInform.getTime() < acsThresholdMs) : false;
         const pppoeUser   = getVal(d, s.acs_path_pppoe)
                          || getVal(d, 'VirtualParameters.PPPoEUser')
                          || getVal(d, 'InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Username')
@@ -1919,8 +1922,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         synced++;
       }
 
-      const onlineCount = allDevices.filter(d => d._lastInform && Date.now()-new Date(d._lastInform).getTime()<300000).length;
-      console.log(`[CRON ACS] Sync selesai — ${synced} device (${onlineCount} online, ${synced - onlineCount} offline)`);
+      const onlineCount = allDevices.filter(d => d._lastInform && Date.now()-new Date(d._lastInform).getTime()<acsThresholdMs).length;
+      console.log(`[CRON ACS] Sync selesai — ${synced} device (${onlineCount} online, ${synced - onlineCount} offline, threshold: ${s.acs_online_threshold||15} mnt)`);
     } catch (e) {
       if (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT') {
         console.log('[CRON ACS] GenieACS tidak dapat dijangkau, skip sync.');

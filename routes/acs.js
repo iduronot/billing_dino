@@ -7,7 +7,7 @@ router.setPool = (dbPool) => { pool = dbPool; };
 
 // Helper to get ACS settings
 async function getACSSettings() {
-    const [rows] = await pool.query("SELECT * FROM settings WHERE setting_key IN ('acs_url', 'acs_user', 'acs_pass', 'acs_vparams', 'acs_path_pppoe', 'acs_path_ip')");
+    const [rows] = await pool.query("SELECT * FROM settings WHERE setting_key IN ('acs_url', 'acs_user', 'acs_pass', 'acs_vparams', 'acs_path_pppoe', 'acs_path_ip', 'acs_online_threshold')");
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
     return s;
@@ -28,6 +28,8 @@ router.get('/', async (req, res) => {
         let devices = [];
         let acsOnline = false;
         const vParams = s.acs_vparams ? s.acs_vparams.split(/\r?\n/).filter(p => p.trim()) : [];
+        const acsOnlineThreshold = parseInt(s.acs_online_threshold) || 15;  // menit
+        const acsThresholdMs     = acsOnlineThreshold * 60 * 1000;
         
         if (s.acs_url) {
             try {
@@ -69,7 +71,7 @@ router.get('/', async (req, res) => {
                             manufacturer: (d._deviceId && d._deviceId._Manufacturer) ? d._deviceId._Manufacturer : 'Unknown',
                             product_class: (d._deviceId && d._deviceId._ProductClass) ? d._deviceId._ProductClass : 'ONT',
                             last_inform: d._lastInform || null,
-                            isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < 300000) : false,
+                            isOnline: d._lastInform ? (Date.now() - new Date(d._lastInform).getTime() < acsThresholdMs) : false,
                             pppoe_user: getVal(s.acs_path_pppoe) || getVal('VirtualParameters.PPPoEUser') || getVal('InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.Username') || '-',
                             ip_address: getVal(s.acs_path_ip) || getVal('VirtualParameters.IPAddress') || getVal('InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.ExternalIPAddress') || '-',
                             vparams: {}
@@ -88,10 +90,10 @@ router.get('/', async (req, res) => {
             }
         }
         
-        res.render('acs', { user: req.session, devices, acsOnline, acsUrl: s.acs_url || '', vParams, currentPage: 'acs' });
+        res.render('acs', { user: req.session, devices, acsOnline, acsUrl: s.acs_url || '', vParams, acsOnlineThreshold, currentPage: 'acs' });
     } catch (err) {
         console.error(err);
-        res.render('acs', { user: req.session, devices: [], acsOnline: false, acsUrl: '', currentPage: 'acs' });
+        res.render('acs', { user: req.session, devices: [], acsOnline: false, acsUrl: '', vParams: [], acsOnlineThreshold: 15, currentPage: 'acs' });
     }
 });
 
