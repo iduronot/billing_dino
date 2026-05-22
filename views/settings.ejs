@@ -235,10 +235,65 @@
                 <div class="form-group"><label><%= t.message_delay %></label><input type="number" id="wa_delay" class="form-control" value="<%=settings.wa_delay||5%>" min="1" placeholder="Contoh: 5"></div>
                 <div class="form-group"><label><%= t.batch_limit %></label><input type="number" id="wa_limit" class="form-control" value="<%=settings.wa_limit||50%>" min="1" placeholder="Contoh: 50"></div>
             </div>
-            
+
+            <!-- Toggle Notifikasi Otomatis WA -->
+            <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px;">
+                <div style="font-weight:700;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:7px;">
+                    📬 Notifikasi Otomatis WhatsApp
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+
+                    <!-- Toggle Invoice -->
+                    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:var(--card-bg);border-radius:9px;border:1px solid var(--border);">
+                        <div>
+                            <div style="font-weight:600;font-size:13px;">📄 Tagihan Baru Dibuat</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Kirim WA ke pelanggan saat invoice bulanan dibuat otomatis (tgl 1)</div>
+                        </div>
+                        <div style="position:relative;width:44px;height:24px;flex-shrink:0;margin-left:12px;">
+                            <input type="checkbox" id="wa_notif_invoice" style="opacity:0;width:0;height:0;position:absolute;"
+                                <%=settings.wa_notif_invoice!=='0'?'checked':''%>
+                                onchange="this.closest('label').querySelector('.tog-track').style.background=this.checked?'#10B981':'#475569';this.closest('label').querySelector('.tog-thumb').style.transform=this.checked?'translateX(20px)':'translateX(0)'">
+                            <div class="tog-track" style="position:absolute;inset:0;border-radius:12px;background:<%=settings.wa_notif_invoice!=='0'?'#10B981':'#475569'%>;transition:background .2s;"></div>
+                            <div class="tog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;transform:<%=settings.wa_notif_invoice!=='0'?'translateX(20px)':'translateX(0)'%>;"></div>
+                        </div>
+                    </label>
+
+                    <!-- Toggle Isolir -->
+                    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:var(--card-bg);border-radius:9px;border:1px solid var(--border);">
+                        <div>
+                            <div style="font-weight:600;font-size:13px;">🔒 Pemutusan Layanan (Isolir)</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Kirim WA ke pelanggan saat diisolir otomatis karena tagihan belum dibayar</div>
+                        </div>
+                        <div style="position:relative;width:44px;height:24px;flex-shrink:0;margin-left:12px;">
+                            <input type="checkbox" id="wa_notif_isolir" style="opacity:0;width:0;height:0;position:absolute;"
+                                <%=settings.wa_notif_isolir!=='0'?'checked':''%>
+                                onchange="this.closest('label').querySelector('.tog-track').style.background=this.checked?'#10B981':'#475569';this.closest('label').querySelector('.tog-thumb').style.transform=this.checked?'translateX(20px)':'translateX(0)'">
+                            <div class="tog-track" style="position:absolute;inset:0;border-radius:12px;background:<%=settings.wa_notif_isolir!=='0'?'#10B981':'#475569'%>;transition:background .2s;"></div>
+                            <div class="tog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;transform:<%=settings.wa_notif_isolir!=='0'?'translateX(20px)':'translateX(0)'%>;"></div>
+                        </div>
+                    </label>
+
+                    <!-- Toggle Reminder -->
+                    <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:var(--card-bg);border-radius:9px;border:1px solid var(--border);">
+                        <div>
+                            <div style="font-weight:600;font-size:13px;">⏰ Pengingat Jatuh Tempo (H-3)</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Kirim WA pengingat 3 hari sebelum tagihan jatuh tempo</div>
+                        </div>
+                        <div style="position:relative;width:44px;height:24px;flex-shrink:0;margin-left:12px;">
+                            <input type="checkbox" id="wa_notif_reminder" style="opacity:0;width:0;height:0;position:absolute;"
+                                <%=settings.wa_notif_reminder!=='0'?'checked':''%>
+                                onchange="this.closest('label').querySelector('.tog-track').style.background=this.checked?'#10B981':'#475569';this.closest('label').querySelector('.tog-thumb').style.transform=this.checked?'translateX(20px)':'translateX(0)'">
+                            <div class="tog-track" style="position:absolute;inset:0;border-radius:12px;background:<%=settings.wa_notif_reminder!=='0'?'#10B981':'#475569'%>;transition:background .2s;"></div>
+                            <div class="tog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;transform:<%=settings.wa_notif_reminder!=='0'?'translateX(20px)':'translateX(0)'%>;"></div>
+                        </div>
+                    </label>
+
+                </div>
+            </div>
+
             <div class="form-group"><label><%= t.admin_phone %></label><input type="text" id="wa_admin" class="form-control" value="<%=settings.wa_admin||''%>" placeholder="6281xxxxxxxxxx"></div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="save(['wa_provider','wa_api_url','wa_api_key','wa_sender','wa_delay','wa_limit','wa_admin'])">💾 <%= t.save %></button>
+                <button class="btn btn-primary" onclick="save(['wa_provider','wa_api_url','wa_api_key','wa_sender','wa_delay','wa_limit','wa_admin','wa_notif_invoice','wa_notif_isolir','wa_notif_reminder'])">💾 <%= t.save %></button>
                 <button class="btn" style="background:rgba(37,211,102,.15);color:#25D366;border:1px solid rgba(37,211,102,.3)" onclick="testWA()">📤 <%= t.test_send_wa %></button>
             </div>
         </div>
@@ -679,7 +734,12 @@ function handleDrop(event, type) {
 }
 async function save(keys){
     const body={};
-    keys.forEach(k=>{const el=document.getElementById(k);if(el)body[k]=el.value;});
+    keys.forEach(k=>{
+        const el=document.getElementById(k);
+        if(!el) return;
+        // checkbox → simpan '1' atau '0'
+        body[k] = el.type==='checkbox' ? (el.checked?'1':'0') : el.value;
+    });
     const res=await fetch('/settings/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();showToast(d.message,d.success?'success':'error');
 }

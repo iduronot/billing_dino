@@ -396,7 +396,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     ['wa_api_token', ''],
     ['wa_api_url', ''],
     ['wa_delay', '5'],
-    ['wa_limit', '50']
+    ['wa_limit', '50'],
+    ['wa_notif_invoice',  '1'],
+    ['wa_notif_isolir',   '1'],
+    ['wa_notif_reminder', '1']
 ];
   for (const [key, val] of defaultSettings) {
     pool.query('INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)', [key, val]).catch(() => {});
@@ -1621,9 +1624,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
          WHERE i.status = 'unpaid' AND i.due_date < CURDATE()`
       );
       const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit']);
-      const waLimit = parseInt(s.wa_limit) || 50;
-      const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_isolir']);
+      const waLimit      = parseInt(s.wa_limit) || 50;
+      const waDelay      = (parseInt(s.wa_delay) || 5) * 1000;
+      const waNotifOn    = s.wa_notif_isolir !== '0';
       let sentCount = 0;
       let isolatedCount = 0;
 
@@ -1646,8 +1650,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
                 cust.pppoe_username
               ).catch(() => {});
             }
-            // Kirim WA hanya jika belum mencapai batas
-            if (sentCount < waLimit) {
+            // Kirim WA hanya jika fitur aktif dan belum mencapai batas
+            if (waNotifOn && sentCount < waLimit) {
               await notifyIsolation(pool, cust);
               sentCount++;
               await new Promise(r => setTimeout(r, waDelay));
@@ -1655,7 +1659,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           }
         }
       }
-      console.log(`[CRON] Auto-isolir done. ${isolatedCount} customers isolated, ${sentCount} WA sent.`);
+      const waInfo = waNotifOn ? `${sentCount} WA sent` : 'WA dinonaktifkan';
+      console.log(`[CRON] Auto-isolir done. ${isolatedCount} customers isolated, ${waInfo}.`);
     } catch (e) {
       console.error('[CRON] Auto-isolir error:', e.message);
     }
@@ -1673,19 +1678,24 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
          AND c.phone IS NOT NULL AND c.phone != ''`
       );
       const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit']);
-      const waLimit = parseInt(s.wa_limit) || 50;
-      const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_reminder']);
+      const waLimit   = parseInt(s.wa_limit) || 50;
+      const waDelay   = (parseInt(s.wa_delay) || 5) * 1000;
+      const waNotifOn = s.wa_notif_reminder !== '0';
       let sentCount = 0;
 
-      for (const inv of upcoming) {
-        if (sentCount >= waLimit) break;
-        const dueStr = new Date(inv.due_date).toLocaleDateString('id-ID');
-        await notifyReminder(pool, inv, inv.amount, dueStr);
-        sentCount++;
-        await new Promise(r => setTimeout(r, waDelay));
+      if (waNotifOn) {
+        for (const inv of upcoming) {
+          if (sentCount >= waLimit) break;
+          const dueStr = new Date(inv.due_date).toLocaleDateString('id-ID');
+          await notifyReminder(pool, inv, inv.amount, dueStr);
+          sentCount++;
+          await new Promise(r => setTimeout(r, waDelay));
+        }
+        console.log(`[CRON] Reminders sent: ${sentCount}`);
+      } else {
+        console.log(`[CRON] Reminder WA dinonaktifkan, skip. (${upcoming.length} invoices eligible)`);
       }
-      console.log(`[CRON] Reminders sent: ${sentCount}`);
     } catch (e) {
       console.error('[CRON] Reminder error:', e.message);
     }
@@ -1710,9 +1720,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       let sentCount = 0;
 
       const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit']);
-      const waLimit = parseInt(s.wa_limit) || 50;
-      const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_invoice']);
+      const waLimit   = parseInt(s.wa_limit) || 50;
+      const waDelay   = (parseInt(s.wa_delay) || 5) * 1000;
+      const waNotifOn = s.wa_notif_invoice !== '0';
 
       for (const c of customers) {
         // Selalu buat invoice — tidak dibatasi wa_limit
@@ -1730,14 +1741,15 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         );
         created++;
 
-        // Kirim WA hanya untuk pelanggan aktif & belum mencapai batas
-        if (c.status === 'active' && sentCount < waLimit) {
+        // Kirim WA hanya jika fitur aktif, pelanggan aktif, dan belum mencapai batas
+        if (waNotifOn && c.status === 'active' && sentCount < waLimit) {
           await notifyInvoiceCreated(pool, c, c.package_price || 0, dueDate);
           sentCount++;
           await new Promise(r => setTimeout(r, waDelay));
         }
       }
-      console.log(`[CRON] Monthly invoices: ${created} created, ${skipped} skipped, ${sentCount} WA sent.`);
+      const waInfo = waNotifOn ? `${sentCount} WA sent` : 'WA dinonaktifkan';
+      console.log(`[CRON] Monthly invoices: ${created} created, ${skipped} skipped, ${waInfo}.`);
     } catch (e) {
       console.error('[CRON] Invoice generation error:', e.message);
     }
