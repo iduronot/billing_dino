@@ -77,6 +77,28 @@
 
         .olt-brand-tag { display:inline-block; padding:3px 8px; border-radius:6px; font-size:10px; font-weight:700; background:var(--sub-bg); color:var(--muted); letter-spacing:0.5px; }
         code { background:var(--sub-bg); padding:2px 7px; border-radius:5px; font-size:11px; color:var(--muted); }
+
+        /* ── PON View ─────────────────────────────────────────── */
+        .pon-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; margin-bottom:20px; overflow:hidden; }
+        .pon-card-header { display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:var(--sub-bg); border-bottom:1px solid var(--border); flex-wrap:wrap; gap:12px; }
+        .pon-row { border-bottom:1px solid var(--border); }
+        .pon-row:last-child { border-bottom:none; }
+        .pon-row-main { display:flex; align-items:center; gap:14px; padding:13px 24px; cursor:pointer; transition:background 0.15s; user-select:none; }
+        .pon-row-main:hover { background:var(--hover-bg); }
+        .pon-row.expanded > .pon-row-main { background:rgba(59,130,246,0.06); border-left:3px solid var(--primary); padding-left:21px; }
+        .pon-row-detail { padding:0 24px 16px 24px; display:none; border-top:1px solid var(--border); background:var(--bg-color); }
+        .pon-row-detail table { width:100%; border-collapse:collapse; font-size:12px; }
+        .pon-row-detail th { padding:8px 10px; font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; background:var(--sub-bg); text-align:left; }
+        .pon-row-detail td { padding:9px 10px; border-bottom:1px solid var(--border); }
+        .pon-row-detail tr:last-child td { border-bottom:none; }
+        .pon-row-detail tr:hover td { background:var(--hover-bg); }
+        .pon-bar { flex:1; height:8px; background:var(--border); border-radius:4px; overflow:hidden; min-width:60px; }
+        .pon-bar-fill { height:100%; background:#10B981; transition:width 0.3s; }
+        .pon-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .pon-chevron { margin-left:auto; font-size:11px; color:var(--muted); transition:transform 0.2s; }
+        .pon-row.expanded .pon-chevron { transform:rotate(180deg); }
+        .pon-header-bar { width:160px; height:6px; background:var(--border); border-radius:4px; overflow:hidden; margin-top:6px; }
+        .pon-header-bar-fill { height:100%; background:#10B981; transition:width 0.3s; }
     </style>
 </head>
 <body>
@@ -136,6 +158,9 @@
             <div class="tab-bar">
                 <button class="active" onclick="switchTab('mon', this)">
                     <i class="fas fa-desktop"></i> <%= t.monitor_onu || 'Monitor ONU' %>
+                </button>
+                <button onclick="switchTab('pon', this)">
+                    <i class="fas fa-diagram-project"></i> PON View
                 </button>
                 <button onclick="switchTab('cfg', this)">
                     <i class="fas fa-cog"></i> <%= t.manage_olt_device || 'Kelola OLT' %>
@@ -314,6 +339,22 @@
 
             </div><!-- end tab-mon -->
 
+            <!-- TAB PON VIEW -->
+            <div id="tab-pon" class="tab-pane">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <h3 style="margin:0; font-size:15px;">PON View — Status per Port PON</h3>
+                        <p style="margin:4px 0 0; font-size:12px; color:var(--muted);">Klik baris PON untuk melihat daftar ONU pada port tersebut.</p>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="loadPonView(true)">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="ponViewContainer">
+                    <div class="empty-state"><i class="fas fa-diagram-project" style="opacity:0.2;"></i><p>Klik tab PON View untuk memuat data.</p></div>
+                </div>
+            </div><!-- end tab-pon -->
+
             <!-- TAB KELOLA OLT -->
             <div id="tab-cfg" class="tab-pane">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -472,11 +513,13 @@
 
 <script>
 // Tab switching
+let ponViewLoaded = false;
 function switchTab(id, btn) {
     document.querySelectorAll('.tab-pane').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + id).classList.add('active');
     btn.classList.add('active');
+    if (id === 'pon' && !ponViewLoaded) loadPonView();
 }
 
 // ── Load info last sync per OLT ──────────────────────────────
@@ -736,6 +779,205 @@ function updateModels(selected = null) {
     });
 }
 updateModels();
+
+// ── PON View ─────────────────────────────────────────────────
+async function loadPonView(forceReload = false) {
+    if (ponViewLoaded && !forceReload) return;
+    ponViewLoaded = true;
+
+    const container = document.getElementById('ponViewContainer');
+    container.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin" style="font-size:32px;opacity:1;color:var(--primary);"></i><p style="margin-top:12px;">Memuat data PON...</p></div>';
+
+    try {
+        const r = await fetch('/olt/api/pon-summary');
+        const d = await r.json();
+        if (!d.success || !d.data || d.data.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-satellite-dish"></i><p>Belum ada data ONU. Klik <b>Sync Semua OLT</b> terlebih dahulu.</p></div>';
+            return;
+        }
+        renderPonView(d.data);
+    } catch(e) {
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-triangle-exclamation"></i><p>Gagal memuat: ${e.message}</p></div>`;
+    }
+}
+
+function renderPonView(olts) {
+    const container = document.getElementById('ponViewContainer');
+    let html = '';
+
+    olts.forEach(olt => {
+        const onPct = olt.total > 0 ? Math.round(olt.online / olt.total * 100) : 0;
+        const allOn = olt.offline === 0 && olt.total > 0;
+        const headerColor = allOn ? '#10B981' : (olt.online === 0 && olt.total > 0 ? '#EF4444' : '#F59E0B');
+
+        html += `
+        <div class="pon-card">
+            <div class="pon-card-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:var(--sub-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--primary);">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;font-size:15px;color:var(--text);">${escHtml(olt.name)}</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+                            <span style="background:var(--sub-bg);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;">${escHtml(olt.brand)}</span>
+                            ${olt.last_profile ? `<span style="margin-left:6px;">profile: ${escHtml(olt.last_profile)}</span>` : ''}
+                            <span style="margin-left:8px;">${olt.pons.length} PON Port</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align:right;min-width:160px;">
+                    <div style="font-size:18px;font-weight:800;color:var(--text);">${olt.total} <span style="font-size:12px;font-weight:400;color:var(--muted);">ONU</span></div>
+                    <div style="font-size:12px;margin-top:2px;">
+                        <span style="color:#10B981;font-weight:600;">▲ ${olt.online} Online</span>
+                        &nbsp;·&nbsp;
+                        <span style="color:#EF4444;font-weight:600;">▼ ${olt.offline} Offline</span>
+                    </div>
+                    <div class="pon-header-bar" style="margin-left:auto;margin-top:7px;">
+                        <div class="pon-header-bar-fill" style="width:${onPct}%;background:${headerColor};"></div>
+                    </div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:3px;">${onPct}% Online</div>
+                </div>
+            </div>
+        `;
+
+        olt.pons.forEach(pon => {
+            const ponPct = pon.total > 0 ? Math.round(pon.online / pon.total * 100) : 0;
+            const dotColor = pon.offline === 0 ? '#10B981' : (pon.online === 0 ? '#EF4444' : '#F59E0B');
+            const ponLabel = pon.port !== undefined && pon.port !== null ? 'PON ' + pon.port : 'PON ?';
+
+            html += `
+            <div class="pon-row" id="ponrow-${olt.id}-${pon.port}">
+                <div class="pon-row-main" onclick="togglePon(${olt.id}, '${escAttr(String(pon.port))}')">
+                    <div class="pon-dot" style="background:${dotColor};box-shadow:0 0 6px ${dotColor}66;"></div>
+                    <div style="min-width:80px;">
+                        <span style="font-weight:700;font-size:14px;">${ponLabel}</span>
+                    </div>
+                    <div class="pon-bar">
+                        <div class="pon-bar-fill" style="width:${ponPct}%;background:${dotColor};"></div>
+                    </div>
+                    <div style="min-width:120px;font-size:12px;text-align:right;">
+                        <span style="color:#10B981;font-weight:600;">✓ ${pon.online}</span>
+                        &nbsp;/&nbsp;
+                        <span style="color:#EF4444;font-weight:600;">✗ ${pon.offline}</span>
+                        <span style="color:var(--muted);"> dari ${pon.total}</span>
+                    </div>
+                    <div style="min-width:50px;font-size:11px;color:var(--muted);text-align:right;">${ponPct}%</div>
+                    <i class="fas fa-chevron-down pon-chevron"></i>
+                </div>
+                <div class="pon-row-detail" id="pondetail-${olt.id}-${pon.port}">
+                    <div style="padding:12px 0;color:var(--muted);font-size:12px;text-align:center;">
+                        <i class="fas fa-spinner fa-spin"></i> Memuat ONU...
+                    </div>
+                </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+async function togglePon(oltId, ponPort) {
+    const row    = document.getElementById(`ponrow-${oltId}-${ponPort}`);
+    const detail = document.getElementById(`pondetail-${oltId}-${ponPort}`);
+    if (!row || !detail) return;
+
+    const isOpen = row.classList.contains('expanded');
+    if (isOpen) {
+        row.classList.remove('expanded');
+        detail.style.display = 'none';
+        return;
+    }
+
+    row.classList.add('expanded');
+    detail.style.display = 'block';
+
+    // Sudah pernah diload?
+    if (detail.dataset.loaded === '1') return;
+
+    try {
+        const r = await fetch(`/olt/api/pon-onus?olt_id=${oltId}&pon=${encodeURIComponent(ponPort)}`);
+        const d = await r.json();
+        detail.dataset.loaded = '1';
+
+        if (!d.success || !d.data || d.data.length === 0) {
+            detail.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12px;text-align:center;">Tidak ada ONU pada PON ini.</div>';
+            return;
+        }
+
+        let tbl = `
+        <div style="padding:14px 0;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama ONU</th>
+                    <th>Index</th>
+                    <th>SN / MAC</th>
+                    <th>TX Power</th>
+                    <th>RX Signal</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+        d.data.forEach(onu => {
+            const rx = parseFloat(onu.rx_power);
+            const tx = parseFloat(onu.tx_power);
+            const rxCls = isNaN(rx)||rx===0 ? 'sig-none' : (rx < -27 ? 'sig-bad' : (rx < -25 ? 'sig-warn' : 'sig-good'));
+            const rxTxt = (isNaN(rx)||rx===0) ? '-' : onu.rx_power + ' dBm';
+            const txTxt = (isNaN(tx)||tx===0) ? '-' : onu.tx_power + ' dBm';
+            const isUp  = onu.status === 'Up';
+
+            const snMac = [onu.sn && onu.sn !== 'Unknown' ? onu.sn.trim() : '', onu.mac ? onu.mac.trim() : '']
+                          .filter(Boolean).join('<br>') || '-';
+
+            tbl += `
+            <tr>
+                <td style="font-weight:600;">${escHtml(onu.name || '-')}</td>
+                <td><code>${escHtml(onu.onu_index)}</code></td>
+                <td style="font-family:monospace;font-size:11px;color:var(--muted);">${snMac}</td>
+                <td><span class="sig-badge ${isNaN(tx)||tx===0 ? 'sig-none' : 'sig-good'}">${txTxt}</span></td>
+                <td><span class="sig-badge ${rxCls}">${rxTxt}</span></td>
+                <td>
+                    <span class="status-badge ${isUp ? 'status-up' : 'status-down'}">
+                        <i class="fas ${isUp ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+                        ${isUp ? 'Online' : 'Offline'}
+                    </span>
+                </td>
+                <td>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn-action" title="Config VLAN"
+                            onclick="event.stopPropagation();openOnuConfig('${onu.olt_id}','${escAttr(onu.onu_index)}','${escAttr(onu.name)}')">
+                            <i class="fas fa-network-wired"></i>
+                        </button>
+                        <button class="btn-action danger" title="Reboot ONU"
+                            onclick="event.stopPropagation();rebootOnu(${onu.olt_id},'${escAttr(onu.onu_index)}')">
+                            <i class="fas fa-power-off"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+
+        tbl += `</tbody></table></div>`;
+        detail.innerHTML = tbl;
+    } catch(e) {
+        detail.dataset.loaded = '0';
+        detail.innerHTML = `<div style="padding:14px;color:#EF4444;font-size:12px;">Gagal: ${e.message}</div>`;
+    }
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+    if (!s) return '';
+    return String(s).replace(/'/g,"\\'");
+}
 
 // Toast
 function showToast(msg, type = 'info') {

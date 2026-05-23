@@ -265,6 +265,82 @@ router.delete('/api/olts/:id', async (req, res) => {
     }
 });
 
+// GET /olt/api/pon-summary — statistik per PON per OLT
+router.get('/api/pon-summary', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT olt_id, olt_name, brand, last_profile, pon_port,
+                   COUNT(*) AS total,
+                   COALESCE(SUM(status = 'Up'),   0) AS online,
+                   COALESCE(SUM(status = 'Down'), 0) AS offline,
+                   MAX(last_updated) AS last_updated
+            FROM (
+                SELECT o.id AS olt_id, o.name AS olt_name, o.brand, o.last_profile,
+                       CASE
+                           WHEN u.onu_index LIKE '%.%'
+                               THEN SUBSTRING_INDEX(u.onu_index, '.', 1)
+                           ELSE CAST(FLOOR(CAST(REPLACE(u.onu_index,'.',0) AS DECIMAL(20,0)) / 65536) AS CHAR)
+                       END AS pon_port,
+                       u.status, u.last_updated
+                FROM hioso_onus u
+                JOIN hioso_olts o ON u.olt_id = o.id
+            ) t
+            GROUP BY olt_id, olt_name, brand, last_profile, pon_port
+            ORDER BY olt_name ASC, CAST(pon_port AS UNSIGNED) ASC
+        `);
+
+        const oltMap = {};
+        rows.forEach(r => {
+            if (!oltMap[r.olt_id]) {
+                oltMap[r.olt_id] = {
+                    id: r.olt_id, name: r.olt_name,
+                    brand: r.brand || 'HIOSO', last_profile: r.last_profile,
+                    pons: [], total: 0, online: 0, offline: 0
+                };
+            }
+            const on  = parseInt(r.online)  || 0;
+            const off = parseInt(r.offline) || 0;
+            const tot = parseInt(r.total)   || 0;
+            oltMap[r.olt_id].pons.push({ port: r.pon_port, total: tot, online: on, offline: off, last_updated: r.last_updated });
+            oltMap[r.olt_id].total   += tot;
+            oltMap[r.olt_id].online  += on;
+            oltMap[r.olt_id].offline += off;
+        });
+
+        res.json({ success: true, data: Object.values(oltMap) });
+    } catch (e) {
+        console.error('[PON Summary]', e);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /olt/api/pon-onus?olt_id=&pon= — daftar ONU pada satu PON
+router.get('/api/pon-onus', async (req, res) => {
+    try {
+        const { olt_id, pon } = req.query;
+        if (!olt_id || pon === undefined)
+            return res.json({ success: false, message: 'Parameter olt_id dan pon wajib diisi' });
+
+        const [rows] = await pool.query(`
+            SELECT u.*, o.name AS olt_name, o.brand AS olt_brand, o.last_profile
+            FROM hioso_onus u
+            JOIN hioso_olts o ON u.olt_id = o.id
+            WHERE u.olt_id = ?
+              AND CASE
+                    WHEN u.onu_index LIKE '%.%'
+                        THEN SUBSTRING_INDEX(u.onu_index, '.', 1)
+                    ELSE CAST(FLOOR(CAST(REPLACE(u.onu_index,'.',0) AS DECIMAL(20,0)) / 65536) AS CHAR)
+                  END = ?
+            ORDER BY u.status DESC, u.name ASC
+        `, [parseInt(olt_id), String(pon)]);
+
+        res.json({ success: true, data: rows });
+    } catch (e) {
+        console.error('[PON ONUs]', e);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 router.post('/api/test', async (req, res) => {
     const { host, community } = req.body;
     try {
