@@ -143,10 +143,12 @@
     <div class="inv-header">
         <div class="header-top">
             <div>
-                <% if (settings.company_logo) { %>
-                <img src="<%= settings.company_logo %>" class="company-logo" alt="Logo">
-                <% } %>
-                <div class="company-name-text"><%= settings.company_name || 'Dino-Bill ISP' %></div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+                    <% if (settings.company_logo) { %>
+                    <img src="<%= settings.company_logo %>" class="company-logo" alt="Logo" style="margin-bottom:0;">
+                    <% } %>
+                    <div class="company-name-text" style="margin-bottom:0;"><%= settings.company_name || 'Dino-Bill ISP' %></div>
+                </div>
                 <div class="company-meta">
                     <% if (settings.company_address) { %><%= settings.company_address %><br><% } %>
                     <% if (settings.company_phone)  { %>Tel: <%= settings.company_phone %><% if(settings.company_email){ %> &nbsp;·&nbsp; <%}%><% } %><% if (settings.company_email) { %><%= settings.company_email %><% } %>
