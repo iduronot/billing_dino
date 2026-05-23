@@ -578,6 +578,23 @@ function timeSince(date) {
     return Math.floor(sec/3600) + ' jam lalu';
 }
 
+// ── Helper: parse JSON atau deteksi HTML (session expired) ───
+async function parseJsonOrAlert(res) {
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+        // Server mengembalikan HTML — kemungkinan sesi expired
+        if (res.url && res.url.includes('/login')) {
+            throw new Error('Sesi berakhir. Halaman akan di-refresh untuk login ulang...');
+        }
+        const text = await res.text();
+        if (text.toLowerCase().includes('login') || text.includes('<!DOCTYPE')) {
+            throw new Error('Sesi berakhir. Silakan login ulang (halaman akan refresh).');
+        }
+        throw new Error('Server mengembalikan respon tidak valid (bukan JSON).');
+    }
+    return res.json();
+}
+
 // ── Sync semua OLT ───────────────────────────────────────────
 async function syncOLT(btn) {
     const oldHtml = btn.innerHTML;
@@ -589,11 +606,14 @@ async function syncOLT(btn) {
             method: 'POST',
             signal: AbortSignal.timeout(300000)
         });
-        const d = await res.json();
+        const d = await parseJsonOrAlert(res);
         showToast(d.message, d.success ? 'success' : 'error');
         if (d.success) setTimeout(() => location.reload(), 1500);
     } catch(e) {
-        showToast('Gagal sync: ' + e.message, 'error');
+        showToast('❌ ' + e.message, 'error');
+        if (e.message.includes('Sesi berakhir')) {
+            setTimeout(() => location.href = '/login', 2500);
+        }
     } finally {
         btn.disabled = false;
         btn.innerHTML = oldHtml;
@@ -613,11 +633,12 @@ async function syncOneOlt(id, btn) {
             body: JSON.stringify({}),
             signal: AbortSignal.timeout(120000)
         });
-        const d = await r.json();
+        const d = await parseJsonOrAlert(r);
         showToast(d.message, d.success ? 'success' : 'error');
         if (d.success) setTimeout(() => location.reload(), 1200);
     } catch(e) {
-        showToast('Gagal: ' + e.message, 'error');
+        showToast('❌ ' + e.message, 'error');
+        if (e.message.includes('Sesi berakhir')) setTimeout(() => location.href = '/login', 2500);
     } finally {
         btn.disabled  = false;
         btn.innerHTML = oldHtml;
@@ -635,11 +656,12 @@ async function syncOneOltReset(id) {
             body: JSON.stringify({ reset_profile: true }),
             signal: AbortSignal.timeout(120000)
         });
-        const d = await r.json();
+        const d = await parseJsonOrAlert(r);
         showToast(d.message, d.success ? 'success' : 'error');
         if (d.success) setTimeout(() => location.reload(), 1200);
     } catch(e) {
-        showToast('Gagal: ' + e.message, 'error');
+        showToast('❌ ' + e.message, 'error');
+        if (e.message.includes('Sesi berakhir')) setTimeout(() => location.href = '/login', 2500);
     }
 }
 
