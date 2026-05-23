@@ -145,9 +145,8 @@
             <div>
                 <% if (settings.company_logo) { %>
                 <img src="<%= settings.company_logo %>" class="company-logo" alt="Logo">
-                <% } else { %>
-                <div class="company-name-text"><%= settings.company_name || 'Dino-Bill ISP' %></div>
                 <% } %>
+                <div class="company-name-text"><%= settings.company_name || 'Dino-Bill ISP' %></div>
                 <div class="company-meta">
                     <% if (settings.company_address) { %><%= settings.company_address %><br><% } %>
                     <% if (settings.company_phone)  { %>Tel: <%= settings.company_phone %><% if(settings.company_email){ %> &nbsp;·&nbsp; <%}%><% } %><% if (settings.company_email) { %><%= settings.company_email %><% } %>
