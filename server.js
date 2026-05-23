@@ -1794,10 +1794,24 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           }
 
           // Full replace agar data benar-benar segar (tidak ada stale ONU)
+          const activeProfile = detectedProfile || profile || olt.last_profile;
           await pool.query('DELETE FROM hioso_onus WHERE olt_id = ?', [olt.id]);
-          const values = onus.map(o => [olt.id, o.index, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status, new Date()]);
+          const values = onus.map(o => {
+            const idx = String(o.index || '').trim();
+            let ponPort = null;
+            if (idx.includes('.')) {
+              const parts = idx.split('.');
+              ponPort = parts.length === 2
+                ? (parseInt(parts[0], 10) || 0)
+                : (parseInt(parts[parts.length - 2], 10) || 0);
+            } else {
+              const num = parseInt(idx, 10);
+              if (!isNaN(num) && num > 0) ponPort = (num >> 8) & 0xFF;
+            }
+            return [olt.id, o.index, ponPort, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status, new Date()];
+          });
           await pool.query(
-            `INSERT INTO hioso_onus (olt_id, onu_index, name, sn, mac, tx_power, rx_power, status, last_updated) VALUES ?`,
+            `INSERT INTO hioso_onus (olt_id, onu_index, pon_port, name, sn, mac, tx_power, rx_power, status, last_updated) VALUES ?`,
             [values]
           );
 
