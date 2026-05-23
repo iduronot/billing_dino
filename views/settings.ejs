@@ -56,6 +56,7 @@
             <button class="tab-btn" onclick="showTab('billing')">🗓 <%= t.billing %></button>
 
             <button class="tab-btn" onclick="showTab('acs')">🌐 <%= t.genieacs %></button>
+            <button class="tab-btn" onclick="showTab('olt_alert')">🔌 OLT Alert</button>
             <button class="tab-btn" onclick="showTab('import')">📤 <%= t.import_export %></button>
             <button class="tab-btn" onclick="showTab('users')">👥 <%= t.manage_users %></button>
             <button class="tab-btn" onclick="showTab('wa_templates')">📝 <%= t.wa_templates %></button>
@@ -539,6 +540,80 @@
             <button class="btn btn-primary" onclick="save(['msg_invoice_created','msg_payment_received','msg_isolation','msg_reminder'])">💾 <%= t.save_templates %></button>
         </div>
 
+        <!-- ═══ TAB OLT ALERT ═══ -->
+        <div id="tab-olt_alert" class="tab-content card" style="display:none">
+            <h2 class="section-title">🔌 Notifikasi OLT — Alert ONU Offline</h2>
+
+            <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;margin-bottom:24px;">
+                <p style="margin:0;font-size:13px;color:var(--text);line-height:1.6;">
+                    <b>📢 Cara kerja:</b> Setiap kali sync OLT selesai (otomatis tiap 5 menit atau manual),
+                    sistem akan memeriksa jumlah ONU offline per OLT dan total seluruh OLT.
+                    Notifikasi Telegram dikirim ke grup yang sudah dikonfigurasi saat jumlah offline melebihi batas,
+                    dan saat kondisi kembali normal (recovery). Pesan hanya dikirim sekali per perubahan status
+                    (anti-spam).
+                </p>
+            </div>
+
+            <div class="setting-group">
+                <span class="setting-label">🔴 Batas Offline per OLT</span>
+                <p class="setting-desc">Kirim notifikasi jika ONU offline pada <b>satu OLT</b> melebihi angka ini. Set 0 untuk nonaktifkan.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Batas ONU Offline (per OLT)</label>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <input type="number" id="olt_offline_threshold" class="form-control"
+                                value="<%= settings.olt_offline_threshold || 100 %>"
+                                min="0" max="9999" style="max-width:160px;">
+                            <span style="font-size:13px;color:var(--muted);">ONU offline</span>
+                        </div>
+                        <p style="font-size:11px;color:var(--muted);margin-top:6px;">
+                            Contoh: 100 = kirim notifikasi jika ≥ 100 ONU offline di satu OLT. Set 0 = nonaktif.
+                        </p>
+                    </div>
+                    <div class="form-group">
+                        <label>Batas ONU Offline (Total Semua OLT)</label>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <input type="number" id="olt_offline_threshold_global" class="form-control"
+                                value="<%= settings.olt_offline_threshold_global || 0 %>"
+                                min="0" max="99999" style="max-width:160px;">
+                            <span style="font-size:13px;color:var(--muted);">ONU offline</span>
+                        </div>
+                        <p style="font-size:11px;color:var(--muted);margin-top:6px;">
+                            Cek total offline semua OLT. Set 0 = nonaktif.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <span class="setting-label">📱 Telegram Tujuan Notifikasi</span>
+                <p class="setting-desc">
+                    Notifikasi dikirim ke Chat ID yang sudah dikonfigurasi di tab <b>Telegram</b>.
+                    Pastikan Bot Token dan Chat ID grup sudah diisi dengan benar.
+                </p>
+                <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;">
+                    <div style="display:flex;gap:12px;align-items:center;">
+                        <span style="font-size:20px;">✈️</span>
+                        <div>
+                            <div>Chat ID aktif: <b id="previewChatId"><%=settings.monitor_telegram_chat||settings.telegram_chat_id||'(belum dikonfigurasi)'%></b></div>
+                            <div style="color:var(--muted);font-size:12px;margin-top:2px;">Ubah di tab <b>Telegram</b> atau <b>IP Monitor</b> → Pengaturan.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                <button class="btn btn-primary" onclick="save(['olt_offline_threshold','olt_offline_threshold_global'])">
+                    💾 Simpan Pengaturan Alert
+                </button>
+                <button class="btn" style="background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);"
+                    onclick="testOltAlert()">
+                    🧪 Test Kirim Notifikasi
+                </button>
+                <span id="testOltAlertResult" style="font-size:13px;"></span>
+            </div>
+        </div>
+
         <div id="tab-import" class="tab-content card" style="display:none">
             <h2 class="section-title">📤 <%= t.import_export_data %></h2>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -767,6 +842,20 @@ async function importCSV(){
     const res=await fetch('/import/customers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csv_data:csv})});
     const d=await res.json();showToast(d.message,d.success?'success':'error');
     if(d.success)document.getElementById('csv_import').value='';
+}
+async function testOltAlert() {
+    const el = document.getElementById('testOltAlertResult');
+    el.textContent = '⏳ Mengirim...';
+    el.style.color = 'var(--muted)';
+    try {
+        const r = await fetch('/settings/api/test-olt-alert', { method: 'POST' });
+        const d = await r.json();
+        el.textContent = d.success ? '✅ ' + d.message : '❌ ' + d.message;
+        el.style.color  = d.success ? '#10B981' : '#EF4444';
+    } catch(e) {
+        el.textContent = '❌ ' + e.message;
+        el.style.color = '#EF4444';
+    }
 }
 async function testACS(){
     const url=document.getElementById('acs_url').value;

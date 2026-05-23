@@ -400,7 +400,9 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     ['wa_notif_invoice',  '1'],
     ['wa_notif_isolir',   '1'],
     ['wa_notif_reminder', '1'],
-    ['acs_online_threshold', '15']   // menit — sesuaikan dengan Periodic Inform Interval CPE
+    ['acs_online_threshold', '15'],   // menit — sesuaikan dengan Periodic Inform Interval CPE
+    ['olt_offline_threshold', '100'], // notif jika ONU offline per OLT >= nilai ini (0=nonaktif)
+    ['olt_offline_threshold_global', '0'] // notif jika total offline semua OLT >= nilai ini (0=nonaktif)
 ];
   for (const [key, val] of defaultSettings) {
     pool.query('INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)', [key, val]).catch(() => {});
@@ -1769,10 +1771,119 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // ═══════════════════════════════════════════════════════════════
   // CRON: Auto Sync OLT — semua OLT aktif setiap 5 menit
   // ═══════════════════════════════════════════════════════════════
+
+  // State anti-spam notifikasi OLT (reset saat server restart)
+  const oltOfflineAlertState = {}; // { oltId: 'ok'|'alert', globalState: 'ok'|'alert' }
+
+  // Kirim notifikasi Telegram untuk alert OLT offline
+  async function sendOltTelegram(text) {
+    try {
+      const [rows] = await pool.query(
+        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('telegram_bot_token','monitor_telegram_chat','telegram_chat_id')"
+      );
+      const s = {};
+      rows.forEach(r => { s[r.setting_key] = r.setting_value; });
+      const token   = s.telegram_bot_token;
+      const chat_id = s.monitor_telegram_chat || s.telegram_chat_id;
+      if (!token || !chat_id) { console.warn('[OLT Alert] Token/Chat ID belum dikonfigurasi'); return false; }
+      const axios = require('axios');
+      await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, { chat_id, text, parse_mode: 'HTML' });
+      return true;
+    } catch (e) {
+      console.error('[OLT Alert] Gagal kirim Telegram:', e.message);
+      return false;
+    }
+  }
+
+  // Periksa ambang batas offline dan kirim notifikasi jika perlu
+  async function checkOltOfflineAlerts(syncResults) {
+    try {
+      const [settingRows] = await pool.query(
+        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('olt_offline_threshold','olt_offline_threshold_global')"
+      );
+      const cfg = {};
+      settingRows.forEach(r => { cfg[r.setting_key] = r.setting_value; });
+
+      const threshold       = parseInt(cfg.olt_offline_threshold || '100', 10);
+      const thresholdGlobal = parseInt(cfg.olt_offline_threshold_global || '0', 10);
+
+      const now = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false });
+
+      // — Cek per OLT —
+      if (threshold > 0) {
+        for (const { olt, total, up, down } of syncResults) {
+          const prev = oltOfflineAlertState[olt.id] || 'ok';
+          const curr = down >= threshold ? 'alert' : 'ok';
+
+          if (curr === 'alert' && prev !== 'alert') {
+            const pct = total > 0 ? Math.round(down / total * 100) : 0;
+            const msg = `🔴 <b>PERINGATAN OLT — ONU Offline Tinggi</b>\n\n`
+              + `📡 <b>OLT:</b> ${olt.name}\n`
+              + `📊 Total ONU  : <b>${total}</b>\n`
+              + `✅ Online      : <b>${up}</b>\n`
+              + `❌ Offline     : <b>${down}</b> (${pct}%)\n`
+              + `⚠️ Batas       : ${threshold} ONU offline\n\n`
+              + `🕐 ${now}`;
+            await sendOltTelegram(msg);
+            console.log(`[OLT Alert] 🔴 "${olt.name}" — ${down} offline (>= ${threshold}), notifikasi terkirim`);
+          } else if (curr === 'ok' && prev === 'alert') {
+            const msg = `✅ <b>NORMAL — OLT Offline Berkurang</b>\n\n`
+              + `📡 <b>OLT:</b> ${olt.name}\n`
+              + `📊 Total ONU  : <b>${total}</b>\n`
+              + `✅ Online      : <b>${up}</b>\n`
+              + `❌ Offline     : <b>${down}</b>\n`
+              + `👍 Di bawah batas: ${threshold} ONU offline\n\n`
+              + `🕐 ${now}`;
+            await sendOltTelegram(msg);
+            console.log(`[OLT Alert] ✅ "${olt.name}" — pulih (${down} offline < ${threshold}), notifikasi terkirim`);
+          }
+          oltOfflineAlertState[olt.id] = curr;
+        }
+      }
+
+      // — Cek total global semua OLT —
+      if (thresholdGlobal > 0) {
+        const totalDown  = syncResults.reduce((s, r) => s + r.down,  0);
+        const totalUp    = syncResults.reduce((s, r) => s + r.up,    0);
+        const totalAll   = syncResults.reduce((s, r) => s + r.total, 0);
+        const prevGlobal = oltOfflineAlertState._global || 'ok';
+        const currGlobal = totalDown >= thresholdGlobal ? 'alert' : 'ok';
+
+        if (currGlobal === 'alert' && prevGlobal !== 'alert') {
+          const pct = totalAll > 0 ? Math.round(totalDown / totalAll * 100) : 0;
+          const msg = `🔴 <b>PERINGATAN GLOBAL — Total ONU Offline Tinggi</b>\n\n`
+            + `📡 <b>Semua OLT (${syncResults.length} unit)</b>\n`
+            + `📊 Total ONU  : <b>${totalAll}</b>\n`
+            + `✅ Online      : <b>${totalUp}</b>\n`
+            + `❌ Offline     : <b>${totalDown}</b> (${pct}%)\n`
+            + `⚠️ Batas Global: ${thresholdGlobal} ONU offline\n\n`
+            + `🕐 ${now}`;
+          await sendOltTelegram(msg);
+          console.log(`[OLT Alert] 🔴 Global — ${totalDown} offline (>= ${thresholdGlobal}), notifikasi terkirim`);
+        } else if (currGlobal === 'ok' && prevGlobal === 'alert') {
+          const msg = `✅ <b>NORMAL — Total ONU Offline Berkurang</b>\n\n`
+            + `📡 <b>Semua OLT (${syncResults.length} unit)</b>\n`
+            + `📊 Total ONU  : <b>${totalAll}</b>\n`
+            + `✅ Online      : <b>${totalUp}</b>\n`
+            + `❌ Offline     : <b>${totalDown}</b>\n`
+            + `👍 Di bawah batas global: ${thresholdGlobal} ONU offline\n\n`
+            + `🕐 ${now}`;
+          await sendOltTelegram(msg);
+          console.log(`[OLT Alert] ✅ Global — pulih (${totalDown} offline < ${thresholdGlobal}), notifikasi terkirim`);
+        }
+        oltOfflineAlertState._global = currGlobal;
+      }
+    } catch (e) {
+      console.error('[OLT Alert] Error:', e.message);
+    }
+  }
+
   const doOltSync = async () => {
     try {
       const [olts] = await pool.query(`SELECT * FROM hioso_olts WHERE status = 'active' OR status IS NULL`);
       if (!olts || olts.length === 0) return;
+
+      const syncResults = [];
 
       // Sync semua OLT secara paralel (tidak round-robin)
       await Promise.allSettled(olts.map(async (olt) => {
@@ -1815,12 +1926,18 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             [values]
           );
 
-          const upCnt = onus.filter(o => o.status === 'Up').length;
-          console.log(`[CRON OLT] "${olt.name}" OK — ${onus.length} ONU (${upCnt} Up / ${onus.length - upCnt} Down)`);
+          const upCnt   = onus.filter(o => o.status === 'Up').length;
+          const downCnt = onus.length - upCnt;
+          console.log(`[CRON OLT] "${olt.name}" OK — ${onus.length} ONU (${upCnt} Up / ${downCnt} Down)`);
+          syncResults.push({ olt, total: onus.length, up: upCnt, down: downCnt });
         } catch (e) {
           console.error(`[CRON OLT] "${olt.name}" error:`, e.message);
         }
       }));
+
+      // Periksa & kirim notifikasi jika ada OLT yang melebihi batas offline
+      if (syncResults.length > 0) await checkOltOfflineAlerts(syncResults);
+
     } catch (e) {
       console.error('[CRON OLT] Error:', e.message);
     }

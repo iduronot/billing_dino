@@ -167,6 +167,69 @@ router.post('/api/test-xendit', async (req, res) => {
     }
 });
 
+router.post('/api/test-olt-alert', async (req, res) => {
+    try {
+        // Ambil konfigurasi telegram
+        const [cfgRows] = await pool.query(
+            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('telegram_bot_token','monitor_telegram_chat','telegram_chat_id','olt_offline_threshold','olt_offline_threshold_global')"
+        );
+        const s = {};
+        cfgRows.forEach(r => { s[r.setting_key] = r.setting_value; });
+
+        const token   = s.telegram_bot_token;
+        const chat_id = s.monitor_telegram_chat || s.telegram_chat_id;
+        const threshold       = parseInt(s.olt_offline_threshold || '100', 10);
+        const thresholdGlobal = parseInt(s.olt_offline_threshold_global || '0', 10);
+
+        if (!token || !chat_id) {
+            return res.json({ success: false, message: 'Token bot atau Chat ID belum dikonfigurasi di pengaturan Telegram.' });
+        }
+
+        // Ambil statistik OLT terkini
+        const [oltRows] = await pool.query(`
+            SELECT o.name AS olt_name,
+                   COUNT(*) AS total,
+                   COALESCE(SUM(u.status = 'Up'), 0) AS online,
+                   COALESCE(SUM(u.status = 'Down'), 0) AS offline
+            FROM hioso_onus u
+            JOIN hioso_olts o ON u.olt_id = o.id
+            GROUP BY o.id, o.name
+            ORDER BY o.name ASC
+        `);
+
+        const totalDown   = oltRows.reduce((a, r) => a + parseInt(r.offline, 10), 0);
+        const totalOnline = oltRows.reduce((a, r) => a + parseInt(r.online, 10), 0);
+        const totalAll    = oltRows.reduce((a, r) => a + parseInt(r.total, 10), 0);
+
+        let lines = ['🔔 <b>[TEST] Notifikasi OLT Alert</b>', ''];
+        lines.push(`📊 Rekap saat ini:`);
+        oltRows.forEach(r => {
+            const down = parseInt(r.offline, 10);
+            const icon = down >= threshold ? '🔴' : '🟢';
+            lines.push(`${icon} <b>${r.olt_name}</b>: ${r.online} online, ${down} offline / ${r.total} total`);
+        });
+        lines.push('');
+        lines.push(`🌐 Total Global: ${totalOnline} online, ${totalDown} offline / ${totalAll} total`);
+        lines.push('');
+        lines.push(`⚙️ Threshold per-OLT: <b>${threshold}</b> offline`);
+        lines.push(`⚙️ Threshold global: <b>${thresholdGlobal > 0 ? thresholdGlobal : 'Nonaktif'}</b>`);
+        lines.push('');
+        lines.push('✅ Ini adalah pesan uji coba — notifikasi real dikirim otomatis saat threshold terlampaui.');
+
+        const axios = require('axios');
+        await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
+            chat_id,
+            text: lines.join('\n'),
+            parse_mode: 'HTML'
+        });
+
+        res.json({ success: true, message: `Pesan test berhasil dikirim ke chat ID ${chat_id}` });
+    } catch (e) {
+        const errMsg = e.response?.data?.description || e.message;
+        res.json({ success: false, message: `Gagal kirim: ${errMsg}` });
+    }
+});
+
 // GET - List users
 router.get('/api/users', async (req, res) => {
     try {
