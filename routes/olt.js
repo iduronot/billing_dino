@@ -84,6 +84,40 @@ router.get('/', async (req, res) => {
     }
 });
 
+/**
+ * Ekstrak nomor PON port dari onu_index berdasarkan format index & profile OLT.
+ *
+ * Format index yang dikenal:
+ *   "X.Y"        → HIOSO/ZTE/Huawei EPON/GPON standard — X = PON, Y = ONU ID
+ *   "X.Y.Z..."   → GPON dengan frame/slot prefix — ambil bagian ke-(n-1) dari belakang
+ *   Large int    → HSGQ EPON: index adalah 32-bit word [shelf][slot][pon][onu]
+ *                  PON = byte ke-2 dari LSB = (index >> 8) & 0xFF
+ *
+ * @param {string|number} index - onu_index dari SNMP
+ * @param {string} profile      - nama profile OLT (HIOSO_C, HSGQ, ZTE, …)
+ * @returns {number|null}
+ */
+function extractPonPort(index, profile) {
+    if (index === undefined || index === null) return null;
+    const idx = String(index).trim();
+
+    if (idx.includes('.')) {
+        // Format X.Y atau X.Y.Z
+        // Untuk format lebih dari 2 bagian (mis. "0.0.2.5"), PON adalah bagian ke-2 dari belakang.
+        const parts = idx.split('.');
+        if (parts.length === 2) return parseInt(parts[0], 10) || 0;          // PON.ONU → PON
+        return parseInt(parts[parts.length - 2], 10) || 0;                   // …PON.ONU → PON
+    }
+
+    // Format integer tunggal (HSGQ dan sejenisnya)
+    const num = parseInt(idx, 10);
+    if (isNaN(num) || num <= 0) return null;
+
+    // HSGQ: 32-bit = [shelf 8bit][slot 8bit][pon 8bit][onu 8bit]
+    // PON = bits 15-8  →  (num >> 8) & 0xFF
+    return (num >> 8) & 0xFF;
+}
+
 // ── Helper: sync satu OLT ke DB ──────────────────────────────────────
 async function syncOneOlt(olt, forceResetProfile = false) {
     const profile = forceResetProfile ? null
@@ -105,12 +139,16 @@ async function syncOneOlt(olt, forceResetProfile = false) {
     }
 
     // Full replace: hapus semua lalu insert ulang agar data benar-benar segar
+    const activeProfile = detectedProfile || profile || olt.last_profile;
     await pool.query('DELETE FROM hioso_onus WHERE olt_id = ?', [olt.id]);
-    const values = onus.map(o => [olt.id, o.index, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status]);
+    const values = onus.map(o => {
+        const ponPort = extractPonPort(o.index, activeProfile);
+        return [olt.id, o.index, ponPort, o.name, o.sn || '', o.mac || '', o.tx_power, o.rx_power, o.status, new Date()];
+    });
     await pool.query(
-        `INSERT INTO hioso_onus (olt_id, onu_index, name, sn, mac, tx_power, rx_power, status, last_updated)
+        `INSERT INTO hioso_onus (olt_id, onu_index, pon_port, name, sn, mac, tx_power, rx_power, status, last_updated)
          VALUES ?`,
-        [values.map(v => [...v, new Date()])]
+        [values]
     );
 
     const upCount   = onus.filter(o => o.status === 'Up').length;
@@ -269,24 +307,20 @@ router.delete('/api/olts/:id', async (req, res) => {
 router.get('/api/pon-summary', async (req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT olt_id, olt_name, brand, last_profile, pon_port,
-                   COUNT(*) AS total,
-                   COALESCE(SUM(status = 'Up'),   0) AS online,
-                   COALESCE(SUM(status = 'Down'), 0) AS offline,
-                   MAX(last_updated) AS last_updated
-            FROM (
-                SELECT o.id AS olt_id, o.name AS olt_name, o.brand, o.last_profile,
-                       CASE
-                           WHEN u.onu_index LIKE '%.%'
-                               THEN SUBSTRING_INDEX(u.onu_index, '.', 1)
-                           ELSE CAST(FLOOR(CAST(REPLACE(u.onu_index,'.',0) AS DECIMAL(20,0)) / 65536) AS CHAR)
-                       END AS pon_port,
-                       u.status, u.last_updated
-                FROM hioso_onus u
-                JOIN hioso_olts o ON u.olt_id = o.id
-            ) t
-            GROUP BY olt_id, olt_name, brand, last_profile, pon_port
-            ORDER BY olt_name ASC, CAST(pon_port AS UNSIGNED) ASC
+            SELECT
+                o.id          AS olt_id,
+                o.name        AS olt_name,
+                o.brand,
+                o.last_profile,
+                u.pon_port,
+                COUNT(*)                               AS total,
+                COALESCE(SUM(u.status = 'Up'),   0)   AS online,
+                COALESCE(SUM(u.status = 'Down'), 0)   AS offline,
+                MAX(u.last_updated)                    AS last_updated
+            FROM hioso_onus u
+            JOIN hioso_olts o ON u.olt_id = o.id
+            GROUP BY o.id, o.name, o.brand, o.last_profile, u.pon_port
+            ORDER BY o.name ASC, u.pon_port ASC
         `);
 
         const oltMap = {};
@@ -325,14 +359,9 @@ router.get('/api/pon-onus', async (req, res) => {
             SELECT u.*, o.name AS olt_name, o.brand AS olt_brand, o.last_profile
             FROM hioso_onus u
             JOIN hioso_olts o ON u.olt_id = o.id
-            WHERE u.olt_id = ?
-              AND CASE
-                    WHEN u.onu_index LIKE '%.%'
-                        THEN SUBSTRING_INDEX(u.onu_index, '.', 1)
-                    ELSE CAST(FLOOR(CAST(REPLACE(u.onu_index,'.',0) AS DECIMAL(20,0)) / 65536) AS CHAR)
-                  END = ?
+            WHERE u.olt_id = ? AND u.pon_port = ?
             ORDER BY u.status DESC, u.name ASC
-        `, [parseInt(olt_id), String(pon)]);
+        `, [parseInt(olt_id), parseInt(pon)]);
 
         res.json({ success: true, data: rows });
     } catch (e) {

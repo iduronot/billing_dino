@@ -523,6 +523,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       id INT AUTO_INCREMENT PRIMARY KEY,
       olt_id INT NOT NULL,
       onu_index VARCHAR(100) NOT NULL,
+      pon_port TINYINT UNSIGNED NULL,
       name VARCHAR(100),
       sn VARCHAR(100),
       mac VARCHAR(100),
@@ -533,6 +534,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       UNIQUE KEY (olt_id, onu_index)
     )
   `).catch(console.error);
+  // Migrasi: tambah kolom pon_port jika belum ada (untuk DB lama)
+  pool.query(`ALTER TABLE hioso_onus ADD COLUMN IF NOT EXISTS pon_port TINYINT UNSIGNED NULL AFTER onu_index`).catch(() => {});
 
   // ═══════════════════════════════════════════
   // Tabel Infrastruktur Fiber Optik
