@@ -534,8 +534,14 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       UNIQUE KEY (olt_id, onu_index)
     )
   `).catch(console.error);
-  // Migrasi: tambah kolom pon_port jika belum ada (untuk DB lama)
-  pool.query(`ALTER TABLE hioso_onus ADD COLUMN IF NOT EXISTS pon_port TINYINT UNSIGNED NULL AFTER onu_index`).catch(() => {});
+  // Migrasi: tambah kolom pon_port jika belum ada (kompatibel MySQL 5.7)
+  pool.query(`SHOW COLUMNS FROM hioso_onus LIKE 'pon_port'`).then(([rows]) => {
+    if (rows.length === 0) {
+      pool.query(`ALTER TABLE hioso_onus ADD COLUMN pon_port TINYINT UNSIGNED NULL AFTER onu_index`)
+        .then(() => console.log('[DB] Kolom pon_port berhasil ditambahkan ke hioso_onus'))
+        .catch(e => console.error('[DB] Gagal tambah pon_port:', e.message));
+    }
+  }).catch(() => {});
 
   // ═══════════════════════════════════════════
   // Tabel Infrastruktur Fiber Optik
@@ -576,7 +582,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     CREATE TABLE IF NOT EXISTS fo_node_types (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(50) NOT NULL UNIQUE,
-      icon VARCHAR(10) DEFAULT '📍',
+      icon VARCHAR(10) DEFAULT NULL,
       color VARCHAR(20) DEFAULT '#94A3B8',
       is_default TINYINT(1) DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
