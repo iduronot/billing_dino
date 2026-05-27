@@ -150,15 +150,44 @@
         </div>
         <form id="nodeForm">
             <input type="hidden" id="nId">
+
+            <!-- Info banner mode Tiang -->
+            <div id="tiangBanner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 13px;margin-bottom:14px;font-size:12px;color:#FCD34D;">
+                🪧 Mode Tiang — hanya koordinat &amp; nama yang diperlukan
+            </div>
+
             <div class="form-grid">
-                <div class="form-group full"><label>Nama *</label><input type="text" id="nName" class="form-control" required placeholder="ODP-JlMerdeka-01"></div>
-                <div class="form-group"><label>Tipe *</label><select id="nType" class="form-control"><% nodeTypes.forEach(t=>{%><option value="<%= t.name %>"><%= t.icon %> <%= t.name %></option><%})%></select></div>
-                <div class="form-group"><label>Kapasitas Port</label><input type="number" id="nCap" class="form-control" placeholder="0" min="0"></div>
-                <div class="form-group"><label>Brand</label><input type="text" id="nBrand" class="form-control" placeholder="Fiberhome"></div>
-                <div class="form-group"><label>Model</label><input type="text" id="nModel" class="form-control" placeholder="ODP-T08"></div>
-                <div class="form-group"><label>Parent</label><select id="nParent" class="form-control"><option value="">-</option><% allNodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%></select></div>
-                <div class="form-group"><label>Status</label><select id="nStatus" class="form-control"><option value="active">Aktif</option><option value="inactive">Tidak Aktif</option><option value="damaged">Rusak</option></select></div>
-                <div class="form-group"><label>Tgl Pasang</label><input type="date" id="nDate" class="form-control"></div>
+                <div class="form-group full">
+                    <label>Nama *</label>
+                    <input type="text" id="nName" class="form-control" required placeholder="Tiang-JlMerdeka-01">
+                </div>
+                <div class="form-group">
+                    <label>Tipe *</label>
+                    <select id="nType" class="form-control" onchange="onTypeChange(this.value)">
+                        <% nodeTypes.forEach(t=>{%><option value="<%= t.name %>"><%= t.icon %> <%= t.name %></option><%})%>
+                    </select>
+                </div>
+                <!-- Field yang disembunyikan saat Tiang -->
+                <div class="form-group node-extra"><label>Kapasitas Port</label><input type="number" id="nCap" class="form-control" placeholder="0" min="0"></div>
+                <div class="form-group node-extra"><label>Brand</label><input type="text" id="nBrand" class="form-control" placeholder="Fiberhome"></div>
+                <div class="form-group node-extra"><label>Model</label><input type="text" id="nModel" class="form-control" placeholder="ODP-T08"></div>
+                <div class="form-group node-extra">
+                    <label>Parent</label>
+                    <select id="nParent" class="form-control">
+                        <option value="">-</option>
+                        <% allNodes.forEach(n=>{%><option value="<%= n.id %>"><%= n.type %>: <%= n.name %></option><%})%>
+                    </select>
+                </div>
+                <div class="form-group node-extra">
+                    <label>Status</label>
+                    <select id="nStatus" class="form-control">
+                        <option value="active">Aktif</option>
+                        <option value="inactive">Tidak Aktif</option>
+                        <option value="damaged">Rusak</option>
+                    </select>
+                </div>
+                <div class="form-group node-extra"><label>Tgl Pasang</label><input type="date" id="nDate" class="form-control"></div>
+                <!-- Koordinat selalu tampil -->
                 <div class="form-group full">
                     <label>Koordinat</label>
                     <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -174,7 +203,7 @@
                     <div id="nodeGpsStatus" style="font-size:11px;color:var(--muted);margin-top:6px;display:none;"></div>
                 </div>
                 <div class="form-group full"><label>Alamat</label><input type="text" id="nAddr" class="form-control" placeholder="Jl. Merdeka No.1"></div>
-                <div class="form-group full"><label>Catatan</label><textarea id="nNotes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
+                <div class="form-group full node-extra"><label>Catatan</label><textarea id="nNotes" class="form-control" rows="2" style="resize:vertical;"></textarea></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
                 <button type="button" onclick="document.getElementById('nodeModal').style.display='none'" class="btn" style="background:var(--sub-bg);border:1px solid var(--border);">Batal</button>
@@ -185,11 +214,26 @@
 </div>
 <div class="toast" id="toast"></div>
 <script>
+function onTypeChange(type) {
+    const isTiang = type.toLowerCase() === 'tiang';
+    document.getElementById('tiangBanner').style.display = isTiang ? '' : 'none';
+    document.querySelectorAll('.node-extra').forEach(el => {
+        el.style.display = isTiang ? 'none' : '';
+    });
+    document.getElementById('nName').placeholder = isTiang ? 'Tiang-JlMerdeka-01' : 'ODP-JlMerdeka-01';
+    document.getElementById('modalTitle').textContent = document.getElementById('modalTitle').textContent.replace(/^(Tambah|Edit).*/, (m, p) => {
+        const base = p === 'Tambah' ? 'Tambah' : 'Edit';
+        return isTiang ? base + ' Tiang' : base + ' Node';
+    });
+}
 function openAddModal(){
     document.getElementById('modalTitle').textContent='Tambah Node';
     document.getElementById('nId').value='';
     ['nName','nBrand','nModel','nLat','nLng','nAddr','nNotes','nCap'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('nType').value='ODP'; document.getElementById('nStatus').value='active'; document.getElementById('nDate').value='';
+    document.getElementById('nType').value='ODP';
+    document.getElementById('nStatus').value='active';
+    document.getElementById('nDate').value='';
+    onTypeChange('ODP');
     document.getElementById('nodeModal').style.display='flex';
 }
 function openEditModal(n){
@@ -201,6 +245,7 @@ function openEditModal(n){
     document.getElementById('nDate').value=n.install_date?n.install_date.split('T')[0]:'';
     document.getElementById('nLat').value=n.lat||''; document.getElementById('nLng').value=n.lng||'';
     document.getElementById('nAddr').value=n.address||''; document.getElementById('nNotes').value=n.notes||'';
+    onTypeChange(n.type);
     document.getElementById('nodeModal').style.display='flex';
 }
 document.getElementById('nodeForm').addEventListener('submit', async ev=>{
