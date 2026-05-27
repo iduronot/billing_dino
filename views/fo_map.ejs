@@ -208,6 +208,12 @@
             <input type="hidden" id="nodeId">
             <input type="hidden" id="nodeLat">
             <input type="hidden" id="nodeLng">
+
+            <!-- Banner mode Tiang -->
+            <div id="tiangBanner" style="display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 13px;margin-bottom:14px;font-size:12px;color:#FCD34D;">
+                🪧 Mode Tiang — hanya koordinat &amp; nama yang diperlukan
+            </div>
+
             <div class="form-grid">
                 <div class="form-group full">
                     <label>Nama *</label>
@@ -215,7 +221,7 @@
                 </div>
                 <div class="form-group">
                     <label>Tipe *</label>
-                    <select id="nodeType" class="form-control" onchange="updateCapacityHint()">
+                    <select id="nodeType" class="form-control" onchange="updateCapacityHint(); onNodeTypeChange(this.value)">
                         <option value="OLT">OLT</option>
                         <option value="ODC">ODC</option>
                         <option value="ODP" selected>ODP</option>
@@ -225,19 +231,19 @@
                         <option value="HandHole">Hand Hole</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Kapasitas Port <span id="capHint" style="font-size:10px; color:var(--muted);">(ODP: 8/16/32)</span></label>
                     <input type="number" id="nodeCapacity" class="form-control" placeholder="0" min="0">
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Brand</label>
                     <input type="text" id="nodeBrand" class="form-control" placeholder="Fiberhome, ZTE, dll">
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Model</label>
                     <input type="text" id="nodeModel" class="form-control" placeholder="ODP-T08-SC">
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Parent Node</label>
                     <select id="nodeParent" class="form-control">
                         <option value="">-- Tidak ada --</option>
@@ -246,7 +252,7 @@
                         <% }) %>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Status</label>
                     <select id="nodeStatus" class="form-control">
                         <option value="active">Aktif</option>
@@ -254,7 +260,7 @@
                         <option value="damaged">Rusak</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group node-extra">
                     <label>Tanggal Pasang</label>
                     <input type="date" id="nodeInstallDate" class="form-control">
                 </div>
@@ -281,7 +287,7 @@
                     <div id="gpsStatus" style="font-size:11px; color:var(--muted); margin-top:6px; display:none;"></div>
                 </div>
                 <!-- ── Koneksi Kabel FO (penginduk) ── -->
-                <div class="form-group full" style="background:var(--sub-bg); border-radius:12px; padding:14px; border:1px solid var(--border);">
+                <div class="form-group full node-extra" style="background:var(--sub-bg); border-radius:12px; padding:14px; border:1px solid var(--border);">
                     <label style="color:var(--primary);">🔌 Kabel FO Penginduk (Opsional)</label>
                     <p style="font-size:11px; color:var(--muted); margin:0 0 12px;">Pilih kabel → tube → core yang menginduk node ini</p>
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
@@ -311,7 +317,7 @@
                     <input type="hidden" id="nodeFeedTubeId">
                     <input type="hidden" id="nodeFeedCoreId">
                 </div>
-                <div class="form-group full">
+                <div class="form-group full node-extra">
                     <label>Catatan</label>
                     <textarea id="nodeNotes" class="form-control" rows="2" style="resize:vertical;"></textarea>
                 </div>
@@ -692,6 +698,16 @@ function cancelCable() {
     if (drawLine) { drawLayer.removeLayer(drawLine); drawLine = null; }
 }
 
+// ── Toggle form fields berdasarkan tipe node ──
+function onNodeTypeChange(type) {
+    const isTiang = type.toLowerCase() === 'tiang';
+    document.getElementById('tiangBanner').style.display = isTiang ? '' : 'none';
+    document.querySelectorAll('#nodeForm .node-extra').forEach(el => {
+        el.style.display = isTiang ? 'none' : '';
+    });
+    document.getElementById('nodeName').placeholder = isTiang ? 'Tiang-JlMerdeka-01' : 'Contoh: ODP-Jl.Merdeka-01';
+}
+
 // ── Node forms ──
 function openAddNodeModal(lat, lng) {
     document.getElementById('nodeModalTitle').textContent = '📍 Tambah Node FO';
@@ -725,6 +741,7 @@ function openAddNodeModal(lat, lng) {
         document.getElementById('nodeLatDisplay').value = '';
         document.getElementById('nodeLngDisplay').value = '';
     }
+    onNodeTypeChange('ODP');
     document.getElementById('nodeModal').style.display = 'flex';
 }
 
@@ -749,6 +766,7 @@ async function openEditNodeModal(id) {
     document.getElementById('nodeLng').value = n.lng || '';
     document.getElementById('nodeLatDisplay').value = n.lat || '';
     document.getElementById('nodeLngDisplay').value = n.lng || '';
+    onNodeTypeChange(n.type);
     document.getElementById('nodeModal').style.display = 'flex';
 }
 
