@@ -568,7 +568,26 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       INDEX idx_olt_onu_time (olt_id, onu_index, changed_at),
       INDEX idx_changed_at   (changed_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  `).catch(console.error);
+  `).then(async () => {
+    // Seed awal: jika tabel masih kosong, inject snapshot semua ONU dari hioso_onus
+    // Ini memastikan semua ONU langsung tersedia untuk perhitungan SLA sejak hari pertama
+    try {
+      const [[countRow]] = await pool.query('SELECT COUNT(*) AS cnt FROM onu_status_history');
+      if (countRow.cnt === 0) {
+        const [seedResult] = await pool.query(`
+          INSERT INTO onu_status_history (olt_id, onu_index, onu_name, pon_port, status, changed_at)
+          SELECT olt_id, onu_index, name, pon_port, status, IFNULL(last_updated, NOW())
+          FROM hioso_onus
+          WHERE status IS NOT NULL
+        `);
+        if (seedResult.affectedRows > 0) {
+          console.log(`[SLA] Seed awal: ${seedResult.affectedRows} ONU dimasukkan ke onu_status_history sebagai snapshot awal`);
+        }
+      }
+    } catch (seedErr) {
+      console.warn('[SLA] Seed awal gagal (diabaikan):', seedErr.message);
+    }
+  }).catch(console.error);
 
   // ═══════════════════════════════════════════
   // Tabel Infrastruktur Fiber Optik
@@ -1958,13 +1977,31 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             [values]
           );
 
-          // Rekam perubahan status ke history (hanya jika status berubah)
+          // Rekam perubahan status ke history
+          // Aturan:
+          //   1. ONU belum punya record apapun di history → insert snapshot awal
+          //   2. Status berubah dari sebelumnya → insert perubahan
           const now = new Date();
+
+          // Cek ONU mana yang sudah punya record di history (1 query bulk, bukan per-ONU)
+          const onuIndexList = onus.map(o => String(o.index));
+          let hasHistory = new Set();
+          if (onuIndexList.length > 0) {
+            const [existHist] = await pool.query(
+              `SELECT DISTINCT onu_index FROM onu_status_history WHERE olt_id = ? AND onu_index IN (?)`,
+              [olt.id, onuIndexList]
+            );
+            existHist.forEach(r => hasHistory.add(r.onu_index));
+          }
+
           const histValues = [];
           for (const o of onus) {
-            const prev = prevStatus[String(o.index)];
-            // Rekam jika: status berubah ATAU ONU baru (belum ada sebelumnya)
-            if (prev !== o.status) {
+            const prev      = prevStatus[String(o.index)];
+            const inHistory = hasHistory.has(String(o.index));
+
+            // Insert jika: belum punya history SAMA SEKALI  →  snapshot awal
+            //              atau status berubah              →  catat perubahan
+            if (!inHistory || prev === undefined || prev !== o.status) {
               const idx = String(o.index || '').trim();
               let ponPort = null;
               if (idx.includes('.')) {
@@ -1982,6 +2019,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
               `INSERT INTO onu_status_history (olt_id, onu_index, onu_name, pon_port, status, changed_at) VALUES ?`,
               [histValues]
             );
+            const newCount = histValues.filter(v => !hasHistory.has(String(v[1]))).length;
+            if (newCount > 0) {
+              console.log(`[SLA] "${olt.name}" — ${newCount} ONU baru ditambahkan ke history sebagai snapshot awal`);
+            }
           }
 
           const upCnt   = onus.filter(o => o.status === 'Up').length;
