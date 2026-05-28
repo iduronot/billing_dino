@@ -168,6 +168,38 @@
     </div>
 </main>
 
+<!-- Modal Mapping ONU → Pelanggan -->
+<div class="modal-overlay" id="mapModal" onclick="if(event.target===this)closeMapModal()">
+    <div class="modal-card" style="max-width:480px;">
+        <div class="modal-header">
+            <div>
+                <h3 style="font-size:16px;font-weight:700;margin:0;">🔗 Petakan ONU ke Pelanggan</h3>
+                <div id="mapOnuLabel" style="font-size:12px;color:var(--muted);margin-top:3px;"></div>
+            </div>
+            <button onclick="closeMapModal()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+
+        <!-- Search pelanggan -->
+        <div style="margin-bottom:12px;">
+            <input type="text" id="mapSearch" placeholder="🔍 Cari nama atau username pelanggan..."
+                oninput="searchCustomers(this.value)"
+                style="width:100%;box-sizing:border-box;background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:13px;font-family:'Outfit',sans-serif;outline:none;">
+        </div>
+
+        <!-- Hasil pencarian -->
+        <div id="mapResults" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+            <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Ketik nama pelanggan untuk mencari...</div>
+        </div>
+
+        <!-- Tombol hapus mapping -->
+        <div id="mapUnlinkWrap" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+            <button onclick="saveMapping(null)" style="width:100%;padding:9px;border-radius:9px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.07);color:#EF4444;cursor:pointer;font-size:13px;">
+                🗑️ Hapus Mapping (ONU ini tidak terhubung pelanggan)
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Modal Timeline -->
 <div class="modal-overlay" id="timelineModal" onclick="if(event.target===this)this.style.display='none'">
     <div class="modal-card">
@@ -322,11 +354,17 @@ function renderTable(data, period) {
                         style="padding:5px 10px;border-radius:7px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08);color:#10B981;text-decoration:none;font-size:11px;display:flex;align-items:center;">
                         💬 WA
                     </a>` : ''}
-                    <a href="/tickets/new?customer_id=${r.customer_id || ''}&title=${encodeURIComponent('Gangguan layanan: ' + (r.onu_name||r.onu_index))}"
+                    ${r.customer_id ? `
+                    <a href="/tickets/new?customer_id=${r.customer_id}&title=${encodeURIComponent('Gangguan layanan: ' + (r.onu_name||r.onu_index))}"
                         title="Buat tiket"
                         style="padding:5px 10px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;text-decoration:none;font-size:11px;display:flex;align-items:center;">
                         🎫 Tiket
-                    </a>
+                    </a>` : `
+                    <button onclick='openMapModal(${JSON.stringify({olt_id:r.olt_id,onu_index:r.onu_index,onu_name:r.onu_name}).replace(/'/g,"&#39;")})'
+                        title="Petakan ke pelanggan"
+                        style="padding:5px 10px;border-radius:7px;border:1px solid rgba(99,102,241,.35);background:rgba(99,102,241,.08);color:#818CF8;cursor:pointer;font-size:11px;">
+                        🔗 Petakan
+                    </button>`}
                 </div>
             </td>
         </tr>`;
@@ -413,6 +451,86 @@ function showToast(msg, type) {
     t.style.color       = type === 'success' ? '#10B981' : '#EF4444';
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── Mapping ONU → Pelanggan ──
+let mapTarget = null;  // { olt_id, onu_index, onu_name }
+let mapSearchTimer = null;
+
+function openMapModal(row) {
+    mapTarget = row;
+    document.getElementById('mapOnuLabel').textContent = `ONU: ${row.onu_name || row.onu_index}`;
+    document.getElementById('mapSearch').value = '';
+    document.getElementById('mapResults').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Ketik nama pelanggan untuk mencari...</div>';
+    document.getElementById('mapUnlinkWrap').style.display = 'none';
+    document.getElementById('mapModal').style.display = 'flex';
+    // Auto-search dengan nama ONU sebagai hint awal
+    const hint = (row.onu_name || '').split('-')[0];
+    if (hint.length >= 3) {
+        document.getElementById('mapSearch').value = hint;
+        searchCustomers(hint);
+    }
+    setTimeout(() => document.getElementById('mapSearch').focus(), 100);
+}
+
+function closeMapModal() {
+    document.getElementById('mapModal').style.display = 'none';
+    mapTarget = null;
+}
+
+function searchCustomers(q) {
+    clearTimeout(mapSearchTimer);
+    if (!q || q.length < 2) {
+        document.getElementById('mapResults').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Ketik min. 2 karakter...</div>';
+        return;
+    }
+    mapSearchTimer = setTimeout(async () => {
+        document.getElementById('mapResults').innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px;">⏳ Mencari...</div>';
+        try {
+            const res = await fetch('/sla/api/customers-search?q=' + encodeURIComponent(q));
+            const d   = await res.json();
+            if (!d.success || !d.data.length) {
+                document.getElementById('mapResults').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Tidak ditemukan.</div>';
+                return;
+            }
+            document.getElementById('mapResults').innerHTML = d.data.map(c => `
+                <div onclick="saveMapping(${c.id})"
+                    style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--sub-bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .15s;"
+                    onmouseover="this.style.borderColor='var(--primary)';this.style.background='rgba(99,102,241,.08)'"
+                    onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--sub-bg)'">
+                    <div>
+                        <div style="font-weight:600;font-size:13px;">${escHtml(c.name)}</div>
+                        <div style="font-size:11px;color:var(--muted);">
+                            ${c.pppoe_username ? `<code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:4px;">${escHtml(c.pppoe_username)}</code>` : '—'}
+                            ${c.phone ? ` · ${escHtml(c.phone)}` : ''}
+                        </div>
+                    </div>
+                    <span style="font-size:11px;color:#818CF8;font-weight:600;">Pilih →</span>
+                </div>
+            `).join('');
+            document.getElementById('mapUnlinkWrap').style.display = '';
+        } catch (e) {
+            document.getElementById('mapResults').innerHTML = `<div style="color:#EF4444;text-align:center;padding:16px;">${e.message}</div>`;
+        }
+    }, 300);
+}
+
+async function saveMapping(customerId) {
+    if (!mapTarget) return;
+    try {
+        const res = await fetch('/sla/api/map-customer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ olt_id: mapTarget.olt_id, onu_index: mapTarget.onu_index, customer_id: customerId })
+        });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message);
+        showToast(customerId ? '✅ Mapping berhasil disimpan' : '🗑️ Mapping dihapus', 'success');
+        closeMapModal();
+        loadData();  // refresh tabel
+    } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+    }
 }
 
 // Load awal

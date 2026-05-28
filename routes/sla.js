@@ -256,11 +256,30 @@ router.get('/api/timeline', async (req, res) => {
 router.post('/api/map-customer', async (req, res) => {
     try {
         const { olt_id, onu_index, customer_id } = req.body;
+        const custId = customer_id || null;
+
+        // 1. Simpan customer_id ke hioso_onus
         await pool.query(
             'UPDATE hioso_onus SET customer_id = ? WHERE olt_id = ? AND onu_index = ?',
-            [customer_id || null, olt_id, onu_index]
+            [custId, olt_id, onu_index]
         );
-        res.json({ success: true, message: 'Mapping berhasil disimpan' });
+
+        // 2. Jika ada customer_id, ambil onu_name lalu simpan ke customers.pppoe_username
+        //    (hanya jika pppoe_username pelanggan masih kosong — tidak overwrite yang sudah ada)
+        if (custId) {
+            const [[onu]] = await pool.query(
+                'SELECT name FROM hioso_onus WHERE olt_id = ? AND onu_index = ?',
+                [olt_id, onu_index]
+            );
+            if (onu && onu.name) {
+                await pool.query(
+                    'UPDATE customers SET pppoe_username = ? WHERE id = ? AND (pppoe_username IS NULL OR pppoe_username = "")',
+                    [onu.name, custId]
+                );
+            }
+        }
+
+        res.json({ success: true, message: custId ? 'Mapping berhasil disimpan' : 'Mapping dihapus' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -270,10 +289,11 @@ router.post('/api/map-customer', async (req, res) => {
 router.get('/api/customers-search', async (req, res) => {
     try {
         const { q } = req.query;
+        if (!q || q.length < 2) return res.json({ success: true, data: [] });
         const [rows] = await pool.query(
             `SELECT id, name, pppoe_username, phone FROM customers
-             WHERE name LIKE ? OR pppoe_username LIKE ?
-             ORDER BY name ASC LIMIT 20`,
+             WHERE (name LIKE ? OR pppoe_username LIKE ?) AND status != 'inactive'
+             ORDER BY name ASC LIMIT 25`,
             [`%${q}%`, `%${q}%`]
         );
         res.json({ success: true, data: rows });
