@@ -49,6 +49,32 @@
         /* ── Empty state ── */
         .empty-state { text-align:center; padding:60px 20px; color:var(--muted); }
         .empty-state .icon { font-size:48px; margin-bottom:12px; }
+
+        /* ── Dropdown fix ── */
+        .sla-select {
+            background: var(--sub-bg) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text) !important;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-family: 'Outfit', sans-serif;
+            outline: none;
+        }
+        .sla-select option {
+            background: #1E293B;
+            color: #F8FAFC;
+        }
+        .filter-bar input {
+            background: var(--sub-bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-family: 'Outfit', sans-serif;
+            outline: none;
+        }
     </style>
 </head>
 <body>
@@ -63,8 +89,8 @@
                 <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">Pantau uptime ONU & deteksi masalah sebelum pelanggan mengeluh</p>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
-                <select id="selPeriod" class="form-control" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;" onchange="loadData()"></select>
-                <select id="selOlt" class="form-control" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;" onchange="loadData()">
+                <select id="selPeriod" class="sla-select" onchange="loadData()"></select>
+                <select id="selOlt" class="sla-select" onchange="loadData()">
                     <option value="">Semua OLT</option>
                     <% olts.forEach(o => { %><option value="<%= o.id %>"><%= o.name %></option><% }) %>
                 </select>

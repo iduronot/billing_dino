@@ -88,7 +88,7 @@ router.get('/api/summary', async (req, res) => {
             LEFT JOIN hioso_olts o  ON o.id = h.olt_id
             LEFT JOIN hioso_onus u  ON u.olt_id = h.olt_id AND u.onu_index = h.onu_index
             LEFT JOIN customers  c  ON c.id = u.customer_id
-                                    OR LOWER(c.pppoe_username) = LOWER(h.onu_name)
+                                    OR CONVERT(c.pppoe_username USING utf8mb4) = CONVERT(h.onu_name USING utf8mb4)
             WHERE h.changed_at BETWEEN ? AND ?
         `;
         const params = [pStart, pEnd];
