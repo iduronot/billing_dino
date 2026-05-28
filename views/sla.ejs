@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        /* ── Cluster Cards ── */
+        .cluster-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+        .cluster-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:16px; cursor:pointer; transition:all .2s; position:relative; overflow:hidden; }
+        .cluster-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+        .cluster-card.critical::before { background:#EF4444; }
+        .cluster-card.bad::before      { background:#F97316; }
+        .cluster-card.warn::before     { background:#F59E0B; }
+        .cluster-card.good::before     { background:#10B981; }
+        .cluster-card:hover            { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.15); }
+        .cluster-card.active           { box-shadow:0 0 0 2px var(--primary); }
+        .cluster-num  { font-size:32px; font-weight:800; margin:4px 0; }
+        .cluster-lbl  { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .cluster-sub  { font-size:11px; color:var(--muted); margin-top:3px; }
+
+        /* ── Filter Bar ── */
+        .filter-bar   { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+        .filter-bar input, .filter-bar select { background:var(--sub-bg); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:8px 12px; font-size:13px; font-family:'Outfit',sans-serif; outline:none; }
+
+        /* ── Table ── */
+        .tbl-card  { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+        table      { width:100%; border-collapse:collapse; }
+        th         { background:var(--sub-bg); color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; padding:11px 14px; text-align:left; white-space:nowrap; }
+        td         { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+        tr:last-child td { border-bottom:none; }
+        tr:hover td { background:var(--hover-bg); }
+
+        /* ── Uptime bar ── */
+        .uptime-wrap  { display:flex; align-items:center; gap:8px; }
+        .uptime-bar   { flex:1; height:6px; background:var(--sub-bg); border-radius:3px; overflow:hidden; min-width:60px; }
+        .uptime-fill  { height:100%; border-radius:3px; }
+        .uptime-pct   { font-size:12px; font-weight:700; white-space:nowrap; min-width:42px; }
+
+        /* ── Cluster Badge ── */
+        .cbadge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; }
+
+        /* ── Timeline Modal ── */
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(6px); display:none; align-items:center; justify-content:center; z-index:2000; padding:16px; }
+        .modal-card    { background:var(--sidebar-bg); border:1px solid var(--border); border-radius:20px; width:100%; max-width:580px; padding:24px; max-height:88vh; overflow-y:auto; }
+        .modal-header  { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+        .incident-row  { display:grid; grid-template-columns:1fr 1fr 80px; gap:8px; align-items:center; padding:10px 12px; background:var(--sub-bg); border:1px solid var(--border); border-radius:10px; margin-bottom:6px; font-size:12px; }
+        .toast { position:fixed; bottom:24px; right:24px; background:var(--toast-bg); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:14px 20px; z-index:9999; display:none; font-size:14px; }
+        .toast.show { display:block; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align:center; padding:60px 20px; color:var(--muted); }
+        .empty-state .icon { font-size:48px; margin-bottom:12px; }
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'SLA Monitoring' }) %>
+    <div class="content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1 class="page-title" style="margin:0;">📈 SLA Monitoring</h1>
+                <p style="margin:4px 0 0;font-size:13px;color:var(--muted);">Pantau uptime ONU & deteksi masalah sebelum pelanggan mengeluh</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <select id="selPeriod" class="form-control" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;" onchange="loadData()"></select>
+                <select id="selOlt" class="form-control" style="background:var(--sub-bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;" onchange="loadData()">
+                    <option value="">Semua OLT</option>
+                    <% olts.forEach(o => { %><option value="<%= o.id %>"><%= o.name %></option><% }) %>
+                </select>
+            </div>
+        </div>
+
+        <!-- Cluster Cards -->
+        <div class="cluster-grid" id="clusterCards">
+            <div class="cluster-card critical" onclick="filterCluster('critical')">
+                <div class="cluster-lbl">🔴 Kritis</div>
+                <div class="cluster-num" id="cnt-critical">—</div>
+                <div class="cluster-sub">Uptime &lt; 90%</div>
+            </div>
+            <div class="cluster-card bad" onclick="filterCluster('bad')">
+                <div class="cluster-lbl">🟠 Buruk</div>
+                <div class="cluster-num" id="cnt-bad">—</div>
+                <div class="cluster-sub">Uptime 90–95%</div>
+            </div>
+            <div class="cluster-card warn" onclick="filterCluster('warn')">
+                <div class="cluster-lbl">🟡 Perlu Pantau</div>
+                <div class="cluster-num" id="cnt-warn">—</div>
+                <div class="cluster-sub">Uptime 95–99%</div>
+            </div>
+            <div class="cluster-card good" onclick="filterCluster('good')">
+                <div class="cluster-lbl">🟢 Baik</div>
+                <div class="cluster-num" id="cnt-good">—</div>
+                <div class="cluster-sub">Uptime ≥ 99%</div>
+            </div>
+            <div class="cluster-card" style="border-top:3px solid var(--primary);" onclick="filterCluster('')">
+                <div class="cluster-lbl">📊 Total ONU</div>
+                <div class="cluster-num" id="cnt-total">—</div>
+                <div class="cluster-sub">Semua cluster</div>
+            </div>
+        </div>
+
+        <!-- Info banner jika belum ada data -->
+        <div id="noHistoryBanner" style="display:none;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:13px;color:#FCD34D;">
+            ⚠️ Belum ada data history untuk periode ini. Data mulai terekam otomatis sejak server berjalan dan OLT disync. Tunggu beberapa siklus sync (5 menit) untuk melihat data.
+        </div>
+
+        <!-- Filter & Search -->
+        <div class="filter-bar">
+            <input type="text" id="searchInput" placeholder="🔍 Cari nama ONU / pelanggan..." style="flex:1;min-width:200px;" oninput="debounceLoad()">
+            <span id="filterClusterLabel" style="font-size:12px;color:var(--muted);display:none;">
+                Filter: <span id="filterClusterName" style="font-weight:700;"></span>
+                <button onclick="filterCluster('')" style="background:none;border:none;color:var(--muted);cursor:pointer;margin-left:4px;font-size:14px;">✕</button>
+            </span>
+            <div id="loadingIndicator" style="font-size:12px;color:var(--muted);display:none;">⏳ Memuat...</div>
+        </div>
+
+        <!-- Table -->
+        <div class="tbl-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ONU / Pelanggan</th>
+                        <th>OLT / PON</th>
+                        <th>Uptime</th>
+                        <th>Jam Down</th>
+                        <th>Insiden</th>
+                        <th>Down Terakhir</th>
+                        <th>Status</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="slaTableBody">
+                    <tr><td colspan="8" class="empty-state">
+                        <div class="icon">📊</div>
+                        <div>Memuat data SLA...</div>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</main>
+
+<!-- Modal Timeline -->
+<div class="modal-overlay" id="timelineModal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:17px;font-weight:700;margin:0;" id="timelineTitle">📉 Riwayat Gangguan</h3>
+            <button onclick="document.getElementById('timelineModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">×</button>
+        </div>
+        <div id="timelineSummary" style="background:var(--sub-bg);border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;"></div>
+        <div id="timelineBody"></div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let activeCluster = '';
+let currentData   = [];
+let debounceTimer = null;
+
+// ── Isi dropdown periode (6 bulan terakhir) ──
+(function initPeriod() {
+    const sel = document.getElementById('selPeriod');
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+        const d   = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const lbl = d.toLocaleDateString('id-ID', { month:'long', year:'numeric' });
+        const opt = document.createElement('option');
+        opt.value = val; opt.textContent = lbl;
+        if (i === 0) opt.selected = true;
+        sel.appendChild(opt);
+    }
+})();
+
+// ── Load Data ──
+async function loadData() {
+    const period  = document.getElementById('selPeriod').value;
+    const olt_id  = document.getElementById('selOlt').value;
+    const search  = document.getElementById('searchInput').value;
+    document.getElementById('loadingIndicator').style.display = '';
+
+    try {
+        const params = new URLSearchParams({ period, olt_id, cluster: activeCluster, search });
+        const res    = await fetch('/sla/api/summary?' + params);
+        const d      = await res.json();
+        if (!d.success) throw new Error(d.message);
+
+        currentData = d.data;
+
+        // Update cluster counts
+        document.getElementById('cnt-critical').textContent = d.stats.critical;
+        document.getElementById('cnt-bad').textContent      = d.stats.bad;
+        document.getElementById('cnt-warn').textContent     = d.stats.warn;
+        document.getElementById('cnt-good').textContent     = d.stats.good;
+        document.getElementById('cnt-total').textContent    = d.stats.total;
+
+        // Banner jika tidak ada data sama sekali
+        document.getElementById('noHistoryBanner').style.display = (d.stats.total === 0 && !activeCluster) ? '' : 'none';
+
+        renderTable(currentData, period);
+    } catch (e) {
+        showToast('Gagal memuat: ' + e.message, 'error');
+    } finally {
+        document.getElementById('loadingIndicator').style.display = 'none';
+    }
+}
+
+function debounceLoad() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(loadData, 400);
+}
+
+function filterCluster(key) {
+    activeCluster = key;
+    // Toggle active card
+    document.querySelectorAll('.cluster-card').forEach(c => c.classList.remove('active'));
+    if (key) {
+        document.querySelector('.cluster-card.' + key)?.classList.add('active');
+        document.getElementById('filterClusterLabel').style.display = '';
+        const labels = { critical:'Kritis', bad:'Buruk', warn:'Perlu Pantau', good:'Baik' };
+        document.getElementById('filterClusterName').textContent = labels[key] || key;
+    } else {
+        document.getElementById('filterClusterLabel').style.display = 'none';
+    }
+    loadData();
+}
+
+// ── Render Table ──
+function renderTable(data, period) {
+    const tbody = document.getElementById('slaTableBody');
+    if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8">
+            <div class="empty-state">
+                <div class="icon">${activeCluster === 'good' ? '🟢' : '📊'}</div>
+                <div>${activeCluster ? 'Tidak ada ONU di cluster ini.' : 'Tidak ada data history untuk periode ini.'}</div>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = data.map(r => {
+        const cl        = r.cluster;
+        const uptimePct = r.uptime;
+        const barColor  = uptimePct >= 99 ? '#10B981' : uptimePct >= 95 ? '#F59E0B' : uptimePct >= 90 ? '#F97316' : '#EF4444';
+        const lastDown  = r.last_down ? new Date(r.last_down).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '-';
+        const customerInfo = r.customer_name
+            ? `<div style="font-size:11px;color:#3B82F6;margin-top:2px;">👤 ${escHtml(r.customer_name)}</div>`
+            : `<div style="font-size:11px;color:var(--muted);margin-top:2px;">— pelanggan belum dipetakan</div>`;
+
+        return `<tr>
+            <td>
+                <div style="font-weight:600;">${escHtml(r.onu_name || r.onu_index)}</div>
+                ${customerInfo}
+                ${r.pppoe_username ? `<div style="font-size:10px;color:var(--muted);font-family:monospace;">${escHtml(r.pppoe_username)}</div>` : ''}
+            </td>
+            <td>
+                <div style="font-size:12px;">${escHtml(r.olt_name || '-')}</div>
+                ${r.pon_port != null ? `<div style="font-size:10px;color:var(--muted);">PON ${r.pon_port}</div>` : ''}
+            </td>
+            <td>
+                <div class="uptime-wrap">
+                    <div class="uptime-bar">
+                        <div class="uptime-fill" style="width:${uptimePct}%;background:${barColor};"></div>
+                    </div>
+                    <span class="uptime-pct" style="color:${barColor};">${uptimePct}%</span>
+                </div>
+            </td>
+            <td>
+                <span style="font-weight:600;color:${r.down_hours > 0 ? '#F87171' : 'var(--muted)'};">
+                    ${r.down_hours > 0 ? r.down_hours + ' jam' : '—'}
+                </span>
+            </td>
+            <td>
+                <span style="font-size:13px;font-weight:600;">${r.incident_count}×</span>
+            </td>
+            <td style="font-size:11px;color:var(--muted);">${lastDown}</td>
+            <td>
+                <span class="cbadge" style="background:${cl.bg};color:${cl.color};border:1px solid ${cl.color}44;">
+                    ${cl.icon} ${cl.label}
+                </span>
+            </td>
+            <td>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <button onclick='showTimeline(${JSON.stringify(r).replace(/'/g,"&#39;")}, ${JSON.stringify(period)})'
+                        title="Riwayat gangguan"
+                        style="padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:var(--sub-bg);color:var(--text);cursor:pointer;font-size:11px;">
+                        📉 Detail
+                    </button>
+                    ${r.customer_phone ? `
+                    <a href="https://wa.me/${formatPhone(r.customer_phone)}?text=${encodeURIComponent('Halo ' + (r.customer_name||r.onu_name) + ', kami mendeteksi gangguan pada layanan internet Anda. Tim kami sedang menangani. Mohon maaf atas ketidaknyamanannya.')}"
+                        target="_blank" title="Hubungi via WhatsApp"
+                        style="padding:5px 10px;border-radius:7px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08);color:#10B981;text-decoration:none;font-size:11px;display:flex;align-items:center;">
+                        💬 WA
+                    </a>` : ''}
+                    <a href="/tickets/new?customer_id=${r.customer_id || ''}&title=${encodeURIComponent('Gangguan layanan: ' + (r.onu_name||r.onu_index))}"
+                        title="Buat tiket"
+                        style="padding:5px 10px;border-radius:7px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:#EF4444;text-decoration:none;font-size:11px;display:flex;align-items:center;">
+                        🎫 Tiket
+                    </a>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Tampilkan Timeline Detail ──
+async function showTimeline(row, period) {
+    document.getElementById('timelineTitle').textContent = `📉 Riwayat: ${row.onu_name || row.onu_index}`;
+    document.getElementById('timelineBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">⏳ Memuat...</div>';
+    document.getElementById('timelineSummary').innerHTML = '';
+    document.getElementById('timelineModal').style.display = 'flex';
+
+    try {
+        const params = new URLSearchParams({ olt_id: row.olt_id, onu_index: row.onu_index, period });
+        const res  = await fetch('/sla/api/timeline?' + params);
+        const d    = await res.json();
+        if (!d.success) throw new Error(d.message);
+
+        const cl = row.cluster;
+        document.getElementById('timelineSummary').innerHTML = `
+            <div>
+                <div style="font-size:22px;font-weight:800;color:${cl.color};">${row.uptime}%</div>
+                <div style="font-size:11px;color:var(--muted);">Uptime</div>
+            </div>
+            <div>
+                <div style="font-size:22px;font-weight:800;color:#F87171;">${row.down_hours > 0 ? row.down_hours + 'j' : '—'}</div>
+                <div style="font-size:11px;color:var(--muted);">Total Down</div>
+            </div>
+            <div>
+                <div style="font-size:22px;font-weight:800;">${row.incident_count}×</div>
+                <div style="font-size:11px;color:var(--muted);">Insiden</div>
+            </div>
+        `;
+
+        if (!d.incidents || d.incidents.length === 0) {
+            document.getElementById('timelineBody').innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);">✅ Tidak ada insiden down pada periode ini.</div>';
+            return;
+        }
+
+        document.getElementById('timelineBody').innerHTML = `
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Daftar Insiden</div>
+            ${d.incidents.map((inc, i) => {
+                const downAt = new Date(inc.down_at).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+                const upAt   = inc.up_at ? new Date(inc.up_at).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '<span style="color:#EF4444;">Masih Down</span>';
+                const durH   = inc.duration_m >= 60 ? (inc.duration_m/60).toFixed(1) + ' jam' : inc.duration_m + ' menit';
+                return `<div class="incident-row">
+                    <div>
+                        <div style="font-size:10px;color:var(--muted);">🔴 Down</div>
+                        <div style="font-weight:600;">${downAt}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;color:var(--muted);">🟢 Up</div>
+                        <div style="font-weight:600;">${upAt}</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:10px;color:var(--muted);">Durasi</div>
+                        <div style="font-weight:700;color:#F87171;">${durH}</div>
+                    </div>
+                </div>`;
+            }).join('')}
+        `;
+    } catch (e) {
+        document.getElementById('timelineBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:20px;">${e.message}</div>`;
+    }
+}
+
+function formatPhone(p) {
+    if (!p) return '';
+    p = p.replace(/\D/g, '');
+    if (p.startsWith('0')) p = '62' + p.slice(1);
+    return p;
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color       = type === 'success' ? '#10B981' : '#EF4444';
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// Load awal
+loadData();
+</script>
+</body>
+</html>

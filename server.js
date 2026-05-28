@@ -545,6 +545,30 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   }).catch(() => {});
 
+  // Migrasi: kolom customer_id di hioso_onus untuk mapping manual ONU → Pelanggan
+  pool.query(`SHOW COLUMNS FROM hioso_onus LIKE 'customer_id'`).then(([rows]) => {
+    if (rows.length === 0) {
+      pool.query(`ALTER TABLE hioso_onus ADD COLUMN customer_id INT NULL AFTER pon_port`)
+        .then(() => console.log('[DB] Kolom customer_id berhasil ditambahkan ke hioso_onus'))
+        .catch(e => console.error('[DB] Gagal tambah customer_id:', e.message));
+    }
+  }).catch(() => {});
+
+  // Tabel histori perubahan status ONU untuk SLA Monitoring
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS onu_status_history (
+      id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+      olt_id     INT NOT NULL,
+      onu_index  VARCHAR(100) NOT NULL,
+      onu_name   VARCHAR(100),
+      pon_port   TINYINT UNSIGNED NULL,
+      status     VARCHAR(20) NOT NULL,
+      changed_at DATETIME NOT NULL,
+      INDEX idx_olt_onu_time (olt_id, onu_index, changed_at),
+      INDEX idx_changed_at   (changed_at)
+    )
+  `).catch(console.error);
+
   // ═══════════════════════════════════════════
   // Tabel Infrastruktur Fiber Optik
   // ═══════════════════════════════════════════
@@ -1904,7 +1928,14 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             return;
           }
 
-          // Full replace agar data benar-benar segar (tidak ada stale ONU)
+          // Ambil status saat ini sebelum di-replace (untuk deteksi perubahan status)
+          const [prevRows] = await pool.query(
+            'SELECT onu_index, status FROM hioso_onus WHERE olt_id = ?', [olt.id]
+          );
+          const prevStatus = {};
+          prevRows.forEach(r => { prevStatus[r.onu_index] = r.status; });
+
+          // Full replace agar data benar-benar segar
           const activeProfile = detectedProfile || profile || olt.last_profile;
           await pool.query('DELETE FROM hioso_onus WHERE olt_id = ?', [olt.id]);
           const values = onus.map(o => {
@@ -1925,6 +1956,32 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             `INSERT INTO hioso_onus (olt_id, onu_index, pon_port, name, sn, mac, tx_power, rx_power, status, last_updated) VALUES ?`,
             [values]
           );
+
+          // Rekam perubahan status ke history (hanya jika status berubah)
+          const now = new Date();
+          const histValues = [];
+          for (const o of onus) {
+            const prev = prevStatus[String(o.index)];
+            // Rekam jika: status berubah ATAU ONU baru (belum ada sebelumnya)
+            if (prev !== o.status) {
+              const idx = String(o.index || '').trim();
+              let ponPort = null;
+              if (idx.includes('.')) {
+                const parts = idx.split('.');
+                ponPort = parts.length === 2 ? (parseInt(parts[0],10)||0) : (parseInt(parts[parts.length-2],10)||0);
+              } else {
+                const num = parseInt(idx, 10);
+                if (!isNaN(num) && num > 0) ponPort = (num >> 8) & 0xFF;
+              }
+              histValues.push([olt.id, o.index, o.name || '', ponPort, o.status, now]);
+            }
+          }
+          if (histValues.length > 0) {
+            await pool.query(
+              `INSERT INTO onu_status_history (olt_id, onu_index, onu_name, pon_port, status, changed_at) VALUES ?`,
+              [histValues]
+            );
+          }
 
           const upCnt   = onus.filter(o => o.status === 'Up').length;
           const downCnt = onus.length - upCnt;
@@ -2117,6 +2174,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   const ipMonitorRouter = require('./routes/ip_monitor');
   ipMonitorRouter.setPool(pool);
   app.use('/ip-monitor', adminOnly, ipMonitorRouter);
+
+  const slaRouter = require('./routes/sla');
+  slaRouter.setPool(pool);
+  app.use('/sla', adminOnly, slaRouter);
 
   // Cek setiap menit; router.runChecks() sendiri yang memutuskan apakah
   // sudah waktunya cek tiap target (berdasarkan check_interval per target)
