@@ -1,6 +1,6 @@
 # 🦖 Dino-Bill — ISP Management System
 
-Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasis **Node.js + Express + MySQL**. Dirancang untuk berjalan **autopilot penuh** — dari pembuatan invoice, isolir otomatis, hingga notifikasi WhatsApp — semua berjalan tanpa campur tangan manual.
+Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasis **Node.js + Express + MySQL**. Dirancang untuk berjalan **autopilot penuh** — dari pembuatan invoice, isolir otomatis, hingga notifikasi WhatsApp & Telegram — semua berjalan tanpa campur tangan manual.
 
 ---
 
@@ -8,13 +8,13 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 - [Fitur Lengkap](#-fitur-lengkap)
 - [Persyaratan Sistem](#-persyaratan-sistem)
-- [Instalasi Cepat](#-instalasi-cepat)
+- [Instalasi Cepat](#-instalasi-cepat-ubuntudebian)
 - [Instalasi Manual](#-instalasi-manual)
 - [Konfigurasi Awal](#-konfigurasi-awal)
 - [Alur Pembayaran Xendit QRIS](#-alur-pembayaran-xendit-qris)
 - [Cron Job Otomatis](#-cron-job-otomatis)
 - [Teknologi](#-teknologi)
-- [Support](#-support)
+- [Support](#-support--komunitas)
 
 ---
 
@@ -25,7 +25,8 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Integrasi PPPoE MikroTik: tambah, hapus, aktif, nonaktif langsung dari dashboard
 - Pilih paket layanan & router yang digunakan
 - Tanggal isolir per pelanggan dapat dikustomisasi
-- Filter pelanggan: aktif, terisolir, menunggak
+- Filter pelanggan: aktif, terisolir, menunggak, tidak aktif
+- Status pelanggan: **Aktif**, **Terisolir**, **Berhenti Berlangganan**
 - Import pelanggan massal via CSV
 - Export data pelanggan ke CSV
 - Tampilan peta sebaran pelanggan (Leaflet.js)
@@ -40,6 +41,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Tunda (defer) invoice tanpa menghapus tagihan
 - Cetak invoice dengan pratinjau in-page (modal + iframe, tanpa buka tab baru)
 - Layout cetak kompak — muat 1 halaman A4 saat disimpan sebagai PDF
+- Logo perusahaan & nama tampil berdampingan di header invoice
 - Export invoice ke CSV
 - Statistik pendapatan bulanan
 - Riwayat pembayaran per pelanggan
@@ -73,14 +75,22 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Fetch daftar PPP Profile dari MikroTik untuk assign ke paket
 - Auto disable/enable PPPoE saat isolir/reaktivasi
 - Monitoring traffic per router
+- Dashboard PPPoE per router dengan donut chart online/offline
 - Tampilkan active PPPoE yang belum terhubung ke data pelanggan
 
 ### 5. 📡 Manajemen OLT (Optical Line Terminal)
 - Multi-brand OLT via SNMP: **HIOSO C, HIOSO B, HIOSO GPON, HIOSO HA73, ZTE, HSGQ, HSGQ GPON, Huawei**
 - Auto-detect tipe/brand OLT saat pertama kali sync
-- Sync daftar ONU otomatis setiap 5 menit (round-robin per OLT)
-- Data ONU: status online/offline, RX power, TX power, MAC address, ONU index
-- VLAN management per ONU
+- Sync daftar ONU otomatis setiap 5 menit
+- Data ONU: status online/offline, RX power, TX power, MAC address, serial number, ONU index
+- **PON View**: tab khusus untuk melihat status ONU per PON port di setiap OLT
+  - Jumlah online/offline per PON ditampilkan dengan progress bar
+  - Expand tiap PON untuk melihat daftar ONU beserta sinyal Rx/Tx
+  - Ekstraksi PON port otomatis dari onu_index (HSGQ: bit-shift, format X.Y / X.Y.Z.W)
+- **OLT Alert Notifikasi Telegram**: kirim notif ke grup Telegram saat jumlah ONU offline melebihi threshold
+  - Threshold per OLT & threshold global (total semua OLT) dapat dikonfigurasi dari Pengaturan
+  - Anti-spam: notifikasi hanya dikirim saat status berubah (normal → alert, alert → recovery)
+  - Tombol test kirim notifikasi dari halaman Pengaturan
 - Reboot ONU dari dashboard
 - SNMP walk discovery untuk temukan OLT baru di jaringan
 - Tambah, edit, hapus konfigurasi OLT
@@ -89,6 +99,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 ### 6. 🌐 Integrasi GenieACS (ONT/CPE Management via TR-069)
 - Sync perangkat dari GenieACS server otomatis setiap 5 menit
 - Tampilkan status online/offline berdasarkan waktu `last_inform`
+- Threshold online/offline dapat dikonfigurasi (default: 15 menit, sesuai Periodic Inform)
 - Lihat IP WAN, serial number, manufacturer, PPPoE username tiap perangkat
 - Fetch SSID & Password WiFi real-time dari GenieACS
 - Ubah nama WiFi (SSID) & password WiFi via modal dari dashboard admin GenieACS
@@ -97,11 +108,25 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Reboot ONT dari dashboard admin
 - Refresh parameter ONT dari dashboard admin
 - Factory reset ONT dari dashboard admin
-- Hapus device dari tracking ACS
+- Hapus device dari tracking ACS (termasuk cleanup device orphan)
 - Konfigurasi path virtual parameters (PPPoE, IP WAN, dll) dari Settings
 - Dukungan autentikasi HTTP Basic ke GenieACS
 
-### 7. 🗺 Peta Infrastruktur
+### 7. 📊 NOC Dashboard (Network Operations Center)
+- Dashboard monitoring real-time jaringan
+- Status keseluruhan OLT, ONU online/offline, GenieACS device
+- Ringkasan status per OLT dengan badge online/offline
+- Integrasi data MikroTik, OLT, dan GenieACS dalam satu tampilan
+
+### 8. 🖧 IP Monitor
+- Monitor konektivitas IP/host secara periodik (ping)
+- Konfigurasi interval cek per target (menit)
+- Notifikasi Telegram otomatis saat host down atau kembali online
+- Riwayat status per target
+- Tambah, edit, hapus target monitoring dari dashboard
+- Test kirim notifikasi Telegram dari Settings
+
+### 9. 🗺 Peta Infrastruktur
 - Peta interaktif (Leaflet.js + OpenStreetMap)
 - Tampilkan objek infrastruktur: Server, ODP, dan titik kustom lainnya
 - Gambar jalur kabel pada peta dengan warna yang dapat dipilih
@@ -109,17 +134,21 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Koordinat pusat peta & zoom default dapat dikustomisasi dari Settings
 - Ambil koordinat GPS perangkat sebagai pusat peta
 
-### 8. 🔶 Manajemen Infrastruktur Fiber Optik (FO)
-- Kelola node FO: ODP, ODC, OLT, Splitter, Tiang, Pondasi, Closure
+### 10. 🔶 Manajemen Infrastruktur Fiber Optik (FO)
+- Kelola node FO dengan tipe dinamis: **ODP, ODC, OLT, Splitter, Tiang, Closure, HandHole, dll**
+- Tipe node FO dapat ditambah/edit/hapus dari dashboard (dengan ikon & warna kustom)
+- **Form Tiang yang disederhanakan**: saat tipe "Tiang" dipilih, form otomatis hanya menampilkan Nama + Koordinat + Alamat — field teknis disembunyikan
+- Berlaku di seluruh titik tambah node: Kelola Node & tombol +Node di peta
 - Kelola kabel FO antar node dengan koordinat jalur
-- Manajemen tube dalam kabel (nomor tube, warna, jumlah core)
-- Manajemen core dalam tube (nomor core, warna, status: tersedia/terpakai/rusak)
-- Assignment core ke node (many-to-many)
+- Manajemen tube dalam kabel (nomor tube, warna standar ITU-T, jumlah core)
+- Manajemen core dalam tube (nomor core, warna standar ITU-T, status: tersedia/terpakai/rusak)
+- Assignment core ke node (many-to-many) — satu core bisa melalui banyak node
+- Kabel FO penginduk: pilih kabel → tube → core yang menginduk suatu node
 - Manajemen splice point per kabel
 - Inventaris aset FO: kabel, splitter, ODP box, closure, konektor, dll
-- Peta visual infrastruktur FO
+- Peta visual infrastruktur FO lengkap dengan jalur kabel
 
-### 9. 🎫 Tiket Gangguan (Trouble Ticket)
+### 11. 🎫 Tiket Gangguan (Trouble Ticket)
 - Buat tiket dari admin, portal pelanggan, atau portal teknisi
 - Priority: low, normal, high, urgent
 - Status: open, in_progress, closed
@@ -131,7 +160,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Close & reopen tiket
 - Laporan tiket: jumlah per status, resolve rate, rata-rata waktu penyelesaian
 
-### 10. 🛠 Portal Teknisi
+### 12. 🛠 Portal Teknisi
 - Dashboard tiket terbuka yang ditugaskan ke teknisi yang login
 - Antrian instalasi baru (pelanggan berstatus instalasi pending)
 - Ambil info WiFi real-time (SSID/Password) dari GenieACS langsung di lapangan
@@ -140,16 +169,17 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Tampilan peta lokasi pelanggan
 - Check-in presensi berbasis GPS
 
-### 11. 📊 Portal Sales
+### 13. 📊 Portal Sales
 - Dashboard khusus tim sales
 - Kelola prospek / lead pelanggan baru
 - Tracking komisi dan balance
 
-### 12. 🌐 Portal Pelanggan (Self-Service)
+### 14. 🌐 Portal Pelanggan (Self-Service)
 - Login menggunakan **username PPPoE** atau **nomor HP** (format bebas: `08xxx`, `628xxx`, `+628xxx`)
 - Password default `1234`, bisa diganti sendiri kapan saja
 - Lihat semua tagihan dan riwayat pembayaran (10 invoice terakhir)
 - Bayar tagihan via Xendit QRIS langsung dari portal
+- Upload bukti transfer langsung dari portal — langsung tampil setelah upload
 - Lihat jumlah dan total tagihan belum lunas
 - Buat laporan gangguan / trouble ticket sendiri
 - Lihat riwayat tiket yang pernah dibuat
@@ -157,9 +187,10 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Update nomor telepon & email profil
 - Ganti password portal
 
-### 13. 💬 Notifikasi & Manager WhatsApp
+### 15. 💬 Notifikasi & Manager WhatsApp
 - **Provider lokal**: whatsapp-web.js (scan QR, gratis, butuh Google Chrome)
 - **Provider eksternal**: Fonnte, MPWA, Wablas (API berbayar, lebih stabil untuk skala besar)
+- Toggle on/off per jenis notifikasi (invoice, reminder, isolir, payment, teknisi, dll)
 - Notifikasi otomatis yang dikirim:
   - Invoice baru diterbitkan (beserta nominal dan jatuh tempo)
   - Pengingat jatuh tempo (H-3 atau sesuai konfigurasi)
@@ -169,21 +200,22 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Laporan harian otomatis ke admin (jumlah pelanggan, pendapatan bulan ini, tiket aktif)
 - Rate limiting & delay antar pesan (untuk bulk send, hindari ban)
 - Manager percakapan WhatsApp: lihat & balas chat dari dashboard
+- Dropdown pencarian pelanggan by nama — kirim pesan langsung dari panel chat
 - Riwayat pesan tersimpan di database
 - Test kirim pesan dari Settings
 - Restart koneksi WhatsApp dari Settings tanpa restart server
 - Status koneksi WhatsApp real-time: QR Code, Connecting, Ready
-- Template semua pesan dapat dikustomisasi dari Settings
 - **Template Pesan**: buat & kelola template pesan dengan variabel dinamis (`{nama}`, `{nomor}`, `{paket}`, `{jumlah}`, `{tanggal}`) — pilih template langsung dari input chat
-- **Auto Reply**: balas pesan masuk secara otomatis berdasarkan kata kunci, dengan mode pencocokan `contains`, `exact`, atau `startswith`; variabel pelanggan otomatis terisi dari database
-- **Kirim ke Pelanggan**: dropdown pencarian pelanggan by nama langsung dari panel chat
+- **Auto Reply**: balas pesan masuk secara otomatis berdasarkan kata kunci, mode pencocokan `contains`, `exact`, atau `startswith`; variabel pelanggan otomatis terisi dari database
 
-### 14. ✈️ Notifikasi Telegram
+### 16. ✈️ Notifikasi Telegram
 - Integrasi Telegram Bot
 - Laporan harian otomatis dikirim ke group/channel Telegram admin
+- Notifikasi OLT Alert (ONU offline massal) — lihat fitur OLT
+- Notifikasi IP Monitor (host down/recovery)
 - Test kirim pesan dari Settings
 
-### 15. 🎮 Hotspot & Voucher WiFi
+### 17. 🎮 Hotspot & Voucher WiFi
 - Manajemen hotspot user di MikroTik
 - Tambah dan hapus hotspot profile
 - Generate voucher WiFi otomatis (kode acak, harga, profile)
@@ -191,34 +223,36 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Hapus voucher yang sudah terpakai sekaligus (bulk cleanup)
 - Lihat status voucher: unused / used
 
-### 16. 📦 Manajemen Inventaris
+### 18. 📦 Manajemen Inventaris
 - Stok perangkat dan material (ONT, kabel, splitter, router, dll)
 - Kategori dan satuan unit (pcs, meter, roll, dll)
 - Tambah, edit, hapus item stok
 
-### 17. 💰 Pencatatan Pengeluaran
+### 19. 💰 Pencatatan Pengeluaran
 - Catat pengeluaran operasional ISP harian
 - Kategori pengeluaran dengan warna & ikon kustom (Operasional, Internet Upstream, Equipment, dll)
 - Tambah, edit, hapus kategori pengeluaran
 - Filter pengeluaran per kategori dan rentang tanggal
 - Ringkasan pengeluaran per kategori
 
-### 18. 📍 Presensi Teknisi
+### 20. 📍 Presensi Teknisi
 - Form check-in berbasis GPS dari portal teknisi
 - Validasi radius: presensi ditolak jika jarak melebihi batas dari titik kantor
 - Batas jam tepat waktu dapat dikonfigurasi (contoh: 08:30, setelahnya = terlambat)
 - Laporan presensi per user per periode (tepat waktu / terlambat)
 - Admin dapat hapus data presensi
 
-### 19. 🔧 Pengaturan Sistem
-- **Profil Perusahaan**: nama ISP, telepon, alamat, email, website, timezone, mata uang
+### 21. 🔧 Pengaturan Sistem
+- **Profil Perusahaan**: nama ISP, logo, ikon, telepon, alamat, email, website, timezone, mata uang
 - **Billing**: prefix nomor invoice, tanggal generate otomatis, hari jatuh tempo default, toleransi keterlambatan
 - **Otomasi**: toggle auto-billing, toggle auto-isolir, hari kirim reminder sebelum jatuh tempo
-- **WhatsApp**: pilih provider, API URL, API key, nomor pengirim, delay antar pesan, limit batch, nomor admin
-- **Template Pesan WA**: kustomisasi teks untuk invoice baru, payment received, isolir, reminder (variabel: `{name}`, `{amount}`, `{due_date}`, `{company}`)
-- **Telegram**: bot token, admin chat ID
-- **Payment Gateway**: pilih gateway default, konfigurasi Xendit (API key, webhook token, callback URL), konfigurasi Tripay (API key, private key, merchant code, mode, channel), data rekening bank manual
-- **GenieACS**: URL ACS, username, password, path virtual parameters (PPPoE, IP WAN, custom params)
+- **WhatsApp**: pilih provider, API URL, API key, nomor pengirim, delay antar pesan, limit batch, nomor admin, toggle per jenis notifikasi
+- **Template Pesan WA**: kustomisasi teks untuk invoice baru, payment received, isolir, reminder
+- **Telegram**: bot token, admin chat ID, monitor chat ID (untuk alert OLT & IP)
+- **OLT Alert**: threshold ONU offline per OLT & global, tombol test notifikasi
+- **IP Monitor**: daftar target ping & interval, notifikasi Telegram
+- **Payment Gateway**: pilih gateway default, konfigurasi Xendit & Tripay, data rekening bank manual
+- **GenieACS**: URL ACS, username, password, threshold online/offline, path virtual parameters
 - **Peta**: koordinat pusat, zoom default, mini preview map interaktif, ambil lokasi GPS
 - **Presensi**: radius maksimal check-in (meter), jam batas tepat waktu
 - **Manajemen User**: tambah/edit/hapus user admin, teknisi, sales; set role, nomor HP, Telegram ID
@@ -227,7 +261,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Update Sistem**: update dari GitHub langsung via tombol di dashboard (git pull)
 - **Multi-bahasa**: Indonesia & English (dapat diganti dari topbar)
 
-### 20. 🔐 Keamanan & Akses
+### 22. 🔐 Keamanan & Akses
 - Role-based access control: **Admin** (akses penuh), **Teknisi** (portal teknisi), **Sales** (portal sales)
 - Password hashing dengan bcrypt (salt round 10)
 - Session management dengan express-session
@@ -242,13 +276,15 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 | Komponen | Minimum | Rekomendasi |
 |---|---|---|
-| OS | Ubuntu 20.04 / Debian 11 | Ubuntu 22.04 LTS |
+| OS | Ubuntu 20.04 / Debian 11 / Windows + WAMP | Ubuntu 22.04 LTS |
 | CPU | 1 core | 2 core |
 | RAM | 1 GB | 2 GB (jika pakai WA lokal) |
 | Storage | 5 GB | 10 GB |
 | Node.js | v18+ | v20 LTS |
-| Database | MySQL 8.0 / MariaDB 10.6 | MySQL 8.0 |
+| Database | MySQL 5.7+ / MariaDB 10.6+ | MySQL 8.0 |
 | Port | 3999 | 3999 |
+
+> ✅ Kompatibel dengan **MySQL 5.7** (WAMP/XAMPP) — tidak membutuhkan fitur MySQL 8 only.
 
 ---
 
@@ -303,7 +339,7 @@ pm2 save && pm2 startup
 - Link **Portal Pelanggan** juga tersedia di sidebar dashboard admin
 
 ### 2. Profil Perusahaan
-**Pengaturan → Perusahaan** → isi nama ISP, telepon, alamat, timezone.
+**Pengaturan → Perusahaan** → isi nama ISP, logo, telepon, alamat, timezone.
 
 ### 3. Xendit QRIS (Payment Gateway)
 **Pengaturan → Payment → Xendit QRIS:**
@@ -326,6 +362,17 @@ pm2 save && pm2 startup
 
 ### 7. GenieACS
 **Pengaturan → GenieACS** → isi URL ACS (`http://IP:7557`), username, password, path virtual parameter.
+
+### 8. OLT Alert (Telegram)
+**Pengaturan → OLT Alert:**
+1. Pastikan Bot Token & Monitor Chat ID sudah diisi di tab Telegram
+2. Set **Batas ONU Offline per OLT** (default: 100)
+3. Set **Batas Global** jika ingin notif untuk total semua OLT (0 = nonaktif)
+4. Klik **Test Kirim Notifikasi** untuk verifikasi
+
+### 9. IP Monitor
+**IP Monitor** → Tambah target → isi nama, IP/host, interval cek (menit).
+Notifikasi Telegram dikirim saat host down atau kembali online.
 
 ---
 
@@ -365,8 +412,9 @@ Portal pelanggan otomatis tampilkan layar sukses ✅
 | Setiap hari pukul 08:00 | **Reminder Tagihan**: kirim WA ke pelanggan yang jatuh tempo H-3 (atau sesuai setting) |
 | Setiap hari pukul 08:30 | **Laporan Harian**: ringkasan statistik ISP dikirim ke admin via WA & Telegram |
 | Tanggal 1 setiap bulan pukul 06:00 | **Generate Invoice**: buat invoice bulanan untuk semua pelanggan aktif + kirim notif WA |
-| Setiap 5 menit | **Sync OLT**: update status & sinyal ONU dari semua OLT via SNMP (round-robin) |
+| Setiap 5 menit | **Sync OLT**: update status & sinyal ONU dari semua OLT via SNMP + cek OLT Alert |
 | Setiap 5 menit | **Sync GenieACS**: update status online/offline device dari ACS server |
+| Setiap 1 menit | **IP Monitor**: ping semua target sesuai interval yang dikonfigurasi per target |
 
 > Auto-isolir dan auto-billing dapat dimatikan dari **Pengaturan → Billing**.
 
@@ -377,7 +425,7 @@ Portal pelanggan otomatis tampilkan layar sukses ✅
 | Komponen | Teknologi |
 |---|---|
 | Backend | Node.js + Express.js |
-| Database | MySQL 8 via mysql2/promise (connection pool) |
+| Database | MySQL 5.7+ / MySQL 8 via mysql2/promise (connection pool) |
 | Template Engine | EJS |
 | Session | express-session |
 | Scheduler | node-cron |
