@@ -75,21 +75,23 @@ router.get('/api/summary', async (req, res) => {
         const pStart = new Date(periodStart);
         const pEnd   = new Date(periodEnd);
 
-        // Step 1: Ambil ONU unik dari history — tanpa JOIN ke customers (hindari collation mismatch)
+        // Step 1: Ambil ONU unik dari history — JOIN pakai CONVERT agar collation seragam
         let onuQuery = `
-            SELECT DISTINCT h.olt_id, h.onu_index, h.onu_name, h.pon_port,
+            SELECT DISTINCT
+                   h.olt_id, h.onu_index, h.onu_name, h.pon_port,
                    o.name AS olt_name,
                    u.customer_id,
                    u.rx_power, u.tx_power
             FROM onu_status_history h
             LEFT JOIN hioso_olts o ON o.id = h.olt_id
-            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id AND u.onu_index = h.onu_index
+            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id
+                   AND CONVERT(u.onu_index USING utf8mb4) = CONVERT(h.onu_index USING utf8mb4)
             WHERE h.changed_at BETWEEN ? AND ?
         `;
         const params = [pStart, pEnd];
 
         if (olt_id) { onuQuery += ' AND h.olt_id = ?'; params.push(parseInt(olt_id)); }
-        if (search)  { onuQuery += ' AND h.onu_name LIKE ?'; params.push(`%${search}%`); }
+        if (search)  { onuQuery += ' AND CONVERT(h.onu_name USING utf8mb4) LIKE ?'; params.push(`%${search}%`); }
 
         const [onuList] = await pool.query(onuQuery, params);
 

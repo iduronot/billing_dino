@@ -555,18 +555,19 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   }).catch(() => {});
 
   // Tabel histori perubahan status ONU untuk SLA Monitoring
+  // Eksplisit charset + collation agar konsisten dengan tabel lain (utf8mb4_general_ci)
   pool.query(`
     CREATE TABLE IF NOT EXISTS onu_status_history (
       id         BIGINT AUTO_INCREMENT PRIMARY KEY,
       olt_id     INT NOT NULL,
-      onu_index  VARCHAR(100) NOT NULL,
-      onu_name   VARCHAR(100),
+      onu_index  VARCHAR(100) NOT NULL COLLATE utf8mb4_general_ci,
+      onu_name   VARCHAR(100)          COLLATE utf8mb4_general_ci,
       pon_port   TINYINT UNSIGNED NULL,
-      status     VARCHAR(20) NOT NULL,
+      status     VARCHAR(20) NOT NULL  COLLATE utf8mb4_general_ci,
       changed_at DATETIME NOT NULL,
       INDEX idx_olt_onu_time (olt_id, onu_index, changed_at),
       INDEX idx_changed_at   (changed_at)
-    )
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   `).catch(console.error);
 
   // ═══════════════════════════════════════════
