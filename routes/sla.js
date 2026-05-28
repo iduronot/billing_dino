@@ -75,32 +75,61 @@ router.get('/api/summary', async (req, res) => {
         const pStart = new Date(periodStart);
         const pEnd   = new Date(periodEnd);
 
-        // Ambil semua ONU unik yang ada di history atau saat ini
+        // Step 1: Ambil ONU unik dari history — tanpa JOIN ke customers (hindari collation mismatch)
         let onuQuery = `
             SELECT DISTINCT h.olt_id, h.onu_index, h.onu_name, h.pon_port,
                    o.name AS olt_name,
                    u.customer_id,
-                   c.name AS customer_name,
-                   c.phone AS customer_phone,
-                   c.pppoe_username,
                    u.rx_power, u.tx_power
             FROM onu_status_history h
-            LEFT JOIN hioso_olts o  ON o.id = h.olt_id
-            LEFT JOIN hioso_onus u  ON u.olt_id = h.olt_id AND u.onu_index = h.onu_index
-            LEFT JOIN customers  c  ON c.id = u.customer_id
-                                    OR CONVERT(c.pppoe_username USING utf8mb4) = CONVERT(h.onu_name USING utf8mb4)
+            LEFT JOIN hioso_olts o ON o.id = h.olt_id
+            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id AND u.onu_index = h.onu_index
             WHERE h.changed_at BETWEEN ? AND ?
         `;
         const params = [pStart, pEnd];
 
         if (olt_id) { onuQuery += ' AND h.olt_id = ?'; params.push(parseInt(olt_id)); }
-        if (search)  { onuQuery += ' AND (h.onu_name LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+        if (search)  { onuQuery += ' AND h.onu_name LIKE ?'; params.push(`%${search}%`); }
 
         const [onuList] = await pool.query(onuQuery, params);
 
+        // Step 2: Ambil semua pelanggan sekali — lakukan matching di JavaScript (tidak di SQL)
+        const [allCustomers] = await pool.query(
+            'SELECT id, name, phone, pppoe_username FROM customers'
+        );
+        // Buat map: customer_id → customer, dan pppoe_username (lowercase) → customer
+        const custById   = {};
+        const custByUser = {};
+        allCustomers.forEach(c => {
+            custById[c.id] = c;
+            if (c.pppoe_username) custByUser[c.pppoe_username.toLowerCase()] = c;
+        });
+
+        // Step 3: Enrichment — tambahkan info customer ke setiap ONU via JS matching
+        onuList.forEach(onu => {
+            let cust = null;
+            if (onu.customer_id) {
+                cust = custById[onu.customer_id] || null;
+            }
+            if (!cust && onu.onu_name) {
+                cust = custByUser[onu.onu_name.toLowerCase()] || null;
+            }
+            onu.customer_name  = cust ? cust.name  : null;
+            onu.customer_phone = cust ? cust.phone : null;
+            onu.pppoe_username = cust ? cust.pppoe_username : null;
+        });
+
+        // Filter search juga ke nama customer jika ada
+        const filteredList = search
+            ? onuList.filter(onu =>
+                (onu.onu_name  && onu.onu_name.toLowerCase().includes(search.toLowerCase())) ||
+                (onu.customer_name && onu.customer_name.toLowerCase().includes(search.toLowerCase()))
+              )
+            : onuList;
+
         // Untuk setiap ONU, hitung uptime
         const results = [];
-        for (const onu of onuList) {
+        for (const onu of filteredList) {
             // Status sebelum periode dimulai (untuk tahu state awal)
             const [[lastBefore]] = await pool.query(`
                 SELECT status FROM onu_status_history
