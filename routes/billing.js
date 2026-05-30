@@ -218,6 +218,43 @@ router.post('/api/:id/pay', async (req, res) => {
     }
 });
 
+// POST - Isolate customer from invoice (tanpa hapus invoice)
+router.post('/api/:id/isolate', async (req, res) => {
+    try {
+        const [[inv]] = await pool.query('SELECT * FROM invoices WHERE id=?', [req.params.id]);
+        if (!inv) return res.status(404).json({ success: false, message: 'Invoice tidak ditemukan' });
+        if (inv.status === 'paid') return res.json({ success: false, message: 'Invoice sudah lunas, tidak perlu isolir' });
+
+        const [[cust]] = await pool.query(
+            "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
+            [inv.customer_id]
+        );
+        if (!cust) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        if (cust.status === 'isolated') return res.json({ success: false, message: 'Pelanggan sudah dalam status isolir' });
+
+        // Set status isolated
+        await pool.query("UPDATE customers SET status='isolated' WHERE id=? AND status='active'", [inv.customer_id]);
+
+        // Disable PPPoE di MikroTik
+        let mtMsg = '';
+        if (cust.pppoe_username && cust.r_ip) {
+            const routerData = { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port };
+            const mtResult = await mikrotik.disablePPPoESecret(routerData, cust.pppoe_username).catch(e => ({ success: false, message: e.message }));
+            mtMsg = mtResult.success ? ' & PPPoE dinonaktifkan di MikroTik' : ' (MikroTik gagal: ' + mtResult.message + ')';
+        } else {
+            mtMsg = ' (PPPoE/router belum dikonfigurasi)';
+        }
+
+        // Kirim notifikasi WA isolasi
+        const { notifyIsolation } = require('../helpers/notification');
+        await notifyIsolation(pool, cust).catch(() => {});
+
+        res.json({ success: true, message: `Pelanggan ${cust.name} berhasil diisolir${mtMsg}` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // POST - Unisolate only (without paying)
 router.post('/api/:id/unisolate', async (req, res) => {
     try {

@@ -382,9 +382,16 @@
                                     <button class="act-more-btn" onclick="toggleActMenu(this)" title="Aksi lainnya">⋮</button>
                                     <div class="act-dropdown">
                                         <% if(i.status !== 'paid') { %>
+                                        <% if(isOverdueRow && i.customer_status !== 'isolated') { %>
+                                        <button onclick="closeAllMenus();isolirInvoice(<%= i.id %>,'<%= (i.customer_name||'').replace(/'/g,'') %>')" style="color:#F97316;">
+                                            <span class="act-icon"><i class="fas fa-lock"></i></span> Isolir Pelanggan
+                                        </button>
+                                        <% } %>
+                                        <% if(i.customer_status === 'isolated') { %>
                                         <button onclick="closeAllMenus();unisolateOnly(<%= i.id %>)">
                                             <span class="act-icon"><i class="fas fa-unlock"></i></span> Aktifkan PPPoE
                                         </button>
+                                        <% } %>
                                         <button onclick="closeAllMenus();deferInvoice(<%= i.id %>)">
                                             <span class="act-icon"><i class="fas fa-calendar-alt"></i></span> Tunda Invoice
                                         </button>
@@ -717,6 +724,7 @@ function openEditById(id) { const inv = allInvoices.find(x => x.id == id); if(in
 
 async function payInvoice(id){if(!confirm(<%- JSON.stringify(t.confirm_pay) %>))return;const res=await fetch('/billing/api/'+id+'/pay',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
 async function unisolateOnly(id){if(!confirm(<%- JSON.stringify(t.confirm_unisolate) %>))return;const res=await fetch('/billing/api/'+id+'/unisolate',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
+async function isolirInvoice(id, name){if(!confirm('Isolir pelanggan "'+name+'"?\nInternet akan diputus dan akun PPPoE dinonaktifkan di MikroTik.\nTagihan tetap tercatat sebagai belum lunas.'))return;const res=await fetch('/billing/api/'+id+'/isolate',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1200);}
 async function deferInvoice(id){if(!confirm(<%- JSON.stringify(t.confirm_defer) %>))return;const res=await fetch('/billing/api/'+id+'/defer',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1200);}
 async function deleteItem(url,msg){if(!confirm(msg))return;const res=await fetch(url,{method:'DELETE'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1000);}
 async function generateBulk(){if(!confirm(<%- JSON.stringify(t.confirm_generate_bulk) %>))return;showToast(<%- JSON.stringify(t.generating) %>,'success');const res=await fetch('/billing/api/generate-bulk',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),2000);}
