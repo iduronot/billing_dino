@@ -28,7 +28,14 @@ router.get('/', async (req, res) => {
 
         let conditions = [];
         let params = [];
-        if (statusFilter !== 'all') { conditions.push('i.status = ?'); params.push(statusFilter); }
+        if (statusFilter === 'overdue') {
+            // Jatuh tempo: belum bayar DAN due_date sudah lewat
+            conditions.push("i.status = 'unpaid'");
+            conditions.push("i.due_date < CURDATE()");
+        } else if (statusFilter !== 'all') {
+            conditions.push('i.status = ?');
+            params.push(statusFilter);
+        }
         if (proofFilter === 'has_proof') { conditions.push('i.proof_image IS NOT NULL AND i.proof_image != ""'); }
         if (search) { conditions.push('(c.name LIKE ? OR c.pppoe_username LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }
         const safeField = ['created_at','due_date','paid_at'].includes(dateField) ? dateField : 'created_at';

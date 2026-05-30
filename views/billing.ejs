@@ -224,17 +224,41 @@
                 <div class="stat-value"><%= stats.unpaid || 0 %></div>
                 <div class="stat-sub">belum terbayar</div>
             </div>
-            <div class="stat-card red">
-                <div class="stat-label"><%= t.overdue %></div>
-                <div class="stat-value"><%= stats.overdue || 0 %></div>
-                <div class="stat-sub">lewat jatuh tempo</div>
+            <a href="/billing?status=overdue" style="text-decoration:none;" title="Klik untuk filter invoice jatuh tempo">
+            <div class="stat-card red" style="cursor:pointer;transition:transform .15s,box-shadow .15s;<%= statusFilter==='overdue' ? 'box-shadow:0 0 0 2px #EF4444;' : '' %>" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(239,68,68,.25)'" onmouseout="this.style.transform='';this.style.boxShadow='<%= statusFilter==='overdue' ? '0 0 0 2px #EF4444' : '' %>'">
+                <div class="stat-label"><%= t.overdue %> <span style="font-size:9px;background:rgba(239,68,68,.2);color:#F87171;padding:1px 5px;border-radius:4px;font-weight:700;">KLIK FILTER</span></div>
+                <div class="stat-value" style="color:#EF4444;"><%= stats.overdue || 0 %></div>
+                <div class="stat-sub">lewat jatuh tempo — klik untuk lihat</div>
             </div>
+            </a>
             <div class="stat-card blue">
                 <div class="stat-label"><%= t.monthly_revenue %></div>
                 <div class="stat-value" style="font-size:18px;">Rp <%= Math.floor(stats.totalRevenue||0).toLocaleString('id-ID') %></div>
                 <div class="stat-sub">bulan ini</div>
             </div>
         </div>
+
+        <!-- ── BANNER JATUH TEMPO (muncul hanya saat filter overdue) ── -->
+        <% if (statusFilter === 'overdue') { %>
+        <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span style="font-size:24px;">⚠️</span>
+                <div>
+                    <div style="font-weight:700;color:#F87171;font-size:14px;">Filter Aktif: Invoice Jatuh Tempo</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px;">Menampilkan <%= pagination.total %> invoice belum lunas yang sudah melewati tanggal jatuh tempo</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <button onclick="runIsolir()" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.1);color:#F87171;cursor:pointer;font-size:12px;font-family:'Outfit',sans-serif;font-weight:600;">
+                    🔒 Auto Isolir Semua
+                </button>
+                <button onclick="sendReminders()" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(37,211,102,.3);background:rgba(37,211,102,.08);color:#25D366;cursor:pointer;font-size:12px;font-family:'Outfit',sans-serif;font-weight:600;">
+                    📱 Kirim WA Reminder
+                </button>
+                <a href="/billing" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--sub-bg);color:var(--muted);text-decoration:none;font-size:12px;">✕ Reset Filter</a>
+            </div>
+        </div>
+        <% } %>
 
         <!-- ── STATS FILTER (muncul hanya jika filter aktif) ── -->
         <% if (useDate && filteredStats) { %>
@@ -260,10 +284,11 @@
             <input type="hidden" name="dateField" value="<%= dateField %>">
             <input type="hidden" name="page"      value="1">
             <input type="text" name="search" class="form-control" placeholder="<%= t.search_customer %>" value="<%= search %>" style="flex:1;min-width:180px;max-width:280px;">
-            <select name="status" class="form-control" style="width:150px;flex-shrink:0;">
-                <option value="all"    <%= statusFilter==='all'   ?'selected':'' %>><%= t.all_status %></option>
-                <option value="paid"   <%= statusFilter==='paid'  ?'selected':'' %>><%= t.paid %></option>
-                <option value="unpaid" <%= statusFilter==='unpaid'?'selected':'' %>><%= t.unpaid %></option>
+            <select name="status" class="form-control" style="width:175px;flex-shrink:0;">
+                <option value="all"     <%= statusFilter==='all'     ?'selected':'' %>><%= t.all_status %></option>
+                <option value="paid"    <%= statusFilter==='paid'    ?'selected':'' %>><%= t.paid %></option>
+                <option value="unpaid"  <%= statusFilter==='unpaid'  ?'selected':'' %>><%= t.unpaid %></option>
+                <option value="overdue" <%= statusFilter==='overdue' ?'selected':'' %>>⚠️ Jatuh Tempo</option>
             </select>
             <select name="proof" class="form-control" style="width:160px;flex-shrink:0;">
                 <option value=""          <%= proofFilter===''          ?'selected':'' %>>Semua</option>
@@ -292,8 +317,12 @@
                 </thead>
                 <tbody>
                 <% if (invoices && invoices.length > 0) { %>
-                    <% invoices.forEach(i => { %>
-                    <tr>
+                    <% invoices.forEach(i => {
+                    const isOverdueRow = i.status === 'unpaid' && i.due_date && new Date(i.due_date) < new Date();
+                    const daysLate = isOverdueRow ? Math.floor((new Date() - new Date(i.due_date)) / 86400000) : 0;
+                    const rowBg = isOverdueRow && daysLate > 30 ? 'rgba(239,68,68,.06)' : isOverdueRow && daysLate > 7 ? 'rgba(249,115,22,.04)' : '';
+                %>
+                    <tr style="<%= rowBg ? 'background:' + rowBg + ';' : '' %>">
                         <td style="color:var(--muted);font-size:11px;">#<%= i.id %></td>
                         <td>
                             <div style="font-weight:600;"><%= i.customer_name || '-' %></div>
@@ -305,11 +334,13 @@
                         <td style="font-size:12px;color:var(--muted);"><%= i.package_name || '-' %></td>
                         <td style="font-weight:700;">Rp <%= parseFloat(i.amount).toLocaleString('id-ID') %></td>
                         <td>
-                            <div style="color:var(--text);">
+                            <div style="color:<%= isOverdueRow ? '#F87171' : 'var(--text)' %>;font-weight:<%= isOverdueRow ? '600' : 'normal' %>;">
                                 <%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '-' %>
                             </div>
-                            <% if(i.status === 'unpaid' && i.due_date && new Date(i.due_date) < new Date()) { %>
-                            <div style="color:var(--danger);font-size:11px;font-weight:600;">⚠ <%= t.late %></div>
+                            <% if(isOverdueRow) { %>
+                            <div style="font-size:11px;font-weight:700;<%= daysLate > 30 ? 'color:#EF4444;' : daysLate > 7 ? 'color:#F97316;' : 'color:#F59E0B;' %>">
+                                ⚠ Telat <%= daysLate %> hari
+                            </div>
                             <% } %>
                         </td>
                         <td style="font-size:12px;color:var(--muted);">
