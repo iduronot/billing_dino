@@ -387,4 +387,32 @@ router.post('/:id/mark-installed', async (req, res) => {
     }
 });
 
+// POST /:id/send-wa — kirim pesan WA manual ke pelanggan via WA lokal
+router.post('/:id/send-wa', async (req, res) => {
+    try {
+        const { message } = req.body;
+        const [[cust]] = await pool.query('SELECT id, name, phone FROM customers WHERE id=?', [req.params.id]);
+        if (!cust) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
+        if (!cust.phone) return res.json({ success: false, message: 'Pelanggan tidak memiliki nomor telepon' });
+
+        const { sendWhatsApp, getSettings } = require('../helpers/notification');
+
+        let finalMsg = message;
+        if (!finalMsg) {
+            // Pesan default jika tidak ada body
+            const s = await getSettings(pool, ['company_name']);
+            finalMsg = `Halo ${cust.name}, ada yang bisa kami bantu? - ${s.company_name || 'Dino-Bill ISP'}`;
+        }
+
+        const result = await sendWhatsApp(pool, cust.phone, finalMsg);
+        if (result.success) {
+            res.json({ success: true, message: `Pesan WA berhasil dikirim ke ${cust.name}` });
+        } else {
+            res.json({ success: false, message: 'Gagal kirim WA: ' + result.message });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 module.exports = router;

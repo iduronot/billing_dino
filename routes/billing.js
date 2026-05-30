@@ -386,6 +386,46 @@ router.post('/api/run-isolir', async (req, res) => {
     }
 });
 
+// POST - Kirim WA tagihan satu invoice via WA lokal/API
+router.post('/api/:id/send-wa', async (req, res) => {
+    try {
+        const [[inv]] = await pool.query(`
+            SELECT i.*, c.name as customer_name, c.phone, c.pppoe_username
+            FROM invoices i
+            JOIN customers c ON i.customer_id = c.id
+            WHERE i.id = ?
+        `, [req.params.id]);
+        if (!inv) return res.status(404).json({ success: false, message: 'Invoice tidak ditemukan' });
+        if (!inv.phone) return res.json({ success: false, message: 'Pelanggan tidak memiliki nomor telepon' });
+
+        const { sendWhatsApp, getSettings } = require('../helpers/notification');
+        const s = await getSettings(pool, ['wa_bill_msg', 'company_name']);
+        const companyName = s.company_name || 'Dino-Bill ISP';
+        const dueStr = inv.due_date ? new Date(inv.due_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) : '-';
+        const amountStr = parseFloat(inv.amount).toLocaleString('id-ID');
+
+        let msg = s.wa_bill_msg ||
+            `📄 *Tagihan Internet*\n\nYth. {name},\nBerikut informasi tagihan Anda:\n\n📋 Invoice: #{invNum}\n💰 Nominal: Rp {amount}\n📅 Jatuh Tempo: {dueDate}\n\nMohon segera melakukan pembayaran sebelum jatuh tempo.\n\nTerima kasih,\n{company}`;
+
+        msg = msg
+            .replace(/{name}/g,    inv.customer_name)
+            .replace(/{invNum}/g,  inv.id)
+            .replace(/{amount}/g,  amountStr)
+            .replace(/{dueDate}/g, dueStr)
+            .replace(/{company}/g, companyName);
+
+        const result = await sendWhatsApp(pool, inv.phone, msg);
+        if (result.success) {
+            console.log(`[Billing] WA tagihan #${inv.id} terkirim ke ${inv.phone}`);
+            res.json({ success: true, message: `WA tagihan berhasil dikirim ke ${inv.customer_name}` });
+        } else {
+            res.json({ success: false, message: 'Gagal kirim WA: ' + result.message });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // POST - Send WA reminder for unpaid invoices
 router.post('/api/send-reminders', async (req, res) => {
     try {

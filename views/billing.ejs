@@ -403,7 +403,7 @@
                                         <button onclick="closeAllMenus();openPrintModal(<%= i.id %>)">
                                             <span class="act-icon"><i class="fas fa-print"></i></span> Cetak Invoice
                                         </button>
-                                        <button onclick="closeAllMenus();sendWA('<%= i.customer_phone %>','#<%= i.id %>','<%= parseFloat(i.amount).toLocaleString('id-ID') %>','<%= i.due_date ? new Date(i.due_date).toLocaleDateString('id-ID') : '' %>')">
+                                        <button onclick="closeAllMenus();sendWAInvoice(<%= i.id %>,'<%= (i.customer_name||'').replace(/'/g,'') %>')">
                                             <span class="act-icon" style="color:#25D366"><i class="fab fa-whatsapp"></i></span> Kirim WA Tagihan
                                         </button>
                                         <% if(i.status !== 'paid') { %>
@@ -730,7 +730,16 @@ async function deleteItem(url,msg){if(!confirm(msg))return;const res=await fetch
 async function generateBulk(){if(!confirm(<%- JSON.stringify(t.confirm_generate_bulk) %>))return;showToast(<%- JSON.stringify(t.generating) %>,'success');const res=await fetch('/billing/api/generate-bulk',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),2000);}
 async function runIsolir(){if(!confirm(<%- JSON.stringify(t.confirm_run_isolir) %>))return;showToast(<%- JSON.stringify(t.running_isolir) %>,'success');const res=await fetch('/billing/api/run-isolir',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');if(d.success)setTimeout(()=>location.reload(),1500);}
 async function sendReminders(){if(!confirm(<%- JSON.stringify(t.confirm_send_reminders) %>))return;showToast(<%- JSON.stringify(t.sending_reminders) %>,'success');try{const res=await fetch('/billing/api/send-reminders',{method:'POST'});const d=await res.json();showToast(d.message,d.success?'success':'error');}catch(e){showToast('Error: '+e.message,'error');}}
-function sendWA(phone,invNum,amount,dueDate){if(!phone){alert(<%- JSON.stringify(t.no_phone) %>);return;}phone=phone.replace(/[^0-9]/g,'');if(phone.startsWith('0'))phone='62'+phone.substring(1);const rawMsg=<%- JSON.stringify(t.wa_bill_msg||'') %>;const msg=rawMsg.replace('{invNum}',invNum).replace('{amount}',amount).replace('{dueDate}',dueDate);window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');}
+async function sendWAInvoice(id, name) {
+    showToast('⏳ Mengirim WA ke ' + name + '...', 'success');
+    try {
+        const res = await fetch('/billing/api/' + id + '/send-wa', { method: 'POST' });
+        const d   = await res.json();
+        showToast(d.message, d.success ? 'success' : 'error');
+    } catch(e) {
+        showToast('Gagal: ' + e.message, 'error');
+    }
+}
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.borderColor=type==='success'?'rgba(16,185,129,.4)':'rgba(239,68,68,.4)';t.style.color=type==='success'?'#10B981':'#EF4444';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);}
 function openProofModal(src, name) {
     document.getElementById('proofModalImg').src = src;

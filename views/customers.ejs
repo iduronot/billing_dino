@@ -320,6 +320,13 @@
                                                         title="Buat tagihan / pembayaran">
                                                         💰 Bayar
                                                     </a>
+                                                    <% if(c.phone) { %>
+                                                    <button onclick="sendWACustomer(<%= c.id %>,'<%= (c.name||'').replace(/'/g,'') %>')"
+                                                        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(37,211,102,.1);color:#25D366;border:1px solid rgba(37,211,102,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
+                                                        title="Kirim pesan WA via sistem">
+                                                        💬 WA
+                                                    </button>
+                                                    <% } %>
                                                     <button onclick='editCustomer(<%- JSON.stringify(c) %>)'
                                                         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:9px;background:rgba(59,130,246,.12);color:#60A5FA;border:1px solid rgba(59,130,246,.3);font-size:12px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;"
                                                         title="Edit data pelanggan">
@@ -654,6 +661,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+async function sendWACustomer(id, name) {
+    // Modal kecil untuk tulis pesan kustom atau kirim langsung
+    const msg = prompt(`Pesan WA ke ${name}:\n(kosongkan = pesan default dari sistem)`, '');
+    if (msg === null) return; // user cancel
+    showToast('⏳ Mengirim WA ke ' + name + '...', 'success');
+    try {
+        const res  = await fetch(`/customers/${id}/send-wa`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg.trim() || null })
+        });
+        const data = await res.json();
+        showToast(data.message, data.success ? 'success' : 'error');
+    } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+    }
+}
 
 async function doAction(url, msg) {
     if (!confirm(msg)) return;
