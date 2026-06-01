@@ -164,7 +164,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     enableKeepAlive:   true,
     keepAliveInitialDelay: 0,
     multipleStatements: false,
-    charset:           'utf8mb4'
+    charset:           'utf8mb4',
+    timezone:          '+07:00'   // WIB — sinkronkan dengan timezone server Node.js
   });
 
 
