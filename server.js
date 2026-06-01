@@ -1638,6 +1638,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   settingsRouter.setPool(pool);
   app.use('/settings', adminOnly, settingsRouter);
 
+
   const expensesRouter = require('./routes/expenses');
   expensesRouter.setPool(pool);
   app.use('/expenses', adminOnly, expensesRouter);
