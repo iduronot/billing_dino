@@ -165,9 +165,17 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     keepAliveInitialDelay: 0,
     multipleStatements: false,
     charset:           'utf8mb4',
-    timezone:          '+07:00'   // WIB — sinkronkan dengan timezone server Node.js
+    timezone:          '+07:00'   // WIB — untuk parsing JS Date ↔ MySQL
   });
 
+  // Set timezone MySQL session ke WIB agar NOW() / CURDATE() / auto-isolir akurat
+  // (timezone di pool config hanya mempengaruhi JS date parsing, bukan fungsi MySQL)
+  pool.pool.on('connection', (conn) => {
+    conn.query("SET time_zone = '+07:00'", (err) => {
+      if (err) console.warn('[DB] Gagal set time_zone session:', err.message);
+    });
+  });
+  console.log('[DB] MySQL session timezone dikunci ke WIB (+07:00)');
 
   // Auto-initialize tables that might be missing
   pool.query(`
