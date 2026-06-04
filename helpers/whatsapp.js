@@ -50,8 +50,8 @@ async function initWhatsApp(pool) {
     connectionStatus = 'INITIALIZING';
     qrData = null; // Clear old QR
 
-    // Cari Chrome/Chromium — cek path umum + which command untuk Linux
-    const paths = [
+    // Cari Chrome/Chromium — prioritas: system Chrome → puppeteer bundled → which
+    const sysPaths = [
         '/usr/bin/google-chrome',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/chromium-browser',
@@ -64,25 +64,39 @@ async function initWhatsApp(pool) {
     ];
 
     let chromePath = null;
-    for (const p of paths) {
+
+    // 1. Cek system Chrome
+    for (const p of sysPaths) {
         if (fs.existsSync(p)) { chromePath = p; break; }
     }
 
-    // Fallback: cari via which (Linux)
+    // 2. Cari via which (Linux/Mac)
     if (!chromePath && process.platform !== 'win32') {
         const candidates = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
         for (const cmd of candidates) {
             try {
                 const found = execSync(`which ${cmd} 2>/dev/null`).toString().trim();
-                if (found) { chromePath = found; break; }
+                if (found && fs.existsSync(found)) { chromePath = found; break; }
             } catch (_) {}
         }
+    }
+
+    // 3. Fallback: gunakan Chrome bundled dari puppeteer (whatsapp-web.js)
+    if (!chromePath) {
+        try {
+            const puppeteer = require('puppeteer');
+            const bundled   = puppeteer.executablePath ? puppeteer.executablePath() : null;
+            if (bundled && fs.existsSync(bundled)) {
+                chromePath = bundled;
+                console.log('[WA-LOCAL] Using puppeteer bundled Chrome:', chromePath);
+            }
+        } catch (_) {}
     }
 
     if (chromePath) {
         console.log('[WA-LOCAL] Found Chrome at:', chromePath);
     } else {
-        console.error('[WA-LOCAL] Chrome NOT FOUND! Install dengan: sudo apt-get install -y chromium-browser');
+        console.log('[WA-LOCAL] Chrome not found di system, puppeteer akan cari sendiri...');
     }
 
     // Args khusus Linux agar berjalan di server headless
