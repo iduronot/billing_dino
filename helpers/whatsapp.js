@@ -4,9 +4,19 @@ const qrcode = require('qrcode');
 let client;
 let qrData = null;
 let connectionStatus = 'DISCONNECTED'; // DISCONNECTED, INITIALIZING, READY, AUTHENTICATED
+let lastInitTime   = 0;    // timestamp init terakhir (anti-loop)
+const INIT_COOLDOWN = 30000; // minimal 30 detik antara init
 
 async function initWhatsApp(pool) {
-    // If client already exists, destroy it first
+    // Anti-loop: jangan init ulang jika baru saja init dalam 30 detik
+    const now = Date.now();
+    if (connectionStatus === 'INITIALIZING' || (now - lastInitTime < INIT_COOLDOWN)) {
+        console.log('[WA-LOCAL] Init cooldown aktif, skip re-init.');
+        return;
+    }
+    lastInitTime = now;
+
+    // Destroy client lama jika ada
     if (client) {
         try {
             console.log('[WA-LOCAL] Destroying existing client before re-init...');
@@ -14,6 +24,26 @@ async function initWhatsApp(pool) {
         } catch (e) {
             console.error('[WA-LOCAL] Destroy error:', e.message);
         }
+        client = null;
+    }
+
+    // Kill proses Chrome/Chromium yang mungkin masih nyangkut (Linux)
+    if (process.platform === 'linux') {
+        try {
+            const { execSync } = require('child_process');
+            execSync('pkill -9 -f "google-chrome.*wwebjs_auth" 2>/dev/null || true');
+            execSync('pkill -9 -f "chromium.*wwebjs_auth" 2>/dev/null || true');
+            console.log('[WA-LOCAL] Killed stale Chrome processes.');
+        } catch (_) {}
+    }
+
+    // Hapus lock file SingletonLock jika ada (mencegah "browser already running")
+    const fs = require('fs');
+    const path = require('path');
+    const sessionDir = path.join(__dirname, '..', '.wwebjs_auth', 'session');
+    const lockFile   = path.join(sessionDir, 'SingletonLock');
+    if (fs.existsSync(lockFile)) {
+        try { fs.unlinkSync(lockFile); console.log('[WA-LOCAL] Removed SingletonLock.'); } catch (_) {}
     }
 
     console.log('[WA-LOCAL] Initializing local WhatsApp client...');
@@ -142,10 +172,10 @@ async function initWhatsApp(pool) {
     });
 
     client.on('disconnected', (reason) => {
-        console.log('[WA-LOCAL] Client was logged out', reason);
+        console.log('[WA-LOCAL] Client was logged out:', reason);
         connectionStatus = 'DISCONNECTED';
-        // Auto-restart on disconnect after 5s
-        setTimeout(() => initWhatsApp(pool), 5000);
+        // Auto-restart setelah 30 detik (cooldown mencegah loop cepat)
+        setTimeout(() => initWhatsApp(pool), 30000);
     });
 
     try {
@@ -153,6 +183,8 @@ async function initWhatsApp(pool) {
     } catch (e) {
         console.error('[WA-LOCAL] Initialization Error:', e.message);
         connectionStatus = 'DISCONNECTED';
+        // Retry setelah 30 detik jika init gagal
+        setTimeout(() => initWhatsApp(pool), 30000);
     }
 }
 
