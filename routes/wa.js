@@ -101,10 +101,14 @@ router.post('/api/send', async (req, res) => {
             if (status.status !== 'READY') {
                 return res.json({ success: false, message: 'WhatsApp tidak terhubung' });
             }
+            if (!waClient) {
+                return res.json({ success: false, message: 'WhatsApp client belum siap' });
+            }
             try {
                 await waClient.sendMessage(lastMsg.chat_id, message);
                 result = { success: true };
             } catch(e) {
+                console.warn('[WA] sendMessage via chatId gagal, fallback:', e.message);
                 // Fallback ke auto-detect
                 result = await wa.sendLocalWhatsApp(cleanPhone, message);
             }

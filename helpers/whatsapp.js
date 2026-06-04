@@ -317,6 +317,9 @@ async function sendLocalWhatsApp(phone, message) {
     if (connectionStatus !== 'READY') {
         return { success: false, message: 'WhatsApp tidak terhubung' };
     }
+    if (!client) {
+        return { success: false, message: 'WhatsApp client belum diinisialisasi' };
+    }
     try {
         // Normalisasi nomor
         let formatted = phone.split('@')[0].replace(/[^0-9]/g, '');
@@ -332,6 +335,12 @@ async function sendLocalWhatsApp(phone, message) {
                 return { success: true };
             } catch (e) {
                 lastError = e;
+                // Jika error internal (pupPage undefined dll), update status
+                if (e.message.includes('getChat') || e.message.includes('undefined') || e.message.includes('puppeteer')) {
+                    console.error('[WA] Internal client error, marking as DISCONNECTED:', e.message);
+                    connectionStatus = 'DISCONNECTED';
+                    return { success: false, message: 'WhatsApp terputus, silakan scan ulang QR' };
+                }
                 // Jika error bukan soal LID, langsung stop
                 if (!e.message.includes('LID') && !e.message.includes('lid')) {
                     break;
@@ -343,6 +352,11 @@ async function sendLocalWhatsApp(phone, message) {
 
         return { success: false, message: lastError ? lastError.message : 'Gagal kirim pesan' };
     } catch (e) {
+        // Tangkap error internal whatsapp-web.js
+        if (e.message.includes('getChat') || e.message.includes('undefined') || e.message.includes('puppeteer')) {
+            connectionStatus = 'DISCONNECTED';
+            return { success: false, message: 'WhatsApp terputus, silakan scan ulang QR' };
+        }
         return { success: false, message: e.message };
     }
 }
