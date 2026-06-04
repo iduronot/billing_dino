@@ -1088,7 +1088,7 @@ async function checkWAStatus() {
     if (provider !== 'local') return;
 
     try {
-        const res = await fetch('/settings/whatsapp-status');
+        const res = await fetch('/wa-status');
         if (!res.ok) return;
         const d = await res.json();
 

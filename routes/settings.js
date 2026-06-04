@@ -85,7 +85,9 @@ router.get('/', async (req, res) => {
 
 router.get('/whatsapp-status', async (req, res) => {
     const { getStatus } = require('../helpers/whatsapp');
-    res.json(getStatus());
+    const s = getStatus();
+    console.log('[WA-STATUS] status:', s.status, '| qr:', s.qr ? s.qr.substring(0,30)+'...('+s.qr.length+' chars)' : 'NULL');
+    res.json(s);
 });
 
 router.post('/whatsapp-restart', async (req, res) => {

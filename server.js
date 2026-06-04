@@ -1629,6 +1629,14 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   settingsRouter.setPool(pool);
   app.use('/settings', adminOnly, settingsRouter);
 
+  // Endpoint publik untuk status WA — tidak butuh auth karena QR hanya valid 20 detik
+  app.get('/wa-status', (req, res) => {
+    const { getStatus } = require('./helpers/whatsapp');
+    const s = getStatus();
+    console.log('[WA-STATUS] status:', s.status, '| qr:', s.qr ? s.qr.length + ' chars' : 'NULL');
+    res.json(s);
+  });
+
 
   const expensesRouter = require('./routes/expenses');
   expensesRouter.setPool(pool);
