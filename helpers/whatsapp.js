@@ -335,11 +335,14 @@ async function sendLocalWhatsApp(phone, message) {
                 return { success: true };
             } catch (e) {
                 lastError = e;
-                // Jika error internal (pupPage undefined dll), update status
+                // Jika error internal (pupPage undefined dll), restart client agar QR baru muncul
                 if (e.message.includes('getChat') || e.message.includes('undefined') || e.message.includes('puppeteer')) {
-                    console.error('[WA] Internal client error, marking as DISCONNECTED:', e.message);
+                    console.error('[WA] Internal client error, restarting...:', e.message);
                     connectionStatus = 'DISCONNECTED';
-                    return { success: false, message: 'WhatsApp terputus, silakan scan ulang QR' };
+                    qrData = null;
+                    // Trigger restart supaya QR baru digenerate
+                    setTimeout(() => initWhatsApp(pool), 3000);
+                    return { success: false, message: 'WhatsApp terputus, sedang restart — tunggu QR baru muncul' };
                 }
                 // Jika error bukan soal LID, langsung stop
                 if (!e.message.includes('LID') && !e.message.includes('lid')) {
@@ -355,7 +358,9 @@ async function sendLocalWhatsApp(phone, message) {
         // Tangkap error internal whatsapp-web.js
         if (e.message.includes('getChat') || e.message.includes('undefined') || e.message.includes('puppeteer')) {
             connectionStatus = 'DISCONNECTED';
-            return { success: false, message: 'WhatsApp terputus, silakan scan ulang QR' };
+            qrData = null;
+            setTimeout(() => initWhatsApp(pool), 3000);
+            return { success: false, message: 'WhatsApp terputus, sedang restart — tunggu QR baru muncul' };
         }
         return { success: false, message: e.message };
     }

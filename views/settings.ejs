@@ -1098,7 +1098,12 @@ async function checkWAStatus() {
             if (d.qr) {
                 qrContainer.innerHTML = `<img src="${d.qr}" style="width:100%; height:100%; object-fit:contain">`;
             } else {
-                qrContainer.innerHTML = 'Memuat QR...';
+                qrContainer.innerHTML = `
+                    <div style="text-align:center;padding:8px;">
+                        <div style="font-size:22px;margin-bottom:6px;">📵</div>
+                        <div style="color:#888;font-size:11px;line-height:1.4;">Menunggu QR...<br>
+                        <span style="font-size:10px;opacity:.7;">Otomatis tampil<br>dalam beberapa detik</span></div>
+                    </div>`;
             }
         }
     } catch (e) {
