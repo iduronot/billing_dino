@@ -50,9 +50,6 @@ async function initWhatsApp(pool) {
     connectionStatus = 'INITIALIZING';
     qrData = null; // Clear old QR
 
-    const fs   = require('fs');
-    const { execSync } = require('child_process');
-
     // Cari Chrome/Chromium — cek path umum + which command untuk Linux
     const paths = [
         '/usr/bin/google-chrome',
