@@ -75,7 +75,9 @@ router.get('/', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM settings');
         const settings = {};
         rows.forEach(s => settings[s.setting_key] = s.setting_value);
-        res.render('settings', { user: req.session, settings, currentPage: 'settings' });
+        const { getStatus } = require('../helpers/whatsapp');
+        const waStatusInit = getStatus();
+        res.render('settings', { user: req.session, settings, currentPage: 'settings', waStatusInit });
     } catch (err) {
         res.status(500).send("Database error: " + err.message);
     }
