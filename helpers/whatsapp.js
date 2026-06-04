@@ -20,12 +20,17 @@ async function initWhatsApp(pool) {
     connectionStatus = 'INITIALIZING';
     qrData = null; // Clear old QR
 
-    const fs = require('fs');
+    const fs   = require('fs');
+    const { execSync } = require('child_process');
+
+    // Cari Chrome/Chromium — cek path umum + which command untuk Linux
     const paths = [
         '/usr/bin/google-chrome',
         '/usr/bin/google-chrome-stable',
         '/usr/bin/chromium-browser',
         '/usr/bin/chromium',
+        '/usr/local/bin/chromium',
+        '/snap/bin/chromium',
         '/opt/google/chrome/google-chrome',
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
@@ -33,16 +38,41 @@ async function initWhatsApp(pool) {
 
     let chromePath = null;
     for (const p of paths) {
-        if (fs.existsSync(p)) {
-            chromePath = p;
-            break;
+        if (fs.existsSync(p)) { chromePath = p; break; }
+    }
+
+    // Fallback: cari via which (Linux)
+    if (!chromePath && process.platform !== 'win32') {
+        const candidates = ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium'];
+        for (const cmd of candidates) {
+            try {
+                const found = execSync(`which ${cmd} 2>/dev/null`).toString().trim();
+                if (found) { chromePath = found; break; }
+            } catch (_) {}
         }
     }
 
     if (chromePath) {
         console.log('[WA-LOCAL] Found Chrome at:', chromePath);
     } else {
-        console.error('[WA-LOCAL] Chrome executable NOT FOUND in common paths!');
+        console.error('[WA-LOCAL] Chrome NOT FOUND! Install dengan: sudo apt-get install -y chromium-browser');
+    }
+
+    // Args khusus Linux agar berjalan di server headless
+    const isLinux = process.platform === 'linux';
+    const puppeteerArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-features=site-per-process',
+        '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    ];
+    if (isLinux) {
+        puppeteerArgs.push('--no-zygote', '--single-process', '--disable-software-rasterizer');
     }
 
     client = new Client({
@@ -51,19 +81,9 @@ async function initWhatsApp(pool) {
         }),
         puppeteer: {
             headless: true,
-            executablePath: chromePath,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu',
-                '--disable-extensions',
-                '--disable-features=site-per-process',
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            ]
+            executablePath: chromePath || undefined, // undefined = pakai bundled Chromium
+            args: puppeteerArgs,
+            timeout: 60000 // timeout lebih lama untuk server yang lambat
         }
     });
 
