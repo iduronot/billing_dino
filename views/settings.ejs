@@ -617,7 +617,11 @@
                 </button>
                 <button class="btn" style="background:rgba(239,68,68,.1);color:#EF4444;border:1px solid rgba(239,68,68,.25);"
                     onclick="testOltAlert()">
-                    🧪 Test Kirim Notifikasi
+                    🧪 Test Telegram
+                </button>
+                <button class="btn" style="background:rgba(37,211,102,.1);color:#25D366;border:1px solid rgba(37,211,102,.25);"
+                    onclick="testOltAlertWA()">
+                    💬 Test WA Admin & Teknisi
                 </button>
                 <span id="testOltAlertResult" style="font-size:13px;"></span>
             </div>
@@ -854,12 +858,26 @@ async function importCSV(){
 }
 async function testOltAlert() {
     const el = document.getElementById('testOltAlertResult');
-    el.textContent = '⏳ Mengirim...';
+    el.textContent = '⏳ Mengirim ke Telegram...';
     el.style.color = 'var(--muted)';
     try {
         const r = await fetch('/settings/api/test-olt-alert', { method: 'POST' });
         const d = await r.json();
-        el.textContent = d.success ? '✅ ' + d.message : '❌ ' + d.message;
+        el.textContent = d.success ? '✅ Telegram: ' + d.message : '❌ Telegram: ' + d.message;
+        el.style.color  = d.success ? '#10B981' : '#EF4444';
+    } catch(e) {
+        el.textContent = '❌ ' + e.message;
+        el.style.color = '#EF4444';
+    }
+}
+async function testOltAlertWA() {
+    const el = document.getElementById('testOltAlertResult');
+    el.textContent = '⏳ Mengirim WA ke admin & teknisi...';
+    el.style.color = 'var(--muted)';
+    try {
+        const r = await fetch('/settings/api/test-olt-alert-wa', { method: 'POST' });
+        const d = await r.json();
+        el.textContent = d.success ? '✅ WA: ' + d.message : '❌ WA: ' + d.message;
         el.style.color  = d.success ? '#10B981' : '#EF4444';
     } catch(e) {
         el.textContent = '❌ ' + e.message;

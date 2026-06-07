@@ -234,6 +234,73 @@ router.post('/api/test-olt-alert', async (req, res) => {
     }
 });
 
+// POST - Test OLT Alert via WhatsApp ke semua admin & teknisi
+router.post('/api/test-olt-alert-wa', async (req, res) => {
+    try {
+        const { sendLocalWhatsApp } = require('../helpers/whatsapp');
+        const { getStatus } = require('../helpers/whatsapp');
+
+        // Cek status WA
+        const waStatus = getStatus();
+        if (waStatus.status !== 'READY') {
+            return res.json({ success: false, message: 'WhatsApp belum terhubung. Scan QR di tab WA Gateway terlebih dahulu.' });
+        }
+
+        // Ambil semua admin & teknisi dengan nomor HP
+        const [users] = await pool.query(
+            "SELECT name, phone, role FROM users WHERE role IN ('admin','technician') AND phone IS NOT NULL AND phone != '' AND phone != '-' ORDER BY role, name"
+        );
+
+        if (!users || users.length === 0) {
+            return res.json({ success: false, message: 'Tidak ada admin/teknisi dengan nomor HP terdaftar di Manajemen User.' });
+        }
+
+        // Ambil statistik OLT terkini
+        const [oltRows] = await pool.query(`
+            SELECT o.name AS olt_name,
+                   COALESCE(SUM(u.status = 'Up'), 0) AS online,
+                   COALESCE(SUM(u.status = 'Down'), 0) AS offline,
+                   COUNT(*) AS total
+            FROM hioso_onus u
+            JOIN hioso_olts o ON u.olt_id = o.id
+            GROUP BY o.id, o.name ORDER BY o.name ASC
+        `);
+
+        const totalDown   = oltRows.reduce((a, r) => a + parseInt(r.offline, 10), 0);
+        const totalOnline = oltRows.reduce((a, r) => a + parseInt(r.online, 10), 0);
+        const totalAll    = oltRows.reduce((a, r) => a + parseInt(r.total, 10), 0);
+        const now         = new Date().toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+        let msg = `🔔 *[TEST] Notifikasi OLT Alert via WA*\n\n`;
+        msg += `📊 Rekap OLT saat ini:\n`;
+        oltRows.forEach(r => {
+            const down = parseInt(r.offline, 10);
+            const icon = down > 0 ? '🔴' : '🟢';
+            msg += `${icon} *${r.olt_name}*: ${r.online} online, ${down} offline / ${r.total}\n`;
+        });
+        msg += `\n🌐 Global: ${totalOnline} online, ${totalDown} offline / ${totalAll}\n`;
+        msg += `🕐 ${now}\n\n`;
+        msg += `✅ Ini pesan uji coba — notifikasi real dikirim otomatis saat threshold terlampaui.`;
+
+        let sent = 0, failed = 0, failedNames = [];
+        for (const user of users) {
+            const result = await sendLocalWhatsApp(user.phone, msg);
+            if (result.success) {
+                sent++;
+            } else {
+                failed++;
+                failedNames.push(user.name);
+            }
+            if (sent + failed < users.length) await new Promise(r => setTimeout(r, 800));
+        }
+
+        const info = `Terkirim: ${sent}/${users.length} user${failed > 0 ? `. Gagal: ${failedNames.join(', ')}` : ''}`;
+        res.json({ success: sent > 0, message: info });
+    } catch (e) {
+        res.json({ success: false, message: 'Error: ' + e.message });
+    }
+});
+
 // GET - List users
 router.get('/api/users', async (req, res) => {
     try {
