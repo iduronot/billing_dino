@@ -11,8 +11,10 @@ router.get('/', async (req, res) => {
         const offset    = (page - 1) * perPage;
         const search    = req.query.search    || '';
         const catFilter = req.query.category  || '';
-        const monthFilter = req.query.month   || '';
-        const yearFilter  = req.query.year    || new Date().getFullYear();
+        const now         = new Date();
+        // Default bulan ini; jika user pilih "Semua" kirim month=0 atau kosong via reset
+        const monthFilter = req.query.month !== undefined ? (req.query.month || '') : (now.getMonth() + 1);
+        const yearFilter  = req.query.year  || now.getFullYear();
 
         const conds = [], params = [];
         if (search)    { conds.push('(e.description LIKE ? OR e.notes LIKE ?)'); params.push(`%${search}%`, `%${search}%`); }

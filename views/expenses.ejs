@@ -189,8 +189,8 @@
             </select>
             <input type="hidden" name="page" value="1">
             <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
-            <% if (search || catFilter || monthFilter) { %>
-            <a href="/expenses?year=<%= yearFilter %>" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--muted);">✕ Reset</a>
+            <% if (search || catFilter || monthFilter != (new Date().getMonth()+1)) { %>
+            <a href="/expenses" class="btn" style="background:var(--sub-bg); border:1px solid var(--border); color:var(--muted);">✕ Reset</a>
             <% } %>
         </form>
 
