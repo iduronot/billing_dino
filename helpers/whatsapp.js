@@ -99,21 +99,29 @@ async function initWhatsApp(pool) {
         console.log('[WA-LOCAL] Chrome not found di system, puppeteer akan cari sendiri...');
     }
 
-    // Args khusus Linux agar berjalan di server headless
-    const isLinux = process.platform === 'linux';
+    // Args puppeteer untuk headless server
     const puppeteerArgs = [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
+        '--disable-dev-shm-usage',   // pakai /tmp bukan /dev/shm (penting di server kecil)
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--disable-gpu',
         '--disable-extensions',
         '--disable-features=site-per-process',
+        '--disable-background-networking',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--hide-scrollbars',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--safebrowsing-disable-auto-update',
         '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     ];
-    if (isLinux) {
-        puppeteerArgs.push('--no-zygote', '--single-process', '--disable-software-rasterizer');
+    // --no-zygote saja tanpa --single-process (lebih stabil)
+    if (process.platform === 'linux') {
+        puppeteerArgs.push('--no-zygote');
     }
 
     client = new Client({
@@ -122,9 +130,11 @@ async function initWhatsApp(pool) {
         }),
         puppeteer: {
             headless: true,
-            executablePath: chromePath || undefined, // undefined = pakai bundled Chromium
+            executablePath: chromePath || undefined,
             args: puppeteerArgs,
-            timeout: 60000 // timeout lebih lama untuk server yang lambat
+            timeout: 60000,
+            // Pakai /tmp sebagai tmpdir jika /dev/shm kecil (umum di VPS)
+            env: { ...process.env, TMPDIR: '/tmp' }
         }
     });
 
