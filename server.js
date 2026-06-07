@@ -1848,6 +1848,42 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   }
 
+  // Kirim notifikasi WA OLT alert ke semua admin & teknisi yang punya nomor HP
+  async function sendOltWhatsApp(text) {
+    try {
+      const { sendLocalWhatsApp } = require('./helpers/whatsapp');
+      // Ambil semua user admin & teknisi yang punya nomor HP
+      const [users] = await pool.query(
+        "SELECT name, phone FROM users WHERE role IN ('admin','technician') AND phone IS NOT NULL AND phone != '' AND phone != '-'"
+      );
+      if (!users || users.length === 0) {
+        console.log('[OLT Alert] Tidak ada admin/teknisi dengan nomor HP terdaftar');
+        return;
+      }
+      // Konversi pesan dari HTML ke plain text untuk WA
+      const waText = text
+        .replace(/<b>/g, '*').replace(/<\/b>/g, '*')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+      let sent = 0;
+      for (const user of users) {
+        const result = await sendLocalWhatsApp(user.phone, waText);
+        if (result.success) {
+          sent++;
+          console.log(`[OLT Alert] WA terkirim ke ${user.name} (${user.phone})`);
+        } else {
+          console.warn(`[OLT Alert] Gagal kirim WA ke ${user.name}: ${result.message}`);
+        }
+        // Jeda 1 detik antar pengiriman
+        if (sent < users.length) await new Promise(r => setTimeout(r, 1000));
+      }
+      console.log(`[OLT Alert] WA OLT alert: ${sent}/${users.length} terkirim`);
+    } catch (e) {
+      console.error('[OLT Alert] Gagal kirim WA:', e.message);
+    }
+  }
+
   // Periksa ambang batas offline dan kirim notifikasi jika perlu
   async function checkOltOfflineAlerts(syncResults) {
     try {
@@ -1878,6 +1914,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
               + `⚠️ Batas       : ${threshold} ONU offline\n\n`
               + `🕐 ${now}`;
             await sendOltTelegram(msg);
+            await sendOltWhatsApp(msg);
             console.log(`[OLT Alert] 🔴 "${olt.name}" — ${down} offline (>= ${threshold}), notifikasi terkirim`);
           } else if (curr === 'ok' && prev === 'alert') {
             const msg = `✅ <b>NORMAL — OLT Offline Berkurang</b>\n\n`
@@ -1888,6 +1925,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
               + `👍 Di bawah batas: ${threshold} ONU offline\n\n`
               + `🕐 ${now}`;
             await sendOltTelegram(msg);
+            await sendOltWhatsApp(msg);
             console.log(`[OLT Alert] ✅ "${olt.name}" — pulih (${down} offline < ${threshold}), notifikasi terkirim`);
           }
           oltOfflineAlertState[olt.id] = curr;
@@ -1912,6 +1950,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             + `⚠️ Batas Global: ${thresholdGlobal} ONU offline\n\n`
             + `🕐 ${now}`;
           await sendOltTelegram(msg);
+          await sendOltWhatsApp(msg);
           console.log(`[OLT Alert] 🔴 Global — ${totalDown} offline (>= ${thresholdGlobal}), notifikasi terkirim`);
         } else if (currGlobal === 'ok' && prevGlobal === 'alert') {
           const msg = `✅ <b>NORMAL — Total ONU Offline Berkurang</b>\n\n`
@@ -1922,6 +1961,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             + `👍 Di bawah batas global: ${thresholdGlobal} ONU offline\n\n`
             + `🕐 ${now}`;
           await sendOltTelegram(msg);
+          await sendOltWhatsApp(msg);
           console.log(`[OLT Alert] ✅ Global — pulih (${totalDown} offline < ${thresholdGlobal}), notifikasi terkirim`);
         }
         oltOfflineAlertState._global = currGlobal;
