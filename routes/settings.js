@@ -301,6 +301,24 @@ router.post('/api/test-olt-alert-wa', async (req, res) => {
     }
 });
 
+// POST - Test AI Agent (tanpa simpan ke history)
+router.post('/api/test-ai-agent', async (req, res) => {
+    try {
+        const { testAIReply } = require('../helpers/ai-agent');
+        const { api_key, model, system_prompt, test_message } = req.body;
+
+        if (!api_key || api_key.trim() === '') {
+            return res.json({ success: false, message: 'Groq API Key belum diisi.' });
+        }
+
+        const reply = await testAIReply(api_key.trim(), model, system_prompt, test_message);
+        res.json({ success: true, reply });
+    } catch (e) {
+        const errMsg = e.response?.data?.error?.message || e.message;
+        res.json({ success: false, message: 'Error: ' + errMsg });
+    }
+});
+
 // GET - List users
 router.get('/api/users', async (req, res) => {
     try {

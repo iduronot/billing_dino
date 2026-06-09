@@ -337,52 +337,67 @@ function getClient() { return client; }
 
 async function checkAutoReply(dbPool, msg) {
     if (!msg.body || msg.fromMe || msg.isGroupMsg) return;
+
+    const phone = normalizePhone(msg.from);
+    const text  = msg.body.toLowerCase().trim();
+
+    // ── 1. Cek keyword rules dulu ─────────────────────────────────────
     const [rules] = await dbPool.query('SELECT * FROM wa_auto_replies WHERE is_active = 1 ORDER BY id ASC').catch(() => [[]]);
-    if (!rules || rules.length === 0) return;
 
-    const text = msg.body.toLowerCase().trim();
+    if (rules && rules.length > 0) {
+        for (const rule of rules) {
+            const kw = rule.keyword.toLowerCase().trim();
+            let matched = false;
+            if (rule.match_type === 'exact')           matched = text === kw;
+            else if (rule.match_type === 'startswith') matched = text.startsWith(kw);
+            else                                       matched = text.includes(kw);
 
-    for (const rule of rules) {
-        const kw = rule.keyword.toLowerCase().trim();
-        let matched = false;
-        if (rule.match_type === 'exact')      matched = text === kw;
-        else if (rule.match_type === 'startswith') matched = text.startsWith(kw);
-        else matched = text.includes(kw);
+            if (!matched) continue;
 
-        if (!matched) continue;
-
-        // Resolve variabel dari data pelanggan
-        const phone = normalizePhone(msg.from);
-        const [[cust]] = await dbPool.query(
-            'SELECT c.*, p.name as package_name FROM customers c LEFT JOIN packages p ON p.id = c.package_id WHERE REPLACE(REPLACE(c.phone,"+",""),"-","") LIKE ? LIMIT 1',
-            ['%' + phone.slice(-9) + '%']
-        ).catch(() => [[]]);
-
-        let reply = rule.reply;
-        const nama = (cust && cust.name) ? cust.name : 'Pelanggan';
-        reply = reply.replace(/{nama}/gi, nama)
-                     .replace(/{nomor}/gi, phone)
-                     .replace(/{paket}/gi, (cust && cust.package_name) ? cust.package_name : '-');
-
-        if (cust) {
-            const [[inv]] = await dbPool.query(
-                "SELECT amount, due_date FROM invoices WHERE customer_id = ? AND status != 'paid' ORDER BY due_date ASC LIMIT 1",
-                [cust.id]
+            // Resolve variabel dari data pelanggan
+            const [[cust]] = await dbPool.query(
+                'SELECT c.*, p.name as package_name FROM customers c LEFT JOIN packages p ON p.id = c.package_id WHERE REPLACE(REPLACE(c.phone,"+",""),"-","") LIKE ? LIMIT 1',
+                ['%' + phone.slice(-9) + '%']
             ).catch(() => [[]]);
-            reply = reply
-                .replace(/{jumlah}/gi, inv ? 'Rp ' + Math.floor(Number(inv.amount)).toLocaleString('id-ID') : '-')
-                .replace(/{tanggal}/gi, inv && inv.due_date ? new Date(inv.due_date).toLocaleDateString('id-ID') : '-');
-        } else {
-            reply = reply.replace(/{jumlah}/gi, '-').replace(/{tanggal}/gi, '-');
-        }
 
-        try {
-            await client.sendMessage(msg.from, reply);
-            console.log(`[WA-AutoReply] Replied to ${phone} (rule: "${rule.keyword}")`);
-        } catch(e) {
-            console.error('[WA-AutoReply] Send error:', e.message);
+            let reply = rule.reply;
+            const nama = (cust && cust.name) ? cust.name : 'Pelanggan';
+            reply = reply.replace(/{nama}/gi, nama)
+                         .replace(/{nomor}/gi, phone)
+                         .replace(/{paket}/gi, (cust && cust.package_name) ? cust.package_name : '-');
+
+            if (cust) {
+                const [[inv]] = await dbPool.query(
+                    "SELECT amount, due_date FROM invoices WHERE customer_id = ? AND status != 'paid' ORDER BY due_date ASC LIMIT 1",
+                    [cust.id]
+                ).catch(() => [[]]);
+                reply = reply
+                    .replace(/{jumlah}/gi, inv ? 'Rp ' + Math.floor(Number(inv.amount)).toLocaleString('id-ID') : '-')
+                    .replace(/{tanggal}/gi, inv && inv.due_date ? new Date(inv.due_date).toLocaleDateString('id-ID') : '-');
+            } else {
+                reply = reply.replace(/{jumlah}/gi, '-').replace(/{tanggal}/gi, '-');
+            }
+
+            try {
+                await client.sendMessage(msg.from, reply);
+                console.log(`[WA-AutoReply] Replied to ${phone} (rule: "${rule.keyword}")`);
+            } catch(e) {
+                console.error('[WA-AutoReply] Send error:', e.message);
+            }
+            return; // keyword match ditemukan, stop di sini
         }
-        break; // hanya 1 rule yang cocok pertama
+    }
+
+    // ── 2. Tidak ada keyword match → coba AI Agent ───────────────────
+    try {
+        const { getAIReply } = require('./ai-agent');
+        const aiReply = await getAIReply(dbPool, phone, msg.body);
+        if (aiReply) {
+            await client.sendMessage(msg.from, aiReply);
+            console.log(`[WA-AI] Replied to ${phone} | "${msg.body.substring(0,50)}..."`);
+        }
+    } catch(e) {
+        console.error('[WA-AI] Error:', e.message);
     }
 }
 

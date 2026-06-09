@@ -57,6 +57,7 @@
 
             <button class="tab-btn" onclick="showTab('acs')">🌐 <%= t.genieacs %></button>
             <button class="tab-btn" onclick="showTab('olt_alert')">🔌 OLT Alert</button>
+            <button class="tab-btn" onclick="showTab('ai_agent')">🤖 AI Agent</button>
             <button class="tab-btn" onclick="showTab('import')">📤 <%= t.import_export %></button>
             <button class="tab-btn" onclick="showTab('users')">👥 <%= t.manage_users %></button>
             <button class="tab-btn" onclick="showTab('wa_templates')">📝 <%= t.wa_templates %></button>
@@ -627,6 +628,115 @@
             </div>
         </div>
 
+        <!-- ═══════════════════════════════ AI AGENT TAB ═══════════════════════════════ -->
+        <div id="tab-ai_agent" class="tab-content card" style="display:none">
+            <h2 class="section-title">🤖 AI Agent WhatsApp</h2>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+                AI Agent akan membalas pesan WA masuk dari pelanggan secara otomatis menggunakan kecerdasan buatan (Groq / Llama).
+                Jika ada <b>Auto Reply</b> dengan keyword yang cocok, keyword reply diutamakan. AI baru aktif jika tidak ada keyword yang match.
+            </p>
+
+            <!-- Toggle aktif/nonaktif -->
+            <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:20px;">
+                <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+                    <div>
+                        <div style="font-weight:700;font-size:14px;">🟢 Aktifkan AI Agent</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:3px;">Balas otomatis semua pesan WA masuk menggunakan AI</div>
+                    </div>
+                    <div style="position:relative;width:48px;height:26px;flex-shrink:0;margin-left:16px;">
+                        <input type="checkbox" id="ai_agent_enabled" style="opacity:0;width:0;height:0;position:absolute;"
+                            <%=settings.ai_agent_enabled==='1'?'checked':''%>
+                            onchange="this.closest('label').querySelector('.ai-track').style.background=this.checked?'#10B981':'#475569';this.closest('label').querySelector('.ai-thumb').style.transform=this.checked?'translateX(22px)':'translateX(0)'">
+                        <div class="ai-track" style="position:absolute;inset:0;border-radius:13px;background:<%=settings.ai_agent_enabled==='1'?'#10B981':'#475569'%>;transition:background .2s;"></div>
+                        <div class="ai-thumb" style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;transform:<%=settings.ai_agent_enabled==='1'?'translateX(22px)':'translateX(0)'%>;"></div>
+                    </div>
+                </label>
+            </div>
+
+            <!-- API Key & Model -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label>🔑 Groq API Key</label>
+                    <input type="password" id="groq_api_key" class="form-control"
+                        value="<%=settings.groq_api_key||''%>"
+                        placeholder="gsk_xxxxxxxxxxxx"
+                        style="font-family:monospace;letter-spacing:.05em">
+                    <small style="color:var(--muted);font-size:11px">Daftar gratis di <a href="https://console.groq.com" target="_blank" style="color:var(--primary)">console.groq.com</a></small>
+                </div>
+                <div class="form-group">
+                    <label>🧠 Model AI</label>
+                    <select id="groq_model" class="form-control">
+                        <option value="llama-3.1-8b-instant" <%=settings.groq_model==='llama-3.1-8b-instant'||!settings.groq_model?'selected':''%>>Llama 3.1 8B Instant ⚡ (Cepat, Gratis)</option>
+                        <option value="llama-3.3-70b-versatile" <%=settings.groq_model==='llama-3.3-70b-versatile'?'selected':''%>>Llama 3.3 70B Versatile 🧠 (Lebih Pintar)</option>
+                        <option value="llama3-8b-8192" <%=settings.groq_model==='llama3-8b-8192'?'selected':''%>>Llama 3 8B 8192</option>
+                        <option value="gemma2-9b-it" <%=settings.groq_model==='gemma2-9b-it'?'selected':''%>>Gemma 2 9B (Google)</option>
+                        <option value="mixtral-8x7b-32768" <%=settings.groq_model==='mixtral-8x7b-32768'?'selected':''%>>Mixtral 8x7B</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>📏 Panjang Balasan Maksimum (max_tokens)</label>
+                <input type="number" id="ai_max_tokens" class="form-control" value="<%=settings.ai_max_tokens||400%>" min="100" max="2000" style="max-width:200px">
+                <small style="color:var(--muted);font-size:11px">Disarankan 300-500 token agar balasan tidak terlalu panjang</small>
+            </div>
+
+            <!-- System Prompt -->
+            <div class="form-group">
+                <label>📝 System Prompt (Karakter AI)</label>
+                <textarea id="ai_system_prompt" class="form-control" rows="8" style="font-size:13px;line-height:1.5;font-family:monospace" placeholder="Tulis instruksi untuk AI di sini..."><% if(settings.ai_system_prompt){ %><%= settings.ai_system_prompt %><% } else { %>Kamu adalah asisten layanan pelanggan dari sebuah ISP (Internet Service Provider) yang ramah, sopan, dan profesional.
+Nama kamu adalah Dino Assistant.
+
+Kamu membantu pelanggan dengan pertanyaan seputar:
+- Tagihan dan cara pembayaran internet
+- Status layanan, paket internet yang aktif
+- Informasi gangguan koneksi
+- Proses aktivasi dan isolir layanan
+
+Instruksi penting:
+- Selalu jawab dalam Bahasa Indonesia yang natural dan singkat (maksimal 3-4 kalimat)
+- Gunakan sapaan "Kak" atau nama pelanggan jika diketahui
+- Jika ada data tagihan, sebutkan dengan jelas nominalnya
+- Jika ada masalah teknis kompleks, sarankan menghubungi teknisi
+- Jangan buat-buat informasi yang tidak ada di konteks<% } %></textarea>
+                <small style="color:var(--muted);font-size:11px">AI akan otomatis mendapat konteks data pelanggan (nama, paket, tagihan) dari database</small>
+            </div>
+
+            <!-- Tombol Simpan + Test -->
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+                <button class="btn btn-primary" onclick="saveAIAgent()">💾 Simpan Pengaturan AI</button>
+                <button class="btn" style="background:rgba(139,92,246,.15);color:#8B5CF6;border:1px solid rgba(139,92,246,.3)" onclick="testAIAgent()">🧪 Test AI Sekarang</button>
+            </div>
+
+            <!-- Area Test AI -->
+            <div style="background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:16px">
+                <div style="font-weight:700;font-size:13px;margin-bottom:12px">🧪 Uji Coba Balasan AI</div>
+                <div style="display:flex;gap:10px;margin-bottom:10px">
+                    <input type="text" id="ai_test_message" class="form-control" placeholder="Contoh: Tagihan saya bulan ini berapa ya?" value="Tagihan saya bulan ini berapa ya?">
+                    <button class="btn" style="white-space:nowrap;background:rgba(139,92,246,.2);color:#8B5CF6;border:1px solid rgba(139,92,246,.3)" onclick="testAIAgent()">Kirim →</button>
+                </div>
+                <div id="ai_test_result" style="display:none;background:rgba(139,92,246,.05);border:1px solid rgba(139,92,246,.2);border-radius:10px;padding:14px">
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">🤖 Balasan AI:</div>
+                    <div id="ai_test_reply" style="font-size:13px;line-height:1.6;white-space:pre-wrap"></div>
+                </div>
+                <div id="ai_test_loading" style="display:none;font-size:13px;color:var(--muted)">⏳ AI sedang berpikir...</div>
+                <div id="ai_test_error" style="display:none;font-size:13px;color:#EF4444"></div>
+            </div>
+
+            <!-- Info fitur -->
+            <div style="margin-top:16px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:10px;padding:14px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#10B981">ℹ️ Cara Kerja AI Agent</div>
+                <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0;padding-left:18px">
+                    <li>AI Agent <b>tidak aktif</b> untuk pesan grup WhatsApp</li>
+                    <li>Jika ada <b>Auto Reply keyword</b> yang cocok → keyword diutamakan, AI tidak aktif</li>
+                    <li>AI mendapat <b>konteks otomatis</b>: nama pelanggan, paket, & tagihan dari database</li>
+                    <li>Percakapan diingat selama <b>30 menit</b>, setelah itu konteks direset</li>
+                    <li>Groq gratis hingga <b>~14.400 request/hari</b> (Llama 3.1 8B)</li>
+                </ul>
+            </div>
+        </div>
+        <!-- ═══════════════════════════════════════════════════════════════════════════ -->
+
         <div id="tab-import" class="tab-content card" style="display:none">
             <h2 class="section-title">📤 <%= t.import_export_data %></h2>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -884,6 +994,61 @@ async function testOltAlertWA() {
         el.style.color = '#EF4444';
     }
 }
+// ── AI Agent ──────────────────────────────────────────────────────
+async function saveAIAgent() {
+    const keys = ['ai_agent_enabled', 'groq_api_key', 'groq_model', 'ai_system_prompt', 'ai_max_tokens'];
+    const data = {};
+    keys.forEach(k => {
+        const el = document.getElementById(k);
+        if (!el) return;
+        data[k] = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+    });
+    showToast('💾 Menyimpan pengaturan AI...', 'success');
+    const r = await fetch('/settings/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const d = await r.json();
+    showToast(d.success ? '✅ Pengaturan AI disimpan!' : '❌ ' + d.message, d.success ? 'success' : 'error');
+}
+
+async function testAIAgent() {
+    const apiKey     = document.getElementById('groq_api_key').value.trim();
+    const model      = document.getElementById('groq_model').value;
+    const sysPrmt    = document.getElementById('ai_system_prompt').value;
+    const testMsg    = document.getElementById('ai_test_message').value.trim();
+    const resultBox  = document.getElementById('ai_test_result');
+    const loadingEl  = document.getElementById('ai_test_loading');
+    const errorEl    = document.getElementById('ai_test_error');
+    const replyEl    = document.getElementById('ai_test_reply');
+
+    if (!apiKey) { alert('Masukkan Groq API Key terlebih dahulu!'); return; }
+    if (!testMsg) { alert('Masukkan pesan uji coba!'); return; }
+
+    resultBox.style.display  = 'none';
+    errorEl.style.display    = 'none';
+    loadingEl.style.display  = 'block';
+
+    try {
+        const r = await fetch('/settings/api/test-ai-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: apiKey, model, system_prompt: sysPrmt, test_message: testMsg })
+        });
+        const d = await r.json();
+        loadingEl.style.display = 'none';
+        if (d.success) {
+            replyEl.textContent     = d.reply;
+            resultBox.style.display = 'block';
+        } else {
+            errorEl.textContent    = '❌ ' + d.message;
+            errorEl.style.display  = 'block';
+        }
+    } catch(e) {
+        loadingEl.style.display = 'none';
+        errorEl.textContent     = '❌ ' + e.message;
+        errorEl.style.display   = 'block';
+    }
+}
+// ──────────────────────────────────────────────────────────────────
+
 async function testACS(){
     const url=document.getElementById('acs_url').value;
     if(!url)return alert('Masukkan URL ACS dulu');
