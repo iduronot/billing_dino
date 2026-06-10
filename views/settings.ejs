@@ -683,23 +683,24 @@
 
             <!-- System Prompt -->
             <div class="form-group">
-                <label>📝 System Prompt (Karakter AI)</label>
-                <textarea id="ai_system_prompt" class="form-control" rows="8" style="font-size:13px;line-height:1.5;font-family:monospace" placeholder="Tulis instruksi untuk AI di sini..."><% if(settings.ai_system_prompt){ %><%= settings.ai_system_prompt %><% } else { %>Kamu adalah asisten layanan pelanggan dari sebuah ISP (Internet Service Provider) yang ramah, sopan, dan profesional.
-Nama kamu adalah Dino Assistant.
+                <label>📝 System Prompt — Instruksi Dasar AI</label>
+                <textarea id="ai_system_prompt" class="form-control" rows="7" style="font-size:13px;line-height:1.5;font-family:monospace" placeholder="Tulis instruksi karakter AI di sini..."><% if(settings.ai_system_prompt){ %><%= settings.ai_system_prompt %><% } else { %>Kamu adalah asisten CS (Customer Service) dari perusahaan ISP yang ramah, sopan, dan profesional.
+Tugasmu membantu pelanggan via WhatsApp menjawab pertanyaan tentang layanan internet.
 
-Kamu membantu pelanggan dengan pertanyaan seputar:
-- Tagihan dan cara pembayaran internet
-- Status layanan, paket internet yang aktif
-- Informasi gangguan koneksi
-- Proses aktivasi dan isolir layanan
-
-Instruksi penting:
-- Selalu jawab dalam Bahasa Indonesia yang natural dan singkat (maksimal 3-4 kalimat)
-- Gunakan sapaan "Kak" atau nama pelanggan jika diketahui
-- Jika ada data tagihan, sebutkan dengan jelas nominalnya
-- Jika ada masalah teknis kompleks, sarankan menghubungi teknisi
-- Jangan buat-buat informasi yang tidak ada di konteks<% } %></textarea>
-                <small style="color:var(--muted);font-size:11px">AI akan otomatis mendapat konteks data pelanggan (nama, paket, tagihan) dari database</small>
+Panduan menjawab:
+- Jawab HANYA berdasarkan data yang disediakan (data paket, tagihan, dll otomatis disertakan)
+- Jika info tidak tersedia, katakan jujur dan arahkan ke CS manusia
+- Bahasa Indonesia yang natural, singkat, dan mudah dipahami
+- Maksimal 4 kalimat per balasan
+- Gunakan sapaan "Kak [nama]" jika nama pelanggan diketahui<% } %></textarea>
+                <div style="margin-top:6px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.7">
+                    ℹ️ <b>Isi otomatis yang ditambahkan sistem ke setiap pesan AI:</b><br>
+                    ✅ Info perusahaan (nama, nomor, alamat, rekening)<br>
+                    ✅ Seluruh daftar paket + harga + kecepatan dari database<br>
+                    ✅ Area jangkauan layanan dari data ODP & alamat pelanggan<br>
+                    ✅ Data pelanggan yang chat (nama, paket, tagihan, status isolir)<br>
+                    <b>Kamu hanya perlu menulis karakter/gaya bicara AI di atas.</b>
+                </div>
             </div>
 
             <!-- Tombol Simpan + Test -->
