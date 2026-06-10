@@ -107,6 +107,9 @@ router.post('/api/save', async (req, res) => {
         }
         // Invalidate settings cache agar halaman berikutnya baca data terbaru
         if (global.invalidateSettingsCache) global.invalidateSettingsCache();
+        // Invalidate AI system context cache agar AI pakai data terbaru
+        const { invalidateSystemCache } = require('../helpers/ai-agent');
+        invalidateSystemCache();
         res.json({ success: true, message: 'Pengaturan berhasil disimpan' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
