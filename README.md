@@ -4,6 +4,21 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 ---
 
+## 🆕 Pembaruan Terbaru
+
+### v2.6 — AI Agent & ONU Checker via Bot (Juni 2026)
+- 🤖 **AI Agent WhatsApp** — auto-reply pesan pelanggan menggunakan AI Groq/Llama (gratis). AI mendapat konteks otomatis: daftar paket + harga, area jangkauan, info pelanggan, tagihan, dan status isolir dari database
+- 📡 **ONU Checker via Telegram Bot** — teknisi di lapangan bisa cek status ONU langsung dari Telegram: `/cek [nama]`, `/status`, `/lemah`, `/kritis`, `/offline`
+- 💬 **ONU Checker via WhatsApp** — perintah `#cek`, `#status`, `#lemah`, dll khusus admin/teknisi terdaftar
+- 📊 **Detail ONU lengkap** — setiap hasil `/cek` menyertakan: rx/tx power + indikator sinyal, redaman dari GenieACS (ACS), uptime, jumlah user konek, info pelanggan terhubung
+- 🔔 **OLT Alert via WhatsApp** — notifikasi ONU offline massal kini dikirim ke semua admin & teknisi via WA (selain Telegram)
+- ⚠️ **Filter Jatuh Tempo** — halaman Billing: kartu statistik klikable, banner overdue, warna baris, label "Telat X hari"
+- 🔒 **Isolir dari Invoice** — tombol "Isolir Pelanggan" langsung di kolom aksi invoice yang sudah jatuh tempo
+- 📤 **Kirim WA Tagihan via Sistem Lokal** — kirim tagihan langsung via WA lokal (bukan redirect ke wa.me)
+- 📅 **Dana Operasional** — filter default otomatis ke bulan ini
+
+---
+
 ## 📋 Daftar Isi
 
 - [Fitur Lengkap](#-fitur-lengkap)
@@ -37,8 +52,13 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Generate invoice otomatis setiap bulan (berjalan tengah malam tanggal 1)
 - Generate invoice manual untuk satu atau banyak pelanggan sekaligus
 - Filter invoice: status (unpaid/paid/overdue), rentang tanggal, nama pelanggan
+- **Filter Jatuh Tempo** — kartu statistik "Jatuh Tempo" klikable langsung filter invoice overdue
+- **Label keterlambatan** — kolom "Telat X hari" + warna baris merah/oranye sesuai keterlambatan
+- **Banner overdue** — muncul otomatis saat filter jatuh tempo aktif, dengan tombol Auto Isolir & WA Reminder
 - Catat pembayaran manual (cash/transfer)
 - Tunda (defer) invoice tanpa menghapus tagihan
+- **Isolir dari Invoice** — tombol "Isolir Pelanggan" langsung di aksi invoice yang sudah jatuh tempo
+- **Kirim WA Tagihan** — kirim tagihan via WhatsApp lokal langsung dari kolom aksi (tanpa redirect wa.me)
 - Cetak invoice dengan pratinjau in-page (modal + iframe, tanpa buka tab baru)
 - Layout cetak kompak — muat 1 halaman A4 saat disimpan sebagai PDF
 - Logo perusahaan & nama tampil berdampingan di header invoice
@@ -87,10 +107,17 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
   - Jumlah online/offline per PON ditampilkan dengan progress bar
   - Expand tiap PON untuk melihat daftar ONU beserta sinyal Rx/Tx
   - Ekstraksi PON port otomatis dari onu_index (HSGQ: bit-shift, format X.Y / X.Y.Z.W)
-- **OLT Alert Notifikasi Telegram**: kirim notif ke grup Telegram saat jumlah ONU offline melebihi threshold
+- **OLT Alert Notifikasi** — kirim notif saat jumlah ONU offline melebihi threshold:
+  - Via **Telegram** ke grup admin
+  - Via **WhatsApp** ke semua user dengan role admin & teknisi yang memiliki nomor HP terdaftar
   - Threshold per OLT & threshold global (total semua OLT) dapat dikonfigurasi dari Pengaturan
   - Anti-spam: notifikasi hanya dikirim saat status berubah (normal → alert, alert → recovery)
-  - Tombol test kirim notifikasi dari halaman Pengaturan
+  - Tombol test kirim notifikasi Telegram & WA dari halaman Pengaturan
+- **ONU Checker via Bot** — teknisi cek status ONU real-time tanpa buka browser:
+  - Telegram: `/cek [nama]`, `/status`, `/lemah`, `/kritis`, `/offline`, `/help`
+  - WhatsApp: `#cek [nama]`, `#status`, `#lemah`, `#kritis`, `#offline` (khusus admin/teknisi terdaftar)
+  - Hasil mencakup: rx/tx power + indikator sinyal 🟢🟡🔴, redaman dari GenieACS, uptime, user konek, info pelanggan
+  - Hanya user dengan Telegram ID / nomor HP terdaftar di Kelola User yang bisa akses
 - Reboot ONU dari dashboard
 - SNMP walk discovery untuk temukan OLT baru di jaringan
 - Tambah, edit, hapus konfigurasi OLT
@@ -207,13 +234,34 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Status koneksi WhatsApp real-time: QR Code, Connecting, Ready
 - **Template Pesan**: buat & kelola template pesan dengan variabel dinamis (`{nama}`, `{nomor}`, `{paket}`, `{jumlah}`, `{tanggal}`) — pilih template langsung dari input chat
 - **Auto Reply**: balas pesan masuk secara otomatis berdasarkan kata kunci, mode pencocokan `contains`, `exact`, atau `startswith`; variabel pelanggan otomatis terisi dari database
+- **AI Agent** — auto-reply cerdas menggunakan AI Groq/Llama (gratis hingga ~14.400 req/hari):
+  - Aktif jika tidak ada keyword Auto Reply yang cocok
+  - AI mendapat konteks otomatis dari database: info perusahaan, seluruh daftar paket + harga, area jangkauan, data pelanggan (nama, paket, tagihan, status isolir)
+  - Percakapan diingat selama 30 menit per nomor
+  - Pilihan model: Llama 3.1 8B (cepat), Llama 3.3 70B (lebih pintar), Gemma, Mixtral
+  - System prompt, max token, dan API key dapat dikonfigurasi dari Pengaturan → tab AI Agent
+  - Tombol test AI langsung dari halaman pengaturan
+- **ONU Checker via WA** — perintah khusus untuk admin/teknisi terdaftar:
+  - `#cek [nama]` — status ONU lengkap: sinyal, redaman, pelanggan
+  - `#status` — ringkasan semua OLT
+  - `#lemah` — list ONU sinyal lemah (rx < -27 dBm)
+  - `#kritis` — list ONU sinyal kritis (rx < -30 dBm)
+  - `#offline` — list ONU Down
 
-### 16. ✈️ Notifikasi Telegram
+### 16. ✈️ Notifikasi & Bot Telegram
 - Integrasi Telegram Bot
 - Laporan harian otomatis dikirim ke group/channel Telegram admin
 - Notifikasi OLT Alert (ONU offline massal) — lihat fitur OLT
 - Notifikasi IP Monitor (host down/recovery)
 - Test kirim pesan dari Settings
+- **Bot Perintah untuk Teknisi** — polling bot aktif otomatis saat server start:
+  - `/cek [nama]` — detail ONU: rx/tx power + indikator 🟢🟡🔴, redaman ACS, uptime, user konek, info pelanggan
+  - `/status` — ringkasan semua OLT (online/offline/kritis/lemah per OLT)
+  - `/lemah` — list ONU sinyal lemah (rx < -27 dBm)
+  - `/kritis` — list ONU sinyal kritis (rx < -30 dBm)
+  - `/offline` — list semua ONU yang Down
+  - `/help` — daftar semua perintah
+  - Hanya user dengan Telegram ID terdaftar di Kelola User (role admin/teknisi) yang bisa akses
 
 ### 17. 🎮 Hotspot & Voucher WiFi
 - Manajemen hotspot user di MikroTik
@@ -233,6 +281,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Kategori pengeluaran dengan warna & ikon kustom (Operasional, Internet Upstream, Equipment, dll)
 - Tambah, edit, hapus kategori pengeluaran
 - Filter pengeluaran per kategori dan rentang tanggal
+- **Filter default bulan ini** — saat pertama buka halaman, otomatis menampilkan pengeluaran bulan berjalan
 - Ringkasan pengeluaran per kategori
 
 ### 20. 📍 Presensi Teknisi
@@ -249,7 +298,8 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **WhatsApp**: pilih provider, API URL, API key, nomor pengirim, delay antar pesan, limit batch, nomor admin, toggle per jenis notifikasi
 - **Template Pesan WA**: kustomisasi teks untuk invoice baru, payment received, isolir, reminder
 - **Telegram**: bot token, admin chat ID, monitor chat ID (untuk alert OLT & IP)
-- **OLT Alert**: threshold ONU offline per OLT & global, tombol test notifikasi
+- **OLT Alert**: threshold ONU offline per OLT & global, tombol test notifikasi Telegram & WA
+- **AI Agent**: Groq API key, pilih model AI (Llama/Gemma/Mixtral), system prompt, max token, tombol test real-time
 - **IP Monitor**: daftar target ping & interval, notifikasi Telegram
 - **Payment Gateway**: pilih gateway default, konfigurasi Xendit & Tripay, data rekening bank manual
 - **GenieACS**: URL ACS, username, password, threshold online/offline, path virtual parameters
@@ -432,6 +482,7 @@ Portal pelanggan otomatis tampilkan layar sukses ✅
 | MikroTik API | routeros-api |
 | OLT SNMP | net-snmp |
 | WhatsApp | whatsapp-web.js + Puppeteer / Google Chrome |
+| AI Agent | Groq API (Llama 3.1 / 3.3, Gemma, Mixtral) |
 | Payment | Xendit QRIS API + Tripay API |
 | Notifikasi | WhatsApp (lokal/API) + Telegram Bot API |
 | Peta | Leaflet.js + OpenStreetMap |
