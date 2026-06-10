@@ -313,9 +313,32 @@
             <h2 class="section-title">✈️ <%= t.telegram %> Bot</h2>
             <div class="form-group"><label>Bot Token</label><input type="text" id="telegram_bot_token" class="form-control" value="<%=settings.telegram_bot_token||''%>" placeholder="123456:ABC..."></div>
             <div class="form-group"><label>Admin Chat ID</label><input type="text" id="telegram_chat_id" class="form-control" value="<%=settings.telegram_chat_id||''%>" placeholder="-100xxxxxxxxxx"></div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
                 <button class="btn btn-primary" onclick="save(['telegram_bot_token','telegram_chat_id'])">💾 <%= t.save %></button>
                 <button class="btn" style="background:rgba(0,136,204,.15);color:#0088cc;border:1px solid rgba(0,136,204,.3)" onclick="testTelegram()">✈️ Test Kirim Telegram</button>
+            </div>
+
+            <!-- Info Perintah Bot Teknisi -->
+            <div style="background:rgba(0,136,204,.07);border:1px solid rgba(0,136,204,.2);border-radius:12px;padding:16px 18px">
+                <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:#0088cc">🤖 Perintah Bot untuk Teknisi</div>
+                <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">
+                    Teknisi bisa cek status ONU langsung via Telegram. Pastikan <b>Telegram ID</b> teknisi sudah diisi di menu <b>Kelola User</b>.
+                </p>
+                <table style="width:100%;font-size:12px;border-collapse:collapse">
+                    <tr style="background:rgba(0,136,204,.08)">
+                        <td style="padding:7px 10px;font-weight:700;border-radius:6px 0 0 0">Perintah</td>
+                        <td style="padding:7px 10px;font-weight:700;border-radius:0 6px 0 0">Fungsi</td>
+                    </tr>
+                    <tr><td style="padding:6px 10px;font-family:monospace;color:#0088cc">/cek [nama]</td><td style="padding:6px 10px;color:var(--muted)">Detail ONU: rx/tx power, redaman, info pelanggan</td></tr>
+                    <tr style="background:rgba(0,136,204,.04)"><td style="padding:6px 10px;font-family:monospace;color:#0088cc">/status</td><td style="padding:6px 10px;color:var(--muted)">Ringkasan semua OLT (online/offline/kritis)</td></tr>
+                    <tr><td style="padding:6px 10px;font-family:monospace;color:orange">/lemah</td><td style="padding:6px 10px;color:var(--muted)">List ONU sinyal lemah (rx &lt; -27 dBm)</td></tr>
+                    <tr style="background:rgba(0,136,204,.04)"><td style="padding:6px 10px;font-family:monospace;color:#EF4444">/kritis</td><td style="padding:6px 10px;color:var(--muted)">List ONU sinyal kritis (rx &lt; -30 dBm)</td></tr>
+                    <tr><td style="padding:6px 10px;font-family:monospace;color:#EF4444">/offline</td><td style="padding:6px 10px;color:var(--muted)">List ONU yang offline / Down</td></tr>
+                    <tr style="background:rgba(0,136,204,.04)"><td style="padding:6px 10px;font-family:monospace;color:#10B981">/help</td><td style="padding:6px 10px;color:var(--muted)">Daftar semua perintah</td></tr>
+                </table>
+                <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+                    💬 Via WhatsApp: gunakan <code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">#cek [nama]</code>, <code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">#status</code>, <code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">#lemah</code>, dll. (hanya untuk nomor admin/teknisi terdaftar)
+                </div>
             </div>
         </div>
 

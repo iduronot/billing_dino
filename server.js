@@ -2551,5 +2551,9 @@ const server = app.listen(PORT, () => {
     const { initWhatsApp } = require('./helpers/whatsapp');
     initWhatsApp(pool).catch(err => console.error('[WA-INIT] Error:', err));
   }
+
+  // Start Telegram Bot polling (untuk perintah teknisi: /cek /status /lemah dll)
+  const { startTelegramBot } = require('./helpers/telegram-bot');
+  startTelegramBot(pool).catch(err => console.error('[TG-BOT] Start error:', err));
 });
 server.setTimeout(30000); // 30 detik cukup untuk request HTTP normal

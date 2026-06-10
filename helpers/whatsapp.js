@@ -339,7 +339,116 @@ async function checkAutoReply(dbPool, msg) {
     if (!msg.body || msg.fromMe || msg.isGroupMsg) return;
 
     const phone = normalizePhone(msg.from);
-    const text  = msg.body.toLowerCase().trim();
+    const text  = msg.body.trim();
+
+    // ── 0. Perintah teknisi (#cek / #status / #lemah / #kritis / #offline) ──
+    const cmdMatch = text.match(/^#(cek|status|lemah|kritis|offline|help)\s*(.*)/i);
+    if (cmdMatch) {
+        // Cek apakah pengirim adalah admin/teknisi
+        const [[user]] = await dbPool.query(
+            "SELECT id, username, role FROM users WHERE REPLACE(REPLACE(phone,'+',''),'-','') LIKE ? AND role IN ('admin','technician') LIMIT 1",
+            [`%${phone.slice(-9)}%`]
+        ).catch(() => [[]]);
+
+        if (!user) {
+            // Bukan teknisi terdaftar — abaikan, lanjut ke flow normal
+        } else {
+            const cmd = cmdMatch[1].toLowerCase();
+            const arg = (cmdMatch[2] || '').trim();
+            const { searchONU, formatONUDetail, getWeakONUs, getOLTSummary, signalIcon } = require('./onu-checker');
+
+            try {
+                if (cmd === 'help') {
+                    await client.sendMessage(msg.from,
+                        `*Perintah Teknisi:*\n\n` +
+                        `🔍 *#cek [nama]* — cek status ONU\n` +
+                        `📊 *#status* — ringkasan semua OLT\n` +
+                        `⚠️ *#lemah* — ONU sinyal lemah (< -27 dBm)\n` +
+                        `🔴 *#kritis* — ONU sinyal kritis (< -30 dBm)\n` +
+                        `🔴 *#offline* — list ONU offline`
+                    );
+                } else if (cmd === 'cek') {
+                    if (!arg) {
+                        await client.sendMessage(msg.from, '❓ Contoh: *#cek Gunari* atau *#cek blimbing*');
+                    } else {
+                        await client.sendMessage(msg.from, `🔍 Mencari ONU: *${arg}*...`);
+                        const results = await searchONU(dbPool, arg);
+                        if (!results || results.length === 0) {
+                            await client.sendMessage(msg.from, `❌ ONU "*${arg}*" tidak ditemukan.`);
+                        } else {
+                            for (const { onu, acsDevice } of results) {
+                                await client.sendMessage(msg.from, formatONUDetail(onu, acsDevice));
+                                await new Promise(r => setTimeout(r, 400));
+                            }
+                        }
+                    }
+                } else if (cmd === 'lemah') {
+                    const list = await getWeakONUs(dbPool, -27);
+                    if (!list || list.length === 0) {
+                        await client.sendMessage(msg.from, '✅ Semua ONU sinyal normal.');
+                    } else {
+                        let m = `⚠️ *ONU Sinyal Lemah* (${list.length} unit):\n━━━━━━━━━━━━\n`;
+                        list.forEach((o, i) => {
+                            m += `${i+1}. ${signalIcon(o.rx_power)} *${o.name}* — ${o.rx_power} dBm\n`;
+                            if (o.customer_name) m += `   👤 ${o.customer_name}\n`;
+                        });
+                        m += `\nGunakan *#cek [nama]* untuk detail.`;
+                        await client.sendMessage(msg.from, m);
+                    }
+                } else if (cmd === 'kritis') {
+                    const list = await getWeakONUs(dbPool, -30);
+                    if (!list || list.length === 0) {
+                        await client.sendMessage(msg.from, '✅ Tidak ada ONU sinyal kritis.');
+                    } else {
+                        let m = `🔴 *ONU Sinyal KRITIS* (${list.length} unit):\n━━━━━━━━━━━━\n`;
+                        list.forEach((o, i) => {
+                            m += `${i+1}. 🔴 *${o.name}* — ${o.rx_power} dBm\n`;
+                            if (o.customer_name) m += `   👤 ${o.customer_name}\n`;
+                        });
+                        await client.sendMessage(msg.from, m);
+                    }
+                } else if (cmd === 'offline') {
+                    const [list] = await dbPool.query(
+                        `SELECT u.name, o.name AS olt_name, c.name AS customer_name
+                         FROM hioso_onus u
+                         JOIN hioso_olts o ON u.olt_id = o.id
+                         LEFT JOIN customers c ON c.id = u.customer_id
+                         WHERE u.status = 'Down'
+                         ORDER BY o.name ASC, u.name ASC LIMIT 20`
+                    ).catch(() => [[]]);
+                    if (!list || list.length === 0) {
+                        await client.sendMessage(msg.from, '✅ Tidak ada ONU offline.');
+                    } else {
+                        let m = `🔴 *ONU Offline* (${list.length} unit):\n━━━━━━━━━━━━\n`;
+                        list.forEach((o, i) => {
+                            m += `${i+1}. *${o.name}*`;
+                            if (o.customer_name) m += ` — ${o.customer_name}`;
+                            m += `\n   OLT: ${o.olt_name}\n`;
+                        });
+                        await client.sendMessage(msg.from, m);
+                    }
+                } else if (cmd === 'status') {
+                    const rows = await getOLTSummary(dbPool);
+                    const totalOnline  = rows.reduce((a, r) => a + parseInt(r.online  || 0), 0);
+                    const totalOffline = rows.reduce((a, r) => a + parseInt(r.offline || 0), 0);
+                    const totalAll     = rows.reduce((a, r) => a + parseInt(r.total   || 0), 0);
+                    const now = new Date().toLocaleString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+                    let m = `📊 *Ringkasan OLT* — ${now}\n━━━━━━━━━━━━\n`;
+                    rows.forEach(r => {
+                        const icon = parseInt(r.offline) > 0 ? '🔴' : '🟢';
+                        m += `${icon} *${r.olt_name}*: ${r.online} online, ${r.offline} offline / ${r.total}\n`;
+                        if (parseInt(r.kritis) > 0) m += `   ⚡ Kritis: ${r.kritis} | ⚠️ Lemah: ${r.lemah}\n`;
+                    });
+                    m += `━━━━━━━━━━━━\n🌐 Total: ${totalOnline} online, ${totalOffline} offline / ${totalAll}`;
+                    await client.sendMessage(msg.from, m);
+                }
+            } catch(e) {
+                console.error('[WA-CMD] Error:', e.message);
+                await client.sendMessage(msg.from, `❌ Error: ${e.message}`).catch(() => {});
+            }
+            return; // sudah ditangani, stop
+        }
+    }
 
     // ── 1. Cek keyword rules dulu ─────────────────────────────────────
     const [rules] = await dbPool.query('SELECT * FROM wa_auto_replies WHERE is_active = 1 ORDER BY id ASC').catch(() => [[]]);
