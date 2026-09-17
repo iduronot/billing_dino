@@ -235,6 +235,7 @@
   "straight_line": "straight line",
   "origin": "From",
   "clear_route": "Clear Route",
+  "parse_coords": "Pull Coordinates",
   "pppoe_username": "PPPoE Username",
   "pppoe_password": "PPPoE Password",
   "odp_connection": "ODP Connection",

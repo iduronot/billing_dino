@@ -151,6 +151,9 @@
         <button class="tool-btn" onclick="clearRoute()" style="opacity:0.7">
             <i class="fas fa-eraser"></i> <span><%= t.clear_route || 'Hapus Rute' %></span>
         </button>
+        <button class="tool-btn" onclick="parseCoordinates()" style="opacity:0.7" id="btnParseCoords">
+            <i class="fas fa-satellite-dish"></i> <span><%= t.parse_coords || 'Tarik Koordinat' %></span>
+        </button>
         <button class="tool-btn" onclick="locateUser()" style="opacity:0.7">
             <i class="fas fa-location-arrow"></i> <span><%= t.my_location %></span>
         </button>
@@ -272,6 +275,43 @@
     function clearRoute() {
         routeGroup.clearLayers();
         routeLine = null;
+    }
+
+    // Tarik koordinat dari nama secret PPPoE MikroTik → customers.lat/lng
+    const PARSE_BTN_HTML = '<i class="fas fa-satellite-dish"></i> <span>' + (t.parse_coords || 'Tarik Koordinat') + '</span>';
+    async function parseCoordinates() {
+        const btn = document.getElementById('btnParseCoords');
+        if (!confirm('Tarik koordinat dari router MikroTik?\n\nKoordinat akan diparse dari nama secret PPPoE (Nama@-7.x,111.x) dan diisi ke pelanggan yang belum punya lokasi. Data yang sudah ada tidak ditimpa.')) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Memproses...</span>';
+        try {
+            const resp = await fetch('/map/api/parse-coordinates', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            const d = await resp.json();
+            if (!d.success) throw new Error(d.message || 'Error');
+
+            if (d.updated === 0 && !d.stats.secrets_with_coords) {
+                Swal.fire({ icon: 'info', title: 'Tidak ada data', text: 'Tidak ditemukan secret PPPoE berisi koordinat di router.' });
+            } else {
+                Swal.fire({
+                    icon: 'success',
+                    title: `${d.updated} pelanggan berhasil dipetakan`,
+                    html: `<div style="text-align:left; font-size:13px;">
+                        Secret berisi koordinat: <b>${d.stats.secrets_with_coords}</b><br>
+                        Cocok nama persis: <b>${d.stats.matched_exact}</b> · Cocok awalan: <b>${d.stats.matched_prefix}</b><br>
+                        Sudah punya koordinat: <b>${d.stats.already_has_coords}</b><br>
+                        Nama ambigu (dilewati): <b>${d.stats.ambiguous_skipped}</b> · Tidak cocok: <b>${d.stats.no_match}</b>
+                        ${d.stats.router_failed ? `<br><span style="color:#EF4444;">Router gagal dijangkau: ${d.stats.router_failed}</span>` : ''}
+                    </div>`,
+                    confirmButtonText: 'Muat Ulang Peta'
+                }).then(() => location.reload());
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Gagal', text: e.message });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = PARSE_BTN_HTML;
+        }
     }
 
     // Dukungan URL ?route=lat,lng&name=Nama — langsung gambar rute (dipakai dari halaman lain)

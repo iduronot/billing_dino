@@ -228,6 +228,7 @@
   "straight_line": "garis lurus",
   "origin": "Dari",
   "clear_route": "Hapus Rute",
+  "parse_coords": "Tarik Koordinat",
   "pppoe_username": "PPPoE Username",
   "pppoe_password": "PPPoE Password",
   "odp_connection": "Koneksi ODP",
