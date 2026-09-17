@@ -223,14 +223,18 @@ async function notifyTechnicianNewCustomer(pool, technician, customer) {
 async function sendTelegramToUser(pool, telegramId, message) {
     try {
         const s = await getSettings(pool, ['telegram_bot_token']);
-        if (!s.telegram_bot_token || !telegramId) return;
+        if (!s.telegram_bot_token || !telegramId) return { success: false, message: 'Bot token atau telegram_id kosong' };
         const url = `https://api.telegram.org/bot${s.telegram_bot_token}/sendMessage`;
         await axios.post(url, {
             chat_id: telegramId,
             text: message,
             parse_mode: 'HTML'
         }, { timeout: 10000 });
-    } catch(e) { console.error('[TG] sendToUser error:', e.message); }
+        return { success: true };
+    } catch(e) {
+        console.error('[TG] sendToUser error:', e.message);
+        return { success: false, message: e.message };
+    }
 }
 
 /**

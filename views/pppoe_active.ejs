@@ -505,6 +505,13 @@ function renderTable(data) {
     tbody.innerHTML = data.map((c, i) => {
         const uCat = uptimeCategory(c.uptime);
         const uClass = uCat === 'long' ? 'long' : uCat === 'new' ? 'warn' : '';
+        // Koordinat: dari DB hasil mapping, atau parse dari nama secret (Nama@-7.x,111.x)
+        let routeLat = c.customerLat, routeLng = c.customerLng;
+        if (!routeLat || !routeLng) {
+            const m = (c.name || '').match(/@\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+            if (m) { routeLat = parseFloat(m[1]); routeLng = parseFloat(m[2]); }
+        }
+        const routeName = c.customerName || (c.name || '').replace(/@\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/, '').trim() || c.name;
         return `
         <tr data-router="${c.routerId||''}" data-linked="${c.customerName?'linked':'unlinked'}" data-uptime="${uCat}">
             <td style="color:var(--muted); font-size:12px;">${i+1}</td>
@@ -529,6 +536,14 @@ function renderTable(data) {
                     <button class="btn-tool btn-ping"  onclick="runPing('${c.address}','${c.name||''}')"><i class="fas fa-satellite-dish"></i> Ping</button>
                     <button class="btn-tool btn-trace" onclick="runTrace('${c.address}','${c.name||''}')"><i class="fas fa-route"></i> Trace</button>
                 </div>` : '<span style="color:var(--muted);font-size:11px;">No IP</span>'}
+                ${routeLat && routeLng ? `
+                <div style="margin-top:5px;">
+                    <a class="btn-tool" style="background:rgba(59,130,246,.15); color:#60A5FA; border:1px solid rgba(59,130,246,.3); text-decoration:none; display:inline-flex;"
+                       href="/map?route=${routeLat},${routeLng}&name=${encodeURIComponent(routeName)}"
+                       target="_blank" title="Lihat lokasi & rute dari kantor pusat di peta">
+                        <i class="fas fa-map-marked-alt"></i> Rute
+                    </a>
+                </div>` : ''}
             </td>
         </tr>`;
     }).join('');

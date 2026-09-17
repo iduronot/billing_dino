@@ -177,6 +177,7 @@
                     <button class="map-btn" id="btnModeCable" onclick="setMode('drawCable',this)">✏️ Gambar Kabel</button>
                     <% } %>
                     <button class="map-btn" id="btnFollowRoad" onclick="toggleFollowRoad()" style="display:none;">🛣 Ikuti Jalan</button>
+                    <button class="map-btn" onclick="clearRoute()" title="Hapus garis rute">🧹 Hapus Rute</button>
                     <button class="map-btn" id="btnFinishCable" onclick="finishCable()" style="display:none; background:#10B981; color:white; border-color:#10B981;">✓ Selesai</button>
                     <button class="map-btn" id="btnCancelCable" onclick="cancelCable()" style="display:none; background:#EF4444; color:white; border-color:#EF4444;">✗ Batal</button>
                     <div style="width:1px; background:var(--border);"></div>
@@ -526,6 +527,47 @@ const nodeLayer   = L.layerGroup().addTo(map);
 const cableLayer  = L.layerGroup().addTo(map);
 const custLayer   = L.layerGroup().addTo(map);
 const drawLayer   = L.layerGroup().addTo(map);
+const routeLayer  = L.layerGroup().addTo(map); // Rute dari kantor pusat
+
+// ── Kantor Pusat & Rute ──
+const HQ = { lat: CFG_LAT, lng: CFG_LNG };
+
+if (HQ.lat && HQ.lng) {
+    L.marker([HQ.lat, HQ.lng], {
+        icon: L.divIcon({
+            className: '',
+            html: '<div style="color:#3B82F6; font-size:24px; filter:drop-shadow(0 0 8px rgba(59,130,246,.8));"><i class="fas fa-building"></i></div>',
+            iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14]
+        })
+    }).addTo(map).bindPopup('<b><i class="fas fa-building" style="color:#3B82F6;"></i> Kantor Pusat</b>');
+}
+
+let foRouteLine = null;
+async function showRouteFromHQ(destLat, destLng, destName) {
+    if (!HQ.lat || !HQ.lng) { alert('Koordinat kantor pusat belum diatur (Pengaturan → Koordinat Peta)'); return; }
+    routeLayer.clearLayers();
+    let path = null, viaRoad = false, distanceM = map.distance([HQ.lat, HQ.lng], [destLat, destLng]);
+    try {
+        const resp = await fetch(`https://router.project-osrm.org/route/v1/driving/${HQ.lng},${HQ.lat};${destLng},${destLat}?overview=full&geometries=geojson`, { signal: AbortSignal.timeout(8000) });
+        const data = await resp.json();
+        if (data.code === 'Ok' && data.routes && data.routes.length) {
+            path = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+            distanceM = data.routes[0].distance;
+            viaRoad = true;
+        }
+    } catch (_) { /* fallback garis lurus */ }
+    if (!path) path = [[HQ.lat, HQ.lng], [destLat, destLng]];
+
+    const km = (distanceM / 1000).toFixed(2);
+    foRouteLine = L.polyline(path, { color: '#3B82F6', weight: 6, opacity: 0.9, dashArray: viaRoad ? null : '8, 8' }).addTo(routeLayer);
+    foRouteLine.bindPopup(`<b><i class="fas fa-route" style="color:#3B82F6;"></i> Rute ke ${destName || 'tujuan'}</b><br>Jarak: <b>${km} km</b> ${viaRoad ? '(via jalan)' : '(garis lurus)'}`).openPopup();
+    map.fitBounds(foRouteLine.getBounds(), { padding: [60, 60] });
+}
+
+function clearRoute() {
+    routeLayer.clearLayers();
+    foRouteLine = null;
+}
 
 // ── Render nodes ──
 const markerMap = {};
@@ -601,11 +643,49 @@ function renderCables() {
 
 // ── Render pelanggan ──
 const custIcon = L.divIcon({ className:'', html:'<div style="width:10px;height:10px;border-radius:50%;background:#60A5FA;border:1.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);"></div>', iconSize:[10,10], iconAnchor:[5,5] });
+
+// Lazy-load detail pelanggan untuk popup FO (pakai API /map)
+async function loadFoCustomerDetail(id, popupId) {
+    const el = document.getElementById(popupId);
+    if (!el) return;
+    try {
+        const resp = await fetch(`/map/api/customer/${id}`);
+        const res = await resp.json();
+        if (!res.success) throw new Error(res.message || 'Error');
+        const d = res.data;
+        const esc = (s) => String(s ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        const isActive = d.status === 'active';
+        const unpaidHtml = d.unpaid_count > 0
+            ? `<span style="background:rgba(239,68,68,.15);color:#EF4444;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Menunggak: ${d.unpaid_count} (Rp ${Number(d.unpaid_total).toLocaleString('id-ID')})</span>`
+            : `<span style="background:rgba(16,185,129,.15);color:#10B981;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Lunas</span>`;
+        el.innerHTML = `
+            <div class="node-popup" style="min-width:230px;">
+                <h4><i class="fas fa-user" style="color:#60A5FA;"></i> ${esc(d.name)}</h4>
+                <div class="pp-row"><span class="pp-label">Telepon</span><span class="pp-val">${esc(d.phone)}</span></div>
+                <div class="pp-row"><span class="pp-label">Paket</span><span class="pp-val">${esc(d.package_name)}${d.package_price ? ' (Rp ' + Number(d.package_price).toLocaleString('id-ID') + ')' : ''}</span></div>
+                <div class="pp-row"><span class="pp-label">PPPoE</span><span class="pp-val" style="font-family:monospace;">${esc(d.pppoe_username)}</span></div>
+                <div class="pp-row"><span class="pp-label">Alamat</span><span class="pp-val" style="max-width:140px;text-align:right;">${esc(d.address)}</span></div>
+                <div class="pp-row"><span class="pp-label">Status</span><span class="pp-val" style="color:${isActive?'#10B981':'#EF4444'};">${esc(d.status).toUpperCase()}</span></div>
+                <div style="margin-top:6px;">${unpaidHtml}</div>
+                <div class="pp-actions">
+                    <button class="pp-btn" style="background:rgba(59,130,246,.15);color:#60A5FA;" onclick="showRouteFromHQ(${d.lat}, ${d.lng}, '${String(d.name).replace(/'/g, "\\'")}')"><i class="fas fa-route"></i> Rute dari Kantor</button>
+                    <a class="pp-btn" style="background:rgba(16,185,129,.15);color:#10B981; text-decoration:none; text-align:center;" href="/customers?search=${encodeURIComponent(d.name)}" target="_blank"><i class="fas fa-user"></i> Profil</a>
+                </div>
+            </div>`;
+    } catch (err) {
+        el.innerHTML = '<div class="node-popup"><span style="color:#EF4444; font-size:12px;">Gagal memuat detail</span></div>';
+    }
+}
+
 function renderCustomers() {
     custLayer.clearLayers();
     CUSTOMERS.forEach(c => {
         if (!c.lat || !c.lng) return;
-        L.marker([c.lat, c.lng], { icon: custIcon }).bindTooltip(c.name, { sticky:true }).addTo(custLayer);
+        const popupId = 'fo-cust-popup-' + c.id;
+        const m = L.marker([c.lat, c.lng], { icon: custIcon });
+        m.bindPopup(`<div id="${popupId}" style="min-width:230px;"><div class="node-popup"><h4>${c.name}</h4><span style="font-size:11px; color:#94A3B8;"><i class="fas fa-spinner fa-spin"></i> Memuat detail...</span></div></div>`, { maxWidth: 300 });
+        m.on('popupopen', () => loadFoCustomerDetail(c.id, popupId));
+        m.addTo(custLayer);
     });
 }
 

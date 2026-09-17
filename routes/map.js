@@ -28,6 +28,29 @@ router.get('/api/data', async (req, res) => {
     }
 });
 
+// GET detail satu pelanggan (untuk popup peta)
+router.get('/api/customer/:id', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT c.id, c.name, c.phone, c.address, c.pppoe_username, c.status, c.lat, c.lng,
+                   p.name as package_name, p.price as package_price
+            FROM customers c
+            LEFT JOIN packages p ON c.package_id = p.id
+            WHERE c.id = ?
+        `, [req.params.id]);
+        if (!rows.length) return res.json({ success: false, message: 'Pelanggan tidak ditemukan' });
+
+        const [inv] = await pool.query(`
+            SELECT COUNT(*) as unpaid_count, COALESCE(SUM(amount),0) as unpaid_total
+            FROM invoices WHERE customer_id = ? AND status = 'unpaid'
+        `, [req.params.id]);
+
+        res.json({ success: true, data: { ...rows[0], ...inv[0] } });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // SAVE Map Object (Server/ODP)
 router.post('/api/objects', async (req, res) => {
     const { name, type, lat, lng } = req.body;

@@ -12,6 +12,15 @@ const isInstalled = fs.existsSync(envPath);
 
 if (isInstalled) {
   dotenv.config();
+  // FIX (audit 2026-09): jangan pernah pakai fallback secret statis.
+  // Jika .env belum punya SESSION_SECRET, buat acak & simpan permanen ke .env.
+  if (!process.env.SESSION_SECRET) {
+    const crypto = require('crypto');
+    const generated = crypto.randomBytes(32).toString('hex');
+    fs.appendFileSync(envPath, `\nSESSION_SECRET=${generated}\n`);
+    process.env.SESSION_SECRET = generated;
+    console.warn('[SECURITY] SESSION_SECRET tidak ada di .env — secret acak dibuat dan disimpan permanen.');
+  }
 }
 
 const app = express();
@@ -159,8 +168,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     connectionLimit:   20,
     queueLimit:        0,
     connectTimeout:    10000,
-    acquireTimeout:    10000,
-    idleTimeoutMillis: 30000,
+    // FIX (audit 2026-09): acquireTimeout & idleTimeoutMillis dihapus —
+    // bukan option valid mysql2 (memunculkan warning, di versi baru jadi error).
     enableKeepAlive:   true,
     keepAliveInitialDelay: 0,
     multipleStatements: false,
@@ -232,6 +241,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   checkAndAddColumn('invoices', 'payment_method', "VARCHAR(50) DEFAULT 'Manual'");
   checkAndAddColumn('invoices', 'invoice_number', "VARCHAR(50) DEFAULT ''");
   checkAndAddColumn('invoices', 'proof_image', 'VARCHAR(255) NULL');
+  checkAndAddColumn('invoices', 'payment_ref', 'VARCHAR(120) NULL'); // ref payment gateway (Xendit/Tripay), FIX audit 2026-09
   checkAndAddColumn('routers', 'status', "VARCHAR(20) DEFAULT 'active'");
   checkAndAddColumn('customers', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
   checkAndAddColumn('trouble_tickets', 'closed_at', 'TIMESTAMP NULL');
@@ -402,7 +412,9 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     ['wa_notif_reminder', '1'],
     ['acs_online_threshold', '15'],   // menit — sesuaikan dengan Periodic Inform Interval CPE
     ['olt_offline_threshold', '100'], // notif jika ONU offline per OLT >= nilai ini (0=nonaktif)
-    ['olt_offline_threshold_global', '0'] // notif jika total offline semua OLT >= nilai ini (0=nonaktif)
+    ['olt_offline_threshold_global', '0'], // notif jika total offline semua OLT >= nilai ini (0=nonaktif)
+    ['sla_notify_enabled', '1'],      // notifikasi Telegram user kritis: 1=aktif, 0=nonaktif
+    ['sla_notify_hour', '15']         // jam pengiriman notifikasi kritis (0-23, WIB)
 ];
   for (const [key, val] of defaultSettings) {
     pool.query('INSERT IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)', [key, val]).catch(() => {});
@@ -950,8 +962,67 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════
+  // FIX (audit 2026-09): Cron lock berbasis DB
+  // Cegah eksekusi dobel saat 2 instance jalan bersamaan terhadap 1
+  // database (mis. dev + produksi). Lock kedaluwarsa otomatis (TTL)
+  // jika pemegang crash sebelum sempat melepas lock.
+  // ═══════════════════════════════════════════════════════════════
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS cron_locks (
+      name VARCHAR(64) PRIMARY KEY,
+      instance_id VARCHAR(64) NOT NULL,
+      locked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
+  const CRON_INSTANCE_ID = process.env.CRON_INSTANCE_ID || `${require('os').hostname()}-${process.pid}`;
+  async function claimCronLock(name, ttlMinutes = 15) {
+    try {
+      await pool.query(
+        `INSERT INTO cron_locks (name, instance_id, locked_at) VALUES (?,?,NOW())
+         ON DUPLICATE KEY UPDATE
+           instance_id = IF(locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE), VALUES(instance_id), instance_id),
+           locked_at   = IF(locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE), NOW(), locked_at)`,
+        [name, CRON_INSTANCE_ID, ttlMinutes, ttlMinutes]
+      );
+      const [[row]] = await pool.query('SELECT instance_id FROM cron_locks WHERE name = ?', [name]);
+      return !!row && row.instance_id === CRON_INSTANCE_ID;
+    } catch (_) {
+      return true; // gagal lock (mis. tabel belum siap) → jangan blokir cron
+    }
+  }
+  async function releaseCronLock(name) {
+    await pool.query('DELETE FROM cron_locks WHERE name = ? AND instance_id = ?', [name, CRON_INSTANCE_ID]).catch(() => {});
+  }
+
+  // FIX (audit 2026-09): state anti-spam OLT alert pindah dari memori ke DB
+  // (tahan restart server & konsisten antar-instance)
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS olt_alert_state (
+      state_key VARCHAR(64) PRIMARY KEY,
+      state_value VARCHAR(20) NOT NULL DEFAULT 'ok',
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
+  async function getOltAlertState(key) {
+    try {
+      const [[row]] = await pool.query('SELECT state_value FROM olt_alert_state WHERE state_key = ?', [String(key)]);
+      return row ? row.state_value : 'ok';
+    } catch (_) { return 'ok'; }
+  }
+  async function setOltAlertState(key, value) {
+    await pool.query(
+      'INSERT INTO olt_alert_state (state_key, state_value) VALUES (?,?) ON DUPLICATE KEY UPDATE state_value = VALUES(state_value)',
+      [String(key), value]
+    ).catch(() => {});
+  }
+
   // Daily Admin Report Cron (Run at 08:30 AM)
   cron.schedule('30 8 * * *', async () => {
+    if (!(await claimCronLock('daily-report', 30))) {
+      console.log('[CRON] daily-report dipegang instance lain, skip.');
+      return;
+    }
     try {
       console.log('[CRON] Sending Daily Admin Report...');
       const [[stats]] = await pool.query(`
@@ -978,6 +1049,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       await sendTelegram(pool, reportMsg).catch(() => {});
     } catch (e) {
       console.error('[CRON] Admin Report Error:', e.message);
+    } finally {
+      await releaseCronLock('daily-report');
     }
   });
 
@@ -1239,11 +1312,16 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     `);
     const [objects] = await pool.query('SELECT * FROM map_objects');
     const [cables] = await pool.query('SELECT * FROM map_cables');
+    const [hqRows] = await pool.query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('map_center_lat','map_center_lng')");
+    const hq = {};
+    hqRows.forEach(r => hq[r.setting_key] = r.setting_value);
     res.render('map', { 
         user: req.session, 
         customers, 
         objects,
         cables: cables.map(c => ({ ...c, path: JSON.parse(c.path) })),
+        hqLat: hq.map_center_lat || null,
+        hqLng: hq.map_center_lng || null,
         currentPage: 'map' 
     });
   });
@@ -1682,46 +1760,47 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // Background Tasks / Cron Jobs
 
   // Daily at midnight: auto-isolate overdue customers + MikroTik + WA
+  // FIX (audit 2026-09): hormati toggle auto_isolate_enabled & late_tolerance_days
   cron.schedule('0 0 * * *', async () => {
+    if (!(await claimCronLock('auto-isolir', 60))) {
+      console.log('[CRON] auto-isolir dipegang instance lain, skip.');
+      return;
+    }
     try {
-      console.log('[CRON] Running daily auto-isolir...');
+      const { getSettings } = require('./helpers/notification');
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_isolir', 'auto_isolate_enabled', 'late_tolerance_days']);
+      if (s.auto_isolate_enabled === '0') {
+        console.log('[CRON] Auto-isolir dinonaktifkan dari pengaturan, skip.');
+        return;
+      }
+      const lateTolerance = parseInt(s.late_tolerance_days) || 0;
+      console.log(`[CRON] Running daily auto-isolir... (toleransi keterlambatan: ${lateTolerance} hari)`);
       const [overdueRows] = await pool.query(
         `SELECT DISTINCT i.customer_id FROM invoices i
-         WHERE i.status = 'unpaid' AND i.due_date < CURDATE()`
+         WHERE i.status = 'unpaid' AND i.due_date < DATE_SUB(CURDATE(), INTERVAL ${lateTolerance} DAY)`
       );
-      const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_isolir']);
       const waLimit      = parseInt(s.wa_limit) || 50;
       const waDelay      = (parseInt(s.wa_delay) || 5) * 1000;
       const waNotifOn    = s.wa_notif_isolir !== '0';
       let sentCount = 0;
       let isolatedCount = 0;
 
+      const billingHelper = require('./helpers/billing');
       for (const row of overdueRows) {
         // Selalu jalankan isolir & MikroTik — tidak dibatasi wa_limit
-        const [result] = await pool.query(
-          "UPDATE customers SET status='isolated' WHERE id=? AND status='active'", [row.customer_id]
+        const [[cust]] = await pool.query(
+          "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
+          [row.customer_id]
         );
-        if (result.affectedRows > 0) {
+        if (!cust) continue;
+        const { changed } = await billingHelper.isolateCustomer(pool, cust);
+        if (changed) {
           isolatedCount++;
-          const [[cust]] = await pool.query(
-            "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
-            [row.customer_id]
-          );
-          if (cust) {
-            // Putus PPPoE di MikroTik (selalu, tidak dibatasi)
-            if (cust.pppoe_username && cust.r_ip) {
-              mikrotikHelper.disablePPPoESecret(
-                { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port },
-                cust.pppoe_username
-              ).catch(() => {});
-            }
-            // Kirim WA hanya jika fitur aktif dan belum mencapai batas
-            if (waNotifOn && sentCount < waLimit) {
-              await notifyIsolation(pool, cust);
-              sentCount++;
-              await new Promise(r => setTimeout(r, waDelay));
-            }
+          // Kirim WA hanya jika fitur aktif dan belum mencapai batas
+          if (waNotifOn && sentCount < waLimit) {
+            await notifyIsolation(pool, cust);
+            sentCount++;
+            await new Promise(r => setTimeout(r, waDelay));
           }
         }
       }
@@ -1729,22 +1808,26 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       console.log(`[CRON] Auto-isolir done. ${isolatedCount} customers isolated, ${waInfo}.`);
     } catch (e) {
       console.error('[CRON] Auto-isolir error:', e.message);
+    } finally {
+      await releaseCronLock('auto-isolir');
     }
   });
 
 
-  // Daily at 8 AM: send WA reminder for invoices due in 3 days
+  // Daily at 8 AM: send WA reminder for invoices due in N days (reminder_days_before)
   cron.schedule('0 8 * * *', async () => {
+    if (!(await claimCronLock('reminder', 30))) return;
     try {
-      console.log('[CRON] Sending payment reminders...');
+      const { getSettings } = require('./helpers/notification');
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_reminder', 'reminder_days_before']);
+      const daysBefore = Math.min(Math.max(parseInt(s.reminder_days_before) || 3, 1), 7);
+      console.log(`[CRON] Sending payment reminders... (H-${daysBefore})`);
       const [upcoming] = await pool.query(
         `SELECT i.*, c.name, c.phone FROM invoices i
          JOIN customers c ON i.customer_id = c.id
-         WHERE i.status = 'unpaid' AND i.due_date = DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+         WHERE i.status = 'unpaid' AND i.due_date = DATE_ADD(CURDATE(), INTERVAL ${daysBefore} DAY)
          AND c.phone IS NOT NULL AND c.phone != ''`
       );
-      const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_reminder']);
       const waLimit   = parseInt(s.wa_limit) || 50;
       const waDelay   = (parseInt(s.wa_delay) || 5) * 1000;
       const waNotifOn = s.wa_notif_reminder !== '0';
@@ -1764,11 +1847,17 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       }
     } catch (e) {
       console.error('[CRON] Reminder error:', e.message);
+    } finally {
+      await releaseCronLock('reminder');
     }
   });
 
   // Monthly on 1st: generate invoices for all active customers + send WA
   cron.schedule('0 6 1 * *', async () => {
+    if (!(await claimCronLock('invoice-gen', 120))) {
+      console.log('[CRON] invoice-gen dipegang instance lain, skip.');
+      return;
+    }
     try {
       console.log('[CRON] Generating monthly invoices...');
       const [customers] = await pool.query(
@@ -1786,7 +1875,11 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       let sentCount = 0;
 
       const { getSettings } = require('./helpers/notification');
-      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_invoice']);
+      const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_invoice', 'auto_billing_enabled']);
+      if (s.auto_billing_enabled === '0') {
+        console.log('[CRON] Auto-billing dinonaktifkan dari pengaturan, skip generate invoice.');
+        return;
+      }
       const waLimit   = parseInt(s.wa_limit) || 50;
       const waDelay   = (parseInt(s.wa_delay) || 5) * 1000;
       const waNotifOn = s.wa_notif_invoice !== '0';
@@ -1818,6 +1911,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       console.log(`[CRON] Monthly invoices: ${created} created, ${skipped} skipped, ${waInfo}.`);
     } catch (e) {
       console.error('[CRON] Invoice generation error:', e.message);
+    } finally {
+      await releaseCronLock('invoice-gen');
     }
   });
 
@@ -1825,8 +1920,8 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // CRON: Auto Sync OLT — semua OLT aktif setiap 5 menit
   // ═══════════════════════════════════════════════════════════════
 
-  // State anti-spam notifikasi OLT (reset saat server restart)
-  const oltOfflineAlertState = {}; // { oltId: 'ok'|'alert', globalState: 'ok'|'alert' }
+  // Catatan: state anti-spam OLT alert sekarang di DB (olt_alert_state),
+  // didefinisikan bersama cron lock di atas — tahan restart & antar-instance.
 
   // Kirim notifikasi Telegram untuk alert OLT offline
   async function sendOltTelegram(text) {
@@ -1901,7 +1996,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       // — Cek per OLT —
       if (threshold > 0) {
         for (const { olt, total, up, down } of syncResults) {
-          const prev = oltOfflineAlertState[olt.id] || 'ok';
+          const prev = await getOltAlertState('olt_' + olt.id);
           const curr = down >= threshold ? 'alert' : 'ok';
 
           if (curr === 'alert' && prev !== 'alert') {
@@ -1928,7 +2023,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             await sendOltWhatsApp(msg);
             console.log(`[OLT Alert] ✅ "${olt.name}" — pulih (${down} offline < ${threshold}), notifikasi terkirim`);
           }
-          oltOfflineAlertState[olt.id] = curr;
+          await setOltAlertState('olt_' + olt.id, curr);
         }
       }
 
@@ -1937,7 +2032,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
         const totalDown  = syncResults.reduce((s, r) => s + r.down,  0);
         const totalUp    = syncResults.reduce((s, r) => s + r.up,    0);
         const totalAll   = syncResults.reduce((s, r) => s + r.total, 0);
-        const prevGlobal = oltOfflineAlertState._global || 'ok';
+        const prevGlobal = await getOltAlertState('olt_global');
         const currGlobal = totalDown >= thresholdGlobal ? 'alert' : 'ok';
 
         if (currGlobal === 'alert' && prevGlobal !== 'alert') {
@@ -1964,7 +2059,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           await sendOltWhatsApp(msg);
           console.log(`[OLT Alert] ✅ Global — pulih (${totalDown} offline < ${thresholdGlobal}), notifikasi terkirim`);
         }
-        oltOfflineAlertState._global = currGlobal;
+        await setOltAlertState('olt_global', currGlobal);
       }
     } catch (e) {
       console.error('[OLT Alert] Error:', e.message);
@@ -1998,11 +2093,16 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           }
 
           // Ambil status saat ini sebelum di-replace (untuk deteksi perubahan status)
+          // + mapping customer_id (FIX audit 2026-09: mapping manual harus dipertahankan)
           const [prevRows] = await pool.query(
-            'SELECT onu_index, status FROM hioso_onus WHERE olt_id = ?', [olt.id]
+            'SELECT onu_index, status, customer_id FROM hioso_onus WHERE olt_id = ?', [olt.id]
           );
           const prevStatus = {};
-          prevRows.forEach(r => { prevStatus[r.onu_index] = r.status; });
+          const prevCustomerId = {};
+          prevRows.forEach(r => {
+            prevStatus[r.onu_index] = r.status;
+            if (r.customer_id) prevCustomerId[r.onu_index] = r.customer_id;
+          });
 
           // Full replace agar data benar-benar segar
           const activeProfile = detectedProfile || profile || olt.last_profile;
@@ -2025,6 +2125,22 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
             `INSERT INTO hioso_onus (olt_id, onu_index, pon_port, name, sn, mac, tx_power, rx_power, status, last_updated) VALUES ?`,
             [values]
           );
+
+          // FIX (audit 2026-09): pulihkan mapping manual ONU→pelanggan yang sebelumnya
+          // hilang tiap sync, lalu auto-map berdasarkan nama ONU = username PPPoE
+          for (const [idx, cid] of Object.entries(prevCustomerId)) {
+            await pool.query(
+              'UPDATE hioso_onus SET customer_id = ? WHERE olt_id = ? AND onu_index = ?',
+              [cid, olt.id, idx]
+            ).catch(() => {});
+          }
+          await pool.query(
+            `UPDATE hioso_onus u
+             JOIN customers c ON u.name = c.pppoe_username
+             SET u.customer_id = c.id
+             WHERE u.olt_id = ? AND c.pppoe_username IS NOT NULL AND c.pppoe_username != ''`,
+            [olt.id]
+          ).catch(() => {});
 
           // Rekam perubahan status ke history
           // Aturan:
@@ -2091,8 +2207,15 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   };
 
-  // Sync semua OLT setiap 5 menit (paralel)
-  cron.schedule('*/5 * * * *', doOltSync);
+  // Sync semua OLT setiap 5 menit (paralel) — dengan cron lock antar-instance
+  cron.schedule('*/5 * * * *', async () => {
+    if (!(await claimCronLock('olt-sync', 4))) return;
+    try {
+      await doOltSync();
+    } finally {
+      await releaseCronLock('olt-sync');
+    }
+  });
   console.log('[CRON OLT] Auto-sync aktif — semua OLT paralel setiap 5 menit');
 
   // ═══════════════════════════════════════════════════════════════
@@ -2234,7 +2357,14 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   };
 
-  cron.schedule('*/5 * * * *', doAcsSync);
+  cron.schedule('*/5 * * * *', async () => {
+    if (!(await claimCronLock('acs-sync', 4))) return;
+    try {
+      await doAcsSync();
+    } finally {
+      await releaseCronLock('acs-sync');
+    }
+  });
   console.log('[CRON ACS] Auto-sync GenieACS aktif — interval 5 menit');
   // Langsung sync saat server start (tidak tunggu 5 menit pertama)
   setTimeout(doAcsSync, 8000);
@@ -2270,9 +2400,56 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   slaRouter.setPool(pool);
   app.use('/sla', adminOnly, slaRouter);
 
+  // CRON: Notifikasi user kritis (SLA) ke teknisi + admin via Telegram
+  // Konfigurasi di Pengaturan: sla_notify_enabled (aktif/nonaktif) + sla_notify_hour (jam 0-23)
+  // Cron berjalan tiap jam; pengiriman hanya terjadi di jam yang dikonfigurasi & saat aktif
+  cron.schedule('0 * * * *', async () => {
+    try {
+      const { getSettings } = require('./helpers/notification');
+      const s = await getSettings(pool, ['sla_notify_enabled', 'sla_notify_hour']);
+      if (s.sla_notify_enabled !== '1') {
+        console.log('[CRON SLA] Notifikasi kritis dinonaktifkan dari pengaturan, skip.');
+        return;
+      }
+      const configuredHour = parseInt(s.sla_notify_hour);
+      if (isNaN(configuredHour) || configuredHour < 0 || configuredHour > 23) {
+        console.warn('[CRON SLA] sla_notify_hour tidak valid:', s.sla_notify_hour, '— skip.');
+        return;
+      }
+      const nowHour = new Date().getHours();
+      if (nowHour !== configuredHour) return; // bukan jam yang dijadwalkan
+
+      if (!(await claimCronLock('sla-notify-critical', 60))) {
+        console.log('[CRON SLA] Notifikasi kritis dipegang instance lain, skip.');
+        return;
+      }
+      console.log(`[CRON SLA] Mengirim notifikasi user kritis ke teknisi + admin (jam ${configuredHour}:00)...`);
+      const result = await slaRouter.sendCriticalNotifications(pool, {});
+      if (result.skipped) {
+        console.log('[CRON SLA] ' + result.message);
+      } else if (!result.success) {
+        console.warn('[CRON SLA] Gagal: ' + result.message);
+      } else {
+        console.log(`[CRON SLA] Terkirim: ${result.sent} pesan sukses, ${result.failed} gagal — ${result.critical_count} user kritis ke ${result.recipients.map(r => r.username).join(', ')}`);
+      }
+      await releaseCronLock('sla-notify-critical');
+    } catch (e) {
+      console.error('[CRON SLA] Error:', e.message);
+      await releaseCronLock('sla-notify-critical').catch(() => {});
+    }
+  });
+  console.log('[CRON SLA] Notifikasi user kritis terjadwal — jam & aktif/nonaktif dikonfigurasi di Pengaturan');
+
   // Cek setiap menit; router.runChecks() sendiri yang memutuskan apakah
   // sudah waktunya cek tiap target (berdasarkan check_interval per target)
-  cron.schedule('* * * * *', () => ipMonitorRouter.runChecks());
+  cron.schedule('* * * * *', async () => {
+    if (!(await claimCronLock('ip-monitor', 1))) return;
+    try {
+      await ipMonitorRouter.runChecks();
+    } finally {
+      await releaseCronLock('ip-monitor');
+    }
+  });
   console.log('[CRON IP-Monitor] Aktif — cek setiap menit (interval per target)');
 
   // Export CSV - Customers
@@ -2339,6 +2516,51 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     }
   });
 
+  // Xendit QRIS Callback Webhook (no auth - called by Xendit server)
+  // FIX KRITIS (audit 2026-09): route ini SAMA SEKALI belum ada di kode,
+  // padahal didaftarkan di dashboard Xendit & dihalaman settings.
+  // Akibatnya pembayaran QRIS sukses TIDAK pernah menandai invoice paid.
+  app.post('/api/xendit/callback', async (req, res) => {
+    try {
+      const xenditHelper = require('./helpers/xendit');
+      const s = await xenditHelper.getXenditSettings(pool);
+
+      const callbackToken = req.headers['x-callback-token'] || '';
+      if (!xenditHelper.verifyWebhookToken(callbackToken, s.xendit_webhook_token)) {
+        console.warn('[Xendit] Callback ditolak: token tidak valid');
+        return res.status(401).json({ success: false, message: 'Invalid callback token' });
+      }
+
+      const { reference_id, status, amount } = req.body || {};
+      const paidStatuses = ['COMPLETED', 'SUCCEEDED', 'PAID'];
+      if (reference_id && paidStatuses.includes(status)) {
+        // Cari invoice: prioritas kolom payment_ref, fallback invoice_number (data lama)
+        let [[inv]] = await pool.query('SELECT * FROM invoices WHERE payment_ref = ?', [reference_id]);
+        if (!inv) {
+          [[inv]] = await pool.query('SELECT * FROM invoices WHERE invoice_number = ?', [reference_id]);
+        }
+        if (!inv) {
+          console.warn(`[Xendit] Callback untuk ref ${reference_id}: invoice tidak ditemukan`);
+          return res.json({ success: true }); // tetap 200 agar Xendit tidak retry liar
+        }
+        // Verifikasi nominal — tolak jika tidak cocok
+        if (amount != null && parseFloat(amount) !== parseFloat(inv.amount)) {
+          console.error(`[Xendit] NOMINAL TIDAK COCOK ref ${reference_id}: callback Rp ${amount} vs invoice Rp ${inv.amount}`);
+          return res.status(400).json({ success: false, message: 'Amount mismatch' });
+        }
+        const billingHelper = require('./helpers/billing');
+        const result = await billingHelper.markInvoicePaid(pool, inv.id, 'Xendit QRIS');
+        if (result.success) {
+          console.log(`[Xendit] Invoice #${inv.id} lunas via QRIS (ref: ${reference_id})${result.already ? ' — sudah lunas sebelumnya' : ''}`);
+        }
+      }
+      res.json({ success: true });
+    } catch (e) {
+      console.error('[Xendit] Callback error:', e.message);
+      res.status(500).json({ success: false });
+    }
+  });
+
   // Tripay Callback Webhook (no auth - called by Tripay server)
   app.post('/api/tripay/callback', async (req, res) => {
     try {
@@ -2359,55 +2581,12 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       if (status === 'PAID') {
         const invId = merchant_ref.split('-')[1];
         if (invId) {
-          await pool.query("UPDATE invoices SET status='paid', paid_at=NOW(), payment_method='Tripay' WHERE id=?", [invId]);
-          
-          // Auto-unisolate + MikroTik Activation
-          const [[cust]] = await pool.query(`
-            SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port 
-            FROM invoices i 
-            JOIN customers c ON i.customer_id = c.id 
-            LEFT JOIN routers r ON c.router_id = r.id 
-            WHERE i.id = ?`, [invId]);
-
-          if (cust) {
-            await pool.query("UPDATE customers SET status='active' WHERE id=? AND status='isolated'", [cust.id]);
-            
-            // Re-enable on MikroTik
-            if (cust.pppoe_username && cust.r_ip) {
-              await mikrotikHelper.enablePPPoESecret(
-                { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port },
-                cust.pppoe_username
-              ).catch(e => console.error(`[Callback] MikroTik activation failed: ${e.message}`));
-            }
-
-            // --- Rolling Billing Logic ---
-            const today = new Date();
-            const currentDay = today.getDate();
-            let billingMethod = cust.billing_method || 'fixed';
-
-            // Auto-switch to rolling if paid on/after 25th
-            if (currentDay >= 25) {
-              billingMethod = 'rolling';
-              await pool.query("UPDATE customers SET billing_method='rolling' WHERE id=?", [cust.id]);
-            }
-
-            // If rolling, generate next invoice due in 30 days
-            if (billingMethod === 'rolling') {
-              const nextDue = new Date();
-              nextDue.setDate(nextDue.getDate() + 30);
-              const nextDueStr = nextDue.toISOString().split('T')[0];
-              
-              // Check if invoice for next period already exists to avoid duplicates
-              const [[exists]] = await pool.query('SELECT id FROM invoices WHERE customer_id=? AND due_date=?', [cust.id, nextDueStr]);
-              if (!exists) {
-                const [pkg] = await pool.query('SELECT price FROM packages WHERE id=?', [cust.package_id]);
-                const amount = pkg[0] ? pkg[0].price : 0;
-                await pool.query('INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?, ?, ?, ?, ?)', 
-                  [cust.id, cust.package_id, amount, nextDueStr, 'unpaid']);
-              }
-            }
+          // Logika lunas terpusat: invoice paid + unisolate + MikroTik + WA + rolling
+          const billingHelper = require('./helpers/billing');
+          const result = await billingHelper.markInvoicePaid(pool, invId, 'Tripay');
+          if (result.success) {
+            console.log(`[Tripay] Payment received & Service activated for invoice #${invId}${result.already ? ' (sudah lunas)' : ''}`);
           }
-          console.log(`[Tripay] Payment received & Service activated for invoice #${invId}`);
         }
       }
       res.json({ success: true });
@@ -2553,7 +2732,13 @@ const server = app.listen(PORT, () => {
   }
 
   // Start Telegram Bot polling (untuk perintah teknisi: /cek /status /lemah dll)
-  const { startTelegramBot } = require('./helpers/telegram-bot');
-  startTelegramBot(pool).catch(err => console.error('[TG-BOT] Start error:', err));
+  // FIX (audit 2026-09): bisa dimatikan via TG_BOT=0 di .env — mencegah konflik
+  // getUpdates saat lebih dari 1 instance memakai token bot yang sama.
+  if (process.env.TG_BOT !== '0') {
+    const { startTelegramBot } = require('./helpers/telegram-bot');
+    startTelegramBot(pool).catch(err => console.error('[TG-BOT] Start error:', err));
+  } else {
+    console.log('[TG-BOT] Dinonaktifkan via TG_BOT=0 di .env');
+  }
 });
 server.setTimeout(30000); // 30 detik cukup untuk request HTTP normal

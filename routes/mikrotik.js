@@ -192,21 +192,48 @@ router.get('/api/pppoe-active/:routerId', async (req, res) => {
             return res.json({ success: false, message: activeResult.message });
         }
 
-        // Cross-reference dengan DB
+        // Cross-reference dengan DB — by pppoe_username DAN by nama (secret sering berisi koordinat: "Nama@-7.x,111.x")
         const [customers] = await pool.query(
-            'SELECT pppoe_username, name, phone FROM customers WHERE pppoe_username IS NOT NULL'
+            'SELECT id, pppoe_username, name, phone, lat, lng FROM customers WHERE pppoe_username IS NOT NULL OR lat IS NOT NULL'
         );
-        const custMap = new Map();
-        customers.forEach(c => custMap.set(c.pppoe_username, c));
+        const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const byUser = new Map();
+        const byName = new Map();
+        customers.forEach(c => {
+            if (c.pppoe_username) byUser.set(c.pppoe_username, c);
+            const key = norm(c.name);
+            if (key && !byName.has(key)) byName.set(key, c);
+        });
 
         const data = activeResult.data.map(conn => {
-            const cust = custMap.get(conn.name);
+            // Potong suffix koordinat dari nama secret: "Ariyadi@-7.747719,110.954865" -> "Ariyadi"
+            const cleanName = (conn.name || '').replace(/@\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/, '').trim();
+            let cust = byUser.get(conn.name) || byUser.get(cleanName) || null;
+            if (!cust) {
+                const key = norm(cleanName);
+                if (key.length >= 4) {
+                    // Cari pelanggan yang namanya cocok persis atau berawalan sama
+                    const exact = byName.get(key);
+                    if (exact) {
+                        cust = exact;
+                    } else {
+                        const cands = customers.filter(c => {
+                            const k = norm(c.name);
+                            return k.length >= 4 && (k.startsWith(key) || key.startsWith(k));
+                        });
+                        if (cands.length === 1) cust = cands[0];
+                    }
+                }
+            }
             return {
                 ...conn,
                 routerName:    routerData.name,
                 routerId:      routerData.id,
                 customerName:  cust ? cust.name  : null,
-                customerPhone: cust ? cust.phone : null
+                customerPhone: cust ? cust.phone : null,
+                customerId:    cust ? cust.id    : null,
+                customerLat:   cust && cust.lat ? parseFloat(cust.lat) : null,
+                customerLng:   cust && cust.lng ? parseFloat(cust.lng) : null
             };
         });
 

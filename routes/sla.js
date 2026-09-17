@@ -32,6 +32,143 @@ function calcUptime(events, periodStart, periodEnd, initialStatus) {
     return { uptime: parseFloat(uptime.toFixed(2)), downMs };
 }
 
+// ── Helper: komputasi SLA (dipakai oleh /api/summary dan /api/notify-critical) ──
+async function computeSla(pool, { period, olt_id, cluster, search }) {
+    // Tentukan rentang periode
+    let periodStart, periodEnd;
+    if (period && /^\d{4}-\d{2}$/.test(period)) {
+        const [y, m] = period.split('-').map(Number);
+        periodStart  = new Date(y, m - 1, 1, 0, 0, 0).getTime();
+        periodEnd    = new Date(y, m,     0, 23, 59, 59).getTime(); // hari terakhir bulan
+    } else {
+        // Default: bulan ini
+        const now   = new Date();
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).getTime();
+        periodEnd   = now.getTime();
+    }
+
+    const pStart = new Date(periodStart);
+    const pEnd   = new Date(periodEnd);
+
+    // Step 1: Ambil ONU unik dari history — JOIN pakai CONVERT agar collation seragam
+    let onuQuery = `
+            SELECT DISTINCT
+                   h.olt_id, h.onu_index, h.onu_name, h.pon_port,
+                   o.name AS olt_name,
+                   u.customer_id,
+                   u.rx_power, u.tx_power
+            FROM onu_status_history h
+            LEFT JOIN hioso_olts o ON o.id = h.olt_id
+            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id
+                   AND CONVERT(u.onu_index USING utf8mb4) = CONVERT(h.onu_index USING utf8mb4)
+            WHERE h.changed_at BETWEEN ? AND ?
+        `;
+    const params = [pStart, pEnd];
+
+    if (olt_id) { onuQuery += ' AND h.olt_id = ?'; params.push(parseInt(olt_id)); }
+    if (search)  { onuQuery += ' AND CONVERT(h.onu_name USING utf8mb4) LIKE ?'; params.push(`%${search}%`); }
+
+    const [onuList] = await pool.query(onuQuery, params);
+
+    // Step 2: Ambil semua pelanggan sekali — lakukan matching di JavaScript (tidak di SQL)
+    const [allCustomers] = await pool.query(
+        'SELECT id, name, phone, pppoe_username FROM customers'
+    );
+    // Buat map: customer_id → customer, dan pppoe_username (lowercase) → customer
+    const custById   = {};
+    const custByUser = {};
+    allCustomers.forEach(c => {
+        custById[c.id] = c;
+        if (c.pppoe_username) custByUser[c.pppoe_username.toLowerCase()] = c;
+    });
+
+    // Step 3: Enrichment — tambahkan info customer ke setiap ONU via JS matching
+    onuList.forEach(onu => {
+        let cust = null;
+        if (onu.customer_id) {
+            cust = custById[onu.customer_id] || null;
+        }
+        if (!cust && onu.onu_name) {
+            cust = custByUser[onu.onu_name.toLowerCase()] || null;
+        }
+        onu.customer_name  = cust ? cust.name  : null;
+        onu.customer_phone = cust ? cust.phone : null;
+        onu.pppoe_username = cust ? cust.pppoe_username : null;
+    });
+
+    // Filter search juga ke nama customer jika ada
+    const filteredList = search
+        ? onuList.filter(onu =>
+            (onu.onu_name  && onu.onu_name.toLowerCase().includes(search.toLowerCase())) ||
+            (onu.customer_name && onu.customer_name.toLowerCase().includes(search.toLowerCase()))
+          )
+        : onuList;
+
+    // Untuk setiap ONU, hitung uptime
+    const results = [];
+    for (const onu of filteredList) {
+        // Status sebelum periode dimulai (untuk tahu state awal)
+        const [[lastBefore]] = await pool.query(`
+                SELECT status FROM onu_status_history
+                WHERE olt_id = ? AND onu_index = ? AND changed_at < ?
+                ORDER BY changed_at DESC LIMIT 1
+            `, [onu.olt_id, onu.onu_index, pStart]);
+
+        // Semua event dalam periode
+        const [events] = await pool.query(`
+                SELECT status, changed_at FROM onu_status_history
+                WHERE olt_id = ? AND onu_index = ?
+                  AND changed_at BETWEEN ? AND ?
+                ORDER BY changed_at ASC
+            `, [onu.olt_id, onu.onu_index, pStart, pEnd]);
+
+        const initialStatus = lastBefore ? lastBefore.status : 'Up';
+        const { uptime, downMs } = calcUptime(events, periodStart, periodEnd, initialStatus);
+        const downHours = msToHours(downMs);
+        const cl = clusterLabel(uptime);
+
+        // Filter cluster
+        if (cluster && cl.key !== cluster) continue;
+
+        // Cari waktu down terakhir
+        const lastDownEv = events.slice().reverse().find(e => e.status === 'Down');
+        const lastDown   = lastDownEv ? lastDownEv.changed_at : null;
+
+        results.push({
+            olt_id:          onu.olt_id,
+            olt_name:        onu.olt_name,
+            onu_index:       onu.onu_index,
+            onu_name:        onu.onu_name,
+            pon_port:        onu.pon_port,
+            customer_id:     onu.customer_id,
+            customer_name:   onu.customer_name,
+            customer_phone:  onu.customer_phone,
+            pppoe_username:  onu.pppoe_username,
+            rx_power:        onu.rx_power,
+            tx_power:        onu.tx_power,
+            uptime,
+            down_hours:      downHours,
+            incident_count:  events.filter(e => e.status === 'Down').length,
+            last_down:       lastDown,
+            cluster:         cl
+        });
+    }
+
+    // Urutkan: uptime terendah dulu
+    results.sort((a, b) => a.uptime - b.uptime);
+
+    // Hitung statistik cluster
+    const stats = {
+        critical: results.filter(r => r.cluster.key === 'critical').length,
+        bad:      results.filter(r => r.cluster.key === 'bad').length,
+        warn:     results.filter(r => r.cluster.key === 'warn').length,
+        good:     results.filter(r => r.cluster.key === 'good').length,
+        total:    results.length
+    };
+
+    return { results, stats, period: { start: pStart, end: pEnd } };
+}
+
 function msToHours(ms) {
     return parseFloat((ms / 3600000).toFixed(1));
 }
@@ -58,145 +195,97 @@ router.get('/', async (req, res) => {
 router.get('/api/summary', async (req, res) => {
     try {
         const { period, olt_id, cluster, search } = req.query;
-
-        // Tentukan rentang periode
-        let periodStart, periodEnd;
-        if (period && /^\d{4}-\d{2}$/.test(period)) {
-            const [y, m] = period.split('-').map(Number);
-            periodStart  = new Date(y, m - 1, 1, 0, 0, 0).getTime();
-            periodEnd    = new Date(y, m,     0, 23, 59, 59).getTime(); // hari terakhir bulan
-        } else {
-            // Default: bulan ini
-            const now   = new Date();
-            periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).getTime();
-            periodEnd   = now.getTime();
-        }
-
-        const pStart = new Date(periodStart);
-        const pEnd   = new Date(periodEnd);
-
-        // Step 1: Ambil ONU unik dari history — JOIN pakai CONVERT agar collation seragam
-        let onuQuery = `
-            SELECT DISTINCT
-                   h.olt_id, h.onu_index, h.onu_name, h.pon_port,
-                   o.name AS olt_name,
-                   u.customer_id,
-                   u.rx_power, u.tx_power
-            FROM onu_status_history h
-            LEFT JOIN hioso_olts o ON o.id = h.olt_id
-            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id
-                   AND CONVERT(u.onu_index USING utf8mb4) = CONVERT(h.onu_index USING utf8mb4)
-            WHERE h.changed_at BETWEEN ? AND ?
-        `;
-        const params = [pStart, pEnd];
-
-        if (olt_id) { onuQuery += ' AND h.olt_id = ?'; params.push(parseInt(olt_id)); }
-        if (search)  { onuQuery += ' AND CONVERT(h.onu_name USING utf8mb4) LIKE ?'; params.push(`%${search}%`); }
-
-        const [onuList] = await pool.query(onuQuery, params);
-
-        // Step 2: Ambil semua pelanggan sekali — lakukan matching di JavaScript (tidak di SQL)
-        const [allCustomers] = await pool.query(
-            'SELECT id, name, phone, pppoe_username FROM customers'
-        );
-        // Buat map: customer_id → customer, dan pppoe_username (lowercase) → customer
-        const custById   = {};
-        const custByUser = {};
-        allCustomers.forEach(c => {
-            custById[c.id] = c;
-            if (c.pppoe_username) custByUser[c.pppoe_username.toLowerCase()] = c;
-        });
-
-        // Step 3: Enrichment — tambahkan info customer ke setiap ONU via JS matching
-        onuList.forEach(onu => {
-            let cust = null;
-            if (onu.customer_id) {
-                cust = custById[onu.customer_id] || null;
-            }
-            if (!cust && onu.onu_name) {
-                cust = custByUser[onu.onu_name.toLowerCase()] || null;
-            }
-            onu.customer_name  = cust ? cust.name  : null;
-            onu.customer_phone = cust ? cust.phone : null;
-            onu.pppoe_username = cust ? cust.pppoe_username : null;
-        });
-
-        // Filter search juga ke nama customer jika ada
-        const filteredList = search
-            ? onuList.filter(onu =>
-                (onu.onu_name  && onu.onu_name.toLowerCase().includes(search.toLowerCase())) ||
-                (onu.customer_name && onu.customer_name.toLowerCase().includes(search.toLowerCase()))
-              )
-            : onuList;
-
-        // Untuk setiap ONU, hitung uptime
-        const results = [];
-        for (const onu of filteredList) {
-            // Status sebelum periode dimulai (untuk tahu state awal)
-            const [[lastBefore]] = await pool.query(`
-                SELECT status FROM onu_status_history
-                WHERE olt_id = ? AND onu_index = ? AND changed_at < ?
-                ORDER BY changed_at DESC LIMIT 1
-            `, [onu.olt_id, onu.onu_index, pStart]);
-
-            // Semua event dalam periode
-            const [events] = await pool.query(`
-                SELECT status, changed_at FROM onu_status_history
-                WHERE olt_id = ? AND onu_index = ?
-                  AND changed_at BETWEEN ? AND ?
-                ORDER BY changed_at ASC
-            `, [onu.olt_id, onu.onu_index, pStart, pEnd]);
-
-            const initialStatus = lastBefore ? lastBefore.status : 'Up';
-            const { uptime, downMs } = calcUptime(events, periodStart, periodEnd, initialStatus);
-            const downHours = msToHours(downMs);
-            const cl = clusterLabel(uptime);
-
-            // Filter cluster
-            if (cluster && cl.key !== cluster) continue;
-
-            // Cari waktu down terakhir
-            const lastDownEv = events.slice().reverse().find(e => e.status === 'Down');
-            const lastDown   = lastDownEv ? lastDownEv.changed_at : null;
-
-            results.push({
-                olt_id:          onu.olt_id,
-                olt_name:        onu.olt_name,
-                onu_index:       onu.onu_index,
-                onu_name:        onu.onu_name,
-                pon_port:        onu.pon_port,
-                customer_id:     onu.customer_id,
-                customer_name:   onu.customer_name,
-                customer_phone:  onu.customer_phone,
-                pppoe_username:  onu.pppoe_username,
-                rx_power:        onu.rx_power,
-                tx_power:        onu.tx_power,
-                uptime,
-                down_hours:      downHours,
-                incident_count:  events.filter(e => e.status === 'Down').length,
-                last_down:       lastDown,
-                cluster:         cl
-            });
-        }
-
-        // Urutkan: uptime terendah dulu
-        results.sort((a, b) => a.uptime - b.uptime);
-
-        // Hitung statistik cluster
-        const stats = {
-            critical: results.filter(r => r.cluster.key === 'critical').length,
-            bad:      results.filter(r => r.cluster.key === 'bad').length,
-            warn:     results.filter(r => r.cluster.key === 'warn').length,
-            good:     results.filter(r => r.cluster.key === 'good').length,
-            total:    results.length
-        };
-
-        res.json({ success: true, data: results, stats, period: { start: pStart, end: pEnd } });
+        const { results, stats, period: per } = await computeSla(pool, { period, olt_id, cluster, search });
+        res.json({ success: true, data: results, stats, period: per });
     } catch (e) {
         console.error('[SLA API]', e.message);
         res.status(500).json({ success: false, message: e.message });
     }
 });
+
+// ── Helper: kirim notifikasi user kritis ke teknisi + admin via Telegram ──
+// Dipakai oleh endpoint POST /api/notify-critical dan cron terjadwal (server.js)
+async function sendCriticalNotifications(dbPool, { period, olt_id } = {}) {
+    const { results, period: per } = await computeSla(dbPool, { period, olt_id, cluster: 'critical' });
+    const critical = results;
+
+    if (critical.length === 0) {
+        return { success: true, sent: 0, failed: 0, skipped: true, critical_count: 0, recipients: [], message: 'Tidak ada user kritis pada periode ini — notifikasi tidak dikirim' };
+    }
+
+    // Penerima: SEMUA teknisi DAN admin yang punya telegram_id
+    const [recipients] = await dbPool.query(
+        "SELECT id, username, role, telegram_id FROM users WHERE role IN ('technician','admin') AND telegram_id IS NOT NULL AND telegram_id != ''"
+    );
+    if (recipients.length === 0) {
+        return { success: false, sent: 0, failed: 0, skipped: false, critical_count: critical.length, recipients: [], message: 'Tidak ada teknisi/admin dengan Telegram ID. Isi kolom telegram_id di data user terlebih dahulu.' };
+    }
+
+    // Susun pesan — batasi 15 user per pesan (batas Telegram 4096 char)
+    const MAX_PER_MSG = 15;
+    const monthLabel = per.start.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+    const esc = s => String(s ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    const buildMsg = (list, offset) => {
+        let msg = `🔴 <b>PERHATIAN — ${critical.length} USER KRITIS (SLA)</b>\n` +
+                  `📅 Periode: ${monthLabel}\n` +
+                  `⚠️ Uptime di bawah 90% — mohon segera ditindaklanjuti\n\n`;
+        list.forEach((r, i) => {
+            const nama = r.customer_name || r.onu_name || 'Tanpa nama';
+            msg += `<b>${offset + i + 1}. ${esc(nama)}</b>\n` +
+                   `   ONU: ${esc(r.onu_name)} | OLT: ${esc(r.olt_name)}\n` +
+                   `   Uptime: ${r.uptime}% | Down: ${r.down_hours} jam | Insiden: ${r.incident_count}x\n`;
+            if (r.last_down) {
+                msg += `   Terakhir down: ${new Date(r.last_down).toLocaleString('id-ID', { dateStyle:'medium', timeStyle:'short' })}\n`;
+            }
+            msg += '\n';
+        });
+        if (critical.length > offset + list.length) {
+            msg += `<i>... dan ${critical.length - offset - list.length} user kritis lainnya (cek dashboard SLA)</i>\n`;
+        }
+        return msg;
+    };
+
+    const { sendTelegramToUser } = require('../helpers/notification');
+    let sent = 0, failed = 0;
+    const errors = [];
+
+    for (const rcpt of recipients) {
+        try {
+            // Kirim per-batch 15 user agar tidak melewati batas pesan
+            for (let i = 0; i < critical.length; i += MAX_PER_MSG) {
+                const batch = critical.slice(i, i + MAX_PER_MSG);
+                const r = await sendTelegramToUser(dbPool, rcpt.telegram_id, buildMsg(batch, i));
+                if (r && r.success) sent++; else { failed++; errors.push(`${rcpt.username}: ${r && r.message ? r.message : 'unknown'}`); }
+            }
+        } catch (e) {
+            failed++;
+            errors.push(`${rcpt.username}: ${e.message}`);
+        }
+    }
+
+    console.log(`[SLA] Notifikasi kritis dikirim: ${sent} sukses, ${failed} gagal (${critical.length} user kritis, ${recipients.length} penerima: ${recipients.map(r => r.username).join(', ')})`);
+    return {
+        success: true, sent, failed, skipped: false,
+        critical_count: critical.length,
+        recipients: recipients.map(r => ({ username: r.username, role: r.role })),
+        errors: errors.slice(0, 5)
+    };
+}
+
+// ── POST /sla/api/notify-critical ──
+// Kirim notifikasi Telegram ke teknisi + admin berisi daftar user kritis (uptime < 90%)
+router.post('/api/notify-critical', async (req, res) => {
+    try {
+        const { period, olt_id } = req.body || {};
+        const result = await sendCriticalNotifications(pool, { period, olt_id });
+        res.json(result);
+    } catch (e) {
+        console.error('[SLA Notify]', e.message);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 
 // ── GET /sla/api/timeline — Detail down events suatu ONU ──
 router.get('/api/timeline', async (req, res) => {
@@ -303,3 +392,4 @@ router.get('/api/customers-search', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.sendCriticalNotifications = sendCriticalNotifications;

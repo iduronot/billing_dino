@@ -134,24 +134,28 @@ router.post('/api/generate-bulk', async (req, res) => {
         const month = new Date().getMonth() + 1;
         const year = new Date().getFullYear();
         const { getSettings } = require('../helpers/notification');
-        const s = await getSettings(pool, ['wa_delay', 'wa_limit']);
+        const s = await getSettings(pool, ['wa_delay', 'wa_limit', 'wa_notif_invoice']);
         const waLimit = parseInt(s.wa_limit) || 50;
         const waDelay = (parseInt(s.wa_delay) || 5) * 1000;
+        const waNotifOn = s.wa_notif_invoice !== '0';
         let sentCount = 0;
 
         for (const c of customers) {
-            if (sentCount >= waLimit) break;
             const [[exists]] = await pool.query('SELECT id FROM invoices WHERE customer_id=? AND MONTH(due_date)=? AND YEAR(due_date)=?', [c.id, month, year]);
             if (!exists) {
                 const day = c.isolation_date || 20;
                 const dueDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                 await pool.query('INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?, ?, ?, ?, ?)', [c.id, c.package_id, c.package_price || 0, dueDate, 'unpaid']);
                 created++;
-                
-                // Send WA notification (sequential with delay)
-                await notifyInvoiceCreated(pool, c, c.package_price || 0, dueDate);
-                sentCount++;
-                if (sentCount < customers.length) await new Promise(r => setTimeout(r, waDelay));
+
+                // Kirim WA hanya jika fitur aktif & belum mencapai batas.
+                // FIX (audit 2026-09): invoice TETAP dibuat untuk semua pelanggan —
+                // batas wa_limit hanya membatasi pengiriman WA, bukan pembuatan invoice.
+                if (waNotifOn && sentCount < waLimit) {
+                    await notifyInvoiceCreated(pool, c, c.package_price || 0, dueDate);
+                    sentCount++;
+                    await new Promise(r => setTimeout(r, waDelay));
+                }
             }
         }
         res.json({ success: true, message: `${created} invoice berhasil di-generate dan notifikasi WA dikirim dengan jeda.` });
@@ -160,59 +164,14 @@ router.post('/api/generate-bulk', async (req, res) => {
     }
 });
 
-// POST - Pay invoice (also unisolate customer + MikroTik + WA)
+// POST - Pay invoice (juga unisolate + MikroTik + WA + rolling billing)
+// Refactor: logika inti dipusatkan di helpers/billing.js markInvoicePaid()
 router.post('/api/:id/pay', async (req, res) => {
     try {
-        const [[inv]] = await pool.query('SELECT * FROM invoices WHERE id=?', [req.params.id]);
-        if (!inv) return res.status(404).json({ success: false, message: 'Invoice tidak ditemukan' });
-
-        await pool.query("UPDATE invoices SET status='paid', paid_at=NOW(), payment_method=? WHERE id=?", [req.body.payment_method || 'Manual', req.params.id]);
-
-        // Auto-unisolate customer + enable on MikroTik
-        const [[cust]] = await pool.query(
-            "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
-            [inv.customer_id]
-        );
-        if (cust && cust.status === 'isolated') {
-            await pool.query("UPDATE customers SET status='active' WHERE id=?", [inv.customer_id]);
-            if (cust.pppoe_username && cust.r_ip) {
-                const routerData = { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port };
-                await mikrotik.enablePPPoESecret(routerData, cust.pppoe_username);
-            }
-        }
-
-        // Send WA notification
-        if (cust) {
-            await notifyPaymentReceived(pool, cust, inv.amount);
-
-            // --- Rolling Billing Logic ---
-            const today = new Date();
-            const currentDay = today.getDate();
-            let billingMethod = cust.billing_method || 'fixed';
-
-            // Auto-switch to rolling if paid on/after 25th
-            if (currentDay >= 25) {
-                billingMethod = 'rolling';
-                await pool.query("UPDATE customers SET billing_method='rolling' WHERE id=?", [cust.id]);
-            }
-
-            // If rolling, generate next invoice due in 30 days
-            if (billingMethod === 'rolling') {
-                const nextDue = new Date();
-                nextDue.setDate(nextDue.getDate() + 30);
-                const nextDueStr = nextDue.toISOString().split('T')[0];
-                
-                const [[exists]] = await pool.query('SELECT id FROM invoices WHERE customer_id=? AND due_date=?', [cust.id, nextDueStr]);
-                if (!exists) {
-                    const [pkg] = await pool.query('SELECT price FROM packages WHERE id=?', [cust.package_id]);
-                    const amount = pkg[0] ? pkg[0].price : 0;
-                    await pool.query('INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?, ?, ?, ?, ?)', 
-                        [cust.id, cust.package_id, amount, nextDueStr, 'unpaid']);
-                }
-            }
-        }
-
-        res.json({ success: true, message: 'Invoice lunas & pelanggan diaktifkan' });
+        const billingHelper = require('../helpers/billing');
+        const result = await billingHelper.markInvoicePaid(pool, req.params.id, req.body.payment_method || 'Manual');
+        if (!result.success) return res.status(404).json(result);
+        res.json({ success: true, message: result.already ? 'Invoice sudah lunas sebelumnya' : 'Invoice lunas & pelanggan diaktifkan' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -232,18 +191,11 @@ router.post('/api/:id/isolate', async (req, res) => {
         if (!cust) return res.status(404).json({ success: false, message: 'Pelanggan tidak ditemukan' });
         if (cust.status === 'isolated') return res.json({ success: false, message: 'Pelanggan sudah dalam status isolir' });
 
-        // Set status isolated
-        await pool.query("UPDATE customers SET status='isolated' WHERE id=? AND status='active'", [inv.customer_id]);
+        // Isolir inti (UPDATE + disable PPPoE) via helper terpusat
+        const billingHelper = require('../helpers/billing');
+        const { mikrotikOk } = await billingHelper.isolateCustomer(pool, cust);
 
-        // Disable PPPoE di MikroTik
-        let mtMsg = '';
-        if (cust.pppoe_username && cust.r_ip) {
-            const routerData = { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port };
-            const mtResult = await mikrotik.disablePPPoESecret(routerData, cust.pppoe_username).catch(e => ({ success: false, message: e.message }));
-            mtMsg = mtResult.success ? ' & PPPoE dinonaktifkan di MikroTik' : ' (MikroTik gagal: ' + mtResult.message + ')';
-        } else {
-            mtMsg = ' (PPPoE/router belum dikonfigurasi)';
-        }
+        let mtMsg = !cust.pppoe_username ? ' (PPPoE belum dikonfigurasi)' : !cust.r_ip ? ' (router belum dikonfigurasi)' : mikrotikOk ? ' & PPPoE dinonaktifkan di MikroTik' : ' (MikroTik gagal dihubungi)';
 
         // Kirim notifikasi WA isolasi
         const { notifyIsolation } = require('../helpers/notification');
@@ -359,21 +311,20 @@ router.post('/api/run-isolir', async (req, res) => {
         let sentCount = 0;
         let count = 0;
 
+        const billingHelper = require('../helpers/billing');
         for (const row of overdueInvoices) {
-            if (sentCount >= waLimit) break;
-            const result = await pool.query("UPDATE customers SET status='isolated' WHERE id=? AND status='active'", [row.customer_id]);
-            if (result[0].affectedRows > 0) {
+            const [[cust]] = await pool.query(
+                "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
+                [row.customer_id]
+            );
+            if (!cust) continue;
+
+            // Isolir SELALU dijalankan untuk semua overdue — batas wa_limit
+            // hanya membatasi pengiriman WA (FIX audit 2026-09)
+            const { changed } = await billingHelper.isolateCustomer(pool, cust);
+            if (changed) {
                 count++;
-                // Disable on MikroTik + send WA
-                const [[cust]] = await pool.query(
-                    "SELECT c.*, r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port FROM customers c LEFT JOIN routers r ON c.router_id = r.id WHERE c.id=?",
-                    [row.customer_id]
-                );
-                if (cust) {
-                    if (cust.pppoe_username && cust.r_ip) {
-                        const routerData = { ip_address: cust.r_ip, username: cust.r_user, password: cust.r_pass, port: cust.r_port };
-                        mikrotik.disablePPPoESecret(routerData, cust.pppoe_username).catch(() => {});
-                    }
+                if (sentCount < waLimit) {
                     await notifyIsolation(pool, cust);
                     sentCount++;
                     await new Promise(r => setTimeout(r, waDelay));

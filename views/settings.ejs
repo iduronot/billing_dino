@@ -194,6 +194,34 @@
                 </div>
                 <button class="btn btn-primary" onclick="save(['attendance_radius','attendance_late_time'])">💾 Simpan Pengaturan Presensi</button>
             </div>
+
+            <!-- Setting Notifikasi SLA -->
+            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <h2 class="section-title">🔴 Notifikasi User Kritis (SLA)</h2>
+                <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+                    Kirim daftar user kritis (uptime &lt; 90%) ke semua teknisi &amp; admin via Telegram secara otomatis terjadwal.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Status Notifikasi</label>
+                        <select id="sla_notify_enabled" class="form-control">
+                            <option value="1" <%= (settings.sla_notify_enabled||'1')==='1'?'selected':'' %>>✅ Aktif — kirim otomatis setiap hari</option>
+                            <option value="0" <%= (settings.sla_notify_enabled||'1')==='0'?'selected':'' %>>❌ Nonaktif — jangan kirim otomatis</option>
+                        </select>
+                        <p style="font-size:11px; color:var(--muted); margin-top:4px;">Tombol manual di halaman SLA tetap bisa dipakai walau nonaktif</p>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Jam Pengiriman (WIB)</label>
+                        <select id="sla_notify_hour" class="form-control">
+                            <% for (let h = 0; h < 24; h++) { %>
+                            <option value="<%= h %>" <%= parseInt(settings.sla_notify_hour||'15')===h?'selected':'' %>><%= String(h).padStart(2,'0') %>:00</option>
+                            <% } %>
+                        </select>
+                        <p style="font-size:11px; color:var(--muted); margin-top:4px;">Notifikasi dikirim setiap hari di jam ini</p>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="save(['sla_notify_enabled','sla_notify_hour'])">💾 Simpan Pengaturan Notifikasi SLA</button>
+            </div>
             </div>
         </div>
 

@@ -148,6 +148,9 @@
         <button class="tool-btn" onclick="resetMode()" style="margin-top:10px; opacity:0.7">
             <i class="fas fa-mouse-pointer"></i> <span><%= t.explore_mode %></span>
         </button>
+        <button class="tool-btn" onclick="clearRoute()" style="opacity:0.7">
+            <i class="fas fa-eraser"></i> <span><%= t.clear_route || 'Hapus Rute' %></span>
+        </button>
         <button class="tool-btn" onclick="locateUser()" style="opacity:0.7">
             <i class="fas fa-location-arrow"></i> <span><%= t.my_location %></span>
         </button>
@@ -195,12 +198,14 @@
     const initialObjects = <%- JSON.stringify(objects) %>;
     const initialCables = <%- JSON.stringify(cables) %>;
     const t = <%- JSON.stringify(t) %>;
+    const HQ = { lat: <%- hqLat ? Number(hqLat) : 'null' %>, lng: <%- hqLng ? Number(hqLng) : 'null' %> };
 
-    const map = L.map('map').setView([-6.200000, 106.816666], 13);
+    const map = L.map('map').setView(HQ.lat && HQ.lng ? [HQ.lat, HQ.lng] : [-6.200000, 106.816666], 14);
     
-    // Premium Dark Map
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+    // OpenStreetMap (tanpa watermark)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
     // Feature Groups
@@ -209,6 +214,77 @@
     const cableGroup = L.layerGroup().addTo(map);
     const dropCableGroup = L.layerGroup().addTo(map);
     const drawControlGroup = new L.FeatureGroup().addTo(map);
+    const routeGroup = L.layerGroup().addTo(map); // Rute dari kantor pusat
+
+    // Marker Kantor Pusat
+    let hqMarker = null;
+    if (HQ.lat && HQ.lng) {
+        hqMarker = L.marker([HQ.lat, HQ.lng], {
+            icon: L.divIcon({
+                html: '<div style="color:#3b82f6; font-size:24px; filter:drop-shadow(0 0 8px rgba(59,130,246,0.8))"><i class="fas fa-building"></i></div>',
+                className: 'custom-div-icon', iconSize: [28, 28], iconAnchor: [14, 14]
+            })
+        }).addTo(map);
+        hqMarker.bindPopup(`<span class="popup-title"><i class="fas fa-building" style="color:#3b82f6"></i> ${t.hq || 'Kantor Pusat'}</span>`);
+    }
+
+    // Gambar rute dari kantor pusat ke tujuan
+    let routeLine = null;
+    async function showRouteFromHQ(destLat, destLng, destName) {
+        if (!HQ.lat || !HQ.lng) {
+            Swal.fire({ icon: 'warning', title: t.hq_not_set || 'Kantor pusat belum diatur', text: t.hq_not_set_desc || 'Atur koordinat kantor di Pengaturan (map_center_lat / map_center_lng)' });
+            return;
+        }
+        routeGroup.clearLayers();
+        Swal.fire({ title: t.calculating_route || 'Menghitung rute...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+
+        // Coba rute jalan via OSRM (gratis), fallback garis lurus
+        let path = null, viaRoad = false, distanceM = map.distance([HQ.lat, HQ.lng], [destLat, destLng]);
+        try {
+            const resp = await fetch(`https://router.project-osrm.org/route/v1/driving/${HQ.lng},${HQ.lat};${destLng},${destLat}?overview=full&geometries=geojson`, { signal: AbortSignal.timeout(8000) });
+            const data = await resp.json();
+            if (data.code === 'Ok' && data.routes && data.routes.length) {
+                path = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                distanceM = data.routes[0].distance;
+                viaRoad = true;
+            }
+        } catch (_) { /* offline / timeout -> garis lurus */ }
+
+        if (!path) path = [[HQ.lat, HQ.lng], [destLat, destLng]];
+
+        const km = (distanceM / 1000).toFixed(2);
+        routeLine = L.polyline(path, {
+            color: '#3b82f6', weight: 5, opacity: 0.85, dashArray: viaRoad ? null : '8, 8'
+        }).addTo(routeGroup);
+
+        routeLine.bindPopup(`
+            <span class="popup-title"><i class="fas fa-route" style="color:#3b82f6"></i> ${t.route_to || 'Rute ke'} ${destName}</span>
+            <span class="popup-desc">
+                ${t.distance || 'Jarak'}: <b style="color:#3b82f6">${km} km</b> ${viaRoad ? '(' + (t.via_road || 'via jalan') + ')' : '(' + (t.straight_line || 'garis lurus') + ')'}<br>
+                ${t.origin || 'Dari'}: ${t.hq || 'Kantor Pusat'}
+            </span>
+        `).openPopup();
+
+        map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+        Swal.close();
+    }
+
+    function clearRoute() {
+        routeGroup.clearLayers();
+        routeLine = null;
+    }
+
+    // Dukungan URL ?route=lat,lng&name=Nama — langsung gambar rute (dipakai dari halaman lain)
+    (function handleRouteParam() {
+        const params = new URLSearchParams(window.location.search);
+        const route = params.get('route');
+        if (!route) return;
+        const parts = route.split(',');
+        const destLat = parseFloat(parts[0]), destLng = parseFloat(parts[1]);
+        if (!isFinite(destLat) || !isFinite(destLng)) return;
+        const destName = params.get('name') || '';
+        setTimeout(() => showRouteFromHQ(destLat, destLng, destName), 800);
+    })();
 
     let selectedCableColor = '#3b82f6';
     let connectSource = null;
@@ -251,11 +327,14 @@
                     color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.9
                 }).addTo(customerGroup);
                 
-                marker.bindPopup(`
+                // Popup dengan kontainer yang diisi ulang saat dibuka (lazy-load detail)
+                const popupId = 'cust-popup-' + c.id;
+                marker.bindPopup(`<div id="${popupId}" style="min-width:230px">
                     <span class="popup-title">${c.name}</span>
-                    <span class="popup-desc">${c.address || '-'}</span><br>
-                    <span class="badge ${c.status === 'active' ? 'badge-active' : 'badge-danger'}" style="margin-top:5px; display:inline-block">${c.status.toUpperCase()}</span>
-                `);
+                    <div class="popup-desc" style="margin-top:6px"><i class="fas fa-spinner fa-spin"></i> ${t.loading || 'Memuat detail...'}</div>
+                </div>`, { maxWidth: 280 });
+
+                marker.on('popupopen', () => loadCustomerDetail(c.id, popupId));
 
                 // Add Drop Cable (ODP to Customer)
                 if(c.odp_lat && c.odp_lng) {
@@ -331,6 +410,55 @@
     }
 
     renderMarkers();
+
+    // Lazy-load detail pelanggan saat popup dibuka
+    async function loadCustomerDetail(id, popupId) {
+        const el = document.getElementById(popupId);
+        if (!el) return;
+        try {
+            const resp = await fetch(`/map/api/customer/${id}`);
+            const res = await resp.json();
+            if (!res.success) throw new Error(res.message || 'Error');
+            const d = res.data;
+
+            const esc = (s) => String(s ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            const isActive = d.status === 'active';
+            const unpaidBadge = d.unpaid_count > 0
+                ? `<span class="badge badge-danger" style="display:inline-block">${t.unpaid || 'Menunggak'}: ${d.unpaid_count} (${formatRupiah(d.unpaid_total)})</span>`
+                : `<span class="badge badge-active" style="display:inline-block">${t.no_unpaid || 'Tidak ada tunggakan'}</span>`;
+
+            el.innerHTML = `
+                <span class="popup-title">${esc(d.name)}</span>
+                <table style="font-size:12px; margin-top:6px; border-collapse:collapse; width:100%">
+                    <tr><td style="color:var(--muted); padding:2px 8px 2px 0; white-space:nowrap">${t.phone || 'Telepon'}</td><td>: ${esc(d.phone)}</td></tr>
+                    <tr><td style="color:var(--muted); padding:2px 8px 2px 0; white-space:nowrap">${t.package_label || 'Paket'}</td><td>: ${esc(d.package_name)}${d.package_price ? ' (' + formatRupiah(d.package_price) + ')' : ''}</td></tr>
+                    <tr><td style="color:var(--muted); padding:2px 8px 2px 0; white-space:nowrap">${t.pppoe_user || 'User PPPoE'}</td><td>: ${esc(d.pppoe_username)}</td></tr>
+                    <tr><td style="color:var(--muted); padding:2px 8px 2px 0; white-space:nowrap; vertical-align:top">${t.address || 'Alamat'}</td><td>: ${esc(d.address)}</td></tr>
+                </table>
+                <div style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center">
+                    <span class="badge ${isActive ? 'badge-active' : 'badge-danger'}" style="display:inline-block">${esc(d.status).toUpperCase()}</span>
+                    ${unpaidBadge}
+                </div>
+                <div style="margin-top:10px; display:flex; gap:8px">
+                    <a href="/customers?search=${encodeURIComponent(d.name)}" target="_blank" style="flex:1; text-align:center; background:var(--primary); color:#fff; border:none; padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; text-decoration:none; display:inline-block">
+                        <i class="fas fa-user"></i> ${t.view_profile || 'Profil'}
+                    </a>
+                    <a href="/billing?search=${encodeURIComponent(d.name)}" target="_blank" style="flex:1; text-align:center; background:rgba(255,255,255,0.08); color:var(--text); border:1px solid var(--border); padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; text-decoration:none; display:inline-block">
+                        <i class="fas fa-file-invoice"></i> ${t.invoices || 'Tagihan'}
+                    </a>
+                </div>
+                <button onclick="showRouteFromHQ(${d.lat}, ${d.lng}, '${String(d.name).replace(/'/g, "\\'")}')" style="width:100%; margin-top:8px; background:rgba(59,130,246,0.15); color:#3b82f6; border:1px solid rgba(59,130,246,0.4); padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px; font-weight:600">
+                    <i class="fas fa-route"></i> ${t.route_from_hq || 'Rute dari Kantor Pusat'}
+                </button>
+            `;
+        } catch (err) {
+            el.innerHTML = `<span class="popup-title">Error</span><span class="popup-desc">${t.failed_to_load || 'Gagal memuat detail'}</span>`;
+        }
+    }
+
+    function formatRupiah(num) {
+        return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+    }
 
     function handleConnectMode(marker) {
         if (!connectSource) {
@@ -534,7 +662,10 @@
             ...initialObjects.map(o => ({ ...o, mapType: o.type.toUpperCase(), group: objectGroup }))
         ];
 
-        const filtered = combined.filter(item => item.name.toLowerCase().includes(query)).slice(0, 10);
+        const filtered = combined.filter(item =>
+            item.name.toLowerCase().includes(query) ||
+            (item.pppoe_username && String(item.pppoe_username).toLowerCase().includes(query))
+        ).slice(0, 10);
         
         if (filtered.length > 0) {
             html = filtered.map(item => `

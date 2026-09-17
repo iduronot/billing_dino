@@ -34,9 +34,15 @@ const proofUpload = multer({
 });
 
 // Middleware for Portal Auth
+// FIX (audit 2026-09): pelanggan yang masih memakai password default '1234'
+// (portal_password belum pernah diganti) WAJIB ganti password lebih dulu.
+const ALLOWED_WHEN_MUST_CHANGE = ['/first-login', '/logout', '/login'];
 const requirePortalAuth = (req, res, next) => {
     if (!req.session.customerId) {
         return res.redirect('/portal/login');
+    }
+    if (req.session.mustChangePw && !ALLOWED_WHEN_MUST_CHANGE.includes(req.path)) {
+        return res.redirect('/portal/first-login');
     }
     next();
 };
@@ -90,12 +96,41 @@ router.post('/login', async (req, res) => {
                 }
                 req.session.customerId = customer.id;
                 req.session.customerName = customer.name;
-                return res.redirect('/portal');
+                // Password masih default ('1234', belum pernah diganti) → wajib ganti dulu
+                req.session.mustChangePw = !customer.portal_password;
+                return res.redirect(req.session.mustChangePw ? '/portal/first-login' : '/portal');
             }
         }
         res.render('portal_login', { error: 'Username atau Password salah' });
     } catch (err) {
         res.render('portal_login', { error: 'Terjadi kesalahan sistem' });
+    }
+});
+
+// GET /portal/first-login — halaman wajib ganti password default (B6)
+router.get('/first-login', (req, res) => {
+    if (!req.session.customerId) return res.redirect('/portal/login');
+    if (!req.session.mustChangePw) return res.redirect('/portal');
+    res.render('portal_first_login', { user: req.session, error: null });
+});
+
+// POST /portal/first-login — simpan password baru
+router.post('/first-login', async (req, res) => {
+    const { new_password, confirm_password } = req.body;
+    if (!req.session.customerId) return res.redirect('/portal/login');
+    try {
+        if (!new_password || new_password.length < 6) {
+            return res.render('portal_first_login', { user: req.session, error: 'Password minimal 6 karakter.' });
+        }
+        if (new_password !== confirm_password) {
+            return res.render('portal_first_login', { user: req.session, error: 'Konfirmasi password tidak sama.' });
+        }
+        const hashed = await bcrypt.hash(new_password, 10);
+        await pool.query('UPDATE customers SET portal_password = ? WHERE id = ?', [hashed, req.session.customerId]);
+        req.session.mustChangePw = false;
+        res.redirect('/portal');
+    } catch (e) {
+        res.render('portal_first_login', { user: req.session, error: 'Terjadi kesalahan: ' + e.message });
     }
 });
 
@@ -173,9 +208,10 @@ router.post('/pay/:invoiceId', requirePortalAuth, async (req, res) => {
         });
 
         if (result.success) {
-            // Simpan referenceId ke invoice agar callback bisa trace
+            // Simpan referenceId ke kolom payment_ref (FIX audit 2026-09:
+            // dulu menimpa invoice_number sehingga nomor invoice tercetak rusak)
             await pool.query(
-                "UPDATE invoices SET invoice_number = ? WHERE id = ?",
+                "UPDATE invoices SET payment_ref = ? WHERE id = ?",
                 [result.data.referenceId, inv.id]
             );
             res.json({ success: true, data: result.data });
@@ -381,9 +417,24 @@ router.post('/wifi', requirePortalAuth, async (req, res) => {
 });
 
 // GET /portal/qr-status/:referenceId — Cek status QR (polling dari frontend)
+// FIX (audit 2026-09): jika status SUCCEEDED/COMPLETED, langsung tandai invoice
+// lunas — jadi pembayaran tetap terproses walau webhook tidak sampai.
 router.get('/qr-status/:referenceId', requirePortalAuth, async (req, res) => {
     try {
         const result = await xendit.getQRCode(pool, req.params.referenceId);
+        if (result.success && result.data && ['SUCCEEDED', 'COMPLETED', 'PAID'].includes(result.data.status)) {
+            const ref = req.params.referenceId;
+            const [[inv]] = await pool.query(
+                'SELECT id, status FROM invoices WHERE payment_ref = ? OR invoice_number = ? LIMIT 1',
+                [ref, ref]
+            );
+            if (inv && inv.status !== 'paid') {
+                const billingHelper = require('../helpers/billing');
+                await billingHelper.markInvoicePaid(pool, inv.id, 'Xendit QRIS')
+                    .then(r => { if (r.success) console.log(`[Xendit] Invoice #${inv.id} lunas via polling QR (ref: ${ref})`); })
+                    .catch(e => console.error('[Xendit] Poll-mark error:', e.message));
+            }
+        }
         res.json(result);
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -410,6 +461,7 @@ router.post('/upload-proof/:invoiceId', requirePortalAuth, proofUpload.single('p
 router.get('/logout', (req, res) => {
     req.session.customerId = null;
     req.session.customerName = null;
+    req.session.mustChangePw = false;
     res.redirect('/portal/login');
 });
 

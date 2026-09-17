@@ -211,16 +211,8 @@ router.post('/:id/isolate', async (req, res) => {
         if (!customer) return res.status(404).json({ success: false, message: 'Customer tidak ditemukan' });
         if (customer.status === 'inactive') return res.status(400).json({ success: false, message: 'Tidak bisa isolir: pelanggan sudah non-aktif' });
 
-        await pool.query("UPDATE customers SET status='isolated' WHERE id=?", [req.params.id]);
-
-        // Disable PPPoE on MikroTik
-        let mikrotikOk = true;
-        if (customer.pppoe_username && customer.r_ip) {
-            const routerData = { ip_address: customer.r_ip, username: customer.r_user, password: customer.r_pass, port: customer.r_port };
-            const result = await mikrotik.disablePPPoESecret(routerData, customer.pppoe_username);
-            mikrotikOk = result.success;
-            if (!result.success) console.log(`[MikroTik] Gagal isolir ${customer.pppoe_username}: ${result.message}`);
-        }
+        const billingHelper = require('../helpers/billing');
+        const { mikrotikOk } = await billingHelper.isolateCustomer(pool, customer);
 
         // Send WA notification (cek toggle setting wa_notif_isolir)
         const [[waNotifRow]] = await pool.query("SELECT setting_value FROM settings WHERE setting_key='wa_notif_isolir'").catch(() => [[null]]);
@@ -299,7 +291,12 @@ router.post('/:id/pay', async (req, res) => {
             return res.json({ success: false, message: 'Pilih minimal 1 bulan' });
         }
         const [[customer]] = await pool.query(
-            `SELECT c.*, p.price as package_price FROM customers c LEFT JOIN packages p ON c.package_id = p.id WHERE c.id = ?`,
+            `SELECT c.*, p.price as package_price,
+                    r.ip_address as r_ip, r.username as r_user, r.password as r_pass, r.port as r_port
+             FROM customers c
+             LEFT JOIN packages p ON c.package_id = p.id
+             LEFT JOIN routers r ON c.router_id = r.id
+             WHERE c.id = ?`,
             [req.params.id]
         );
         if (!customer) return res.json({ success: false, message: 'Pelanggan tidak ditemukan' });
@@ -327,44 +324,12 @@ router.post('/:id/pay', async (req, res) => {
             count++;
         }
 
-        // Unisolate if was isolated + enable on MikroTik
-        if (customer.status === 'isolated') {
-            await pool.query("UPDATE customers SET status='active' WHERE id=?", [req.params.id]);
-            if (customer.pppoe_username) {
-                const [[routerData]] = await pool.query('SELECT * FROM routers WHERE id=?', [customer.router_id]);
-                if (routerData) {
-                    await mikrotik.enablePPPoESecret(routerData, customer.pppoe_username);
-                }
-            }
-        }
-
-        // Send WA notification
+        // Unisolate + enable PPPoE + notif WA + rolling billing (helper terpusat)
+        const billingHelper = require('../helpers/billing');
         if (customer) {
+            await billingHelper.activateAfterPayment(pool, customer);
             await notifyPaymentReceived(pool, customer, totalAmount);
-
-            // --- Rolling Billing Logic ---
-            const today = new Date();
-            const currentDay = today.getDate();
-            let billingMethod = customer.billing_method || 'fixed';
-
-            // Auto-switch to rolling if paid on/after 25th
-            if (currentDay >= 25) {
-                billingMethod = 'rolling';
-                await pool.query("UPDATE customers SET billing_method='rolling' WHERE id=?", [customer.id]);
-            }
-
-            // If rolling, generate next invoice due in 30 days
-            if (billingMethod === 'rolling') {
-                const nextDue = new Date();
-                nextDue.setDate(nextDue.getDate() + 30);
-                const nextDueStr = nextDue.toISOString().split('T')[0];
-                
-                const [[exists]] = await pool.query('SELECT id FROM invoices WHERE customer_id=? AND due_date=?', [customer.id, nextDueStr]);
-                if (!exists) {
-                    await pool.query('INSERT INTO invoices (customer_id, package_id, amount, due_date, status) VALUES (?, ?, ?, ?, ?)', 
-                        [customer.id, customer.package_id, customer.package_price || 0, nextDueStr, 'unpaid']);
-                }
-            }
+            await billingHelper.applyRollingBilling(pool, customer);
         }
 
         res.json({ success: true, message: `Pembayaran ${count} bulan berhasil diproses. Pelanggan diaktifkan kembali.` });

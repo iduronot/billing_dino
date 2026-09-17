@@ -6,6 +6,20 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 ## 🆕 Pembaruan Terbaru
 
+### v2.7 — Peta Interaktif & Notifikasi SLA Kritis (September 2026)
+- 🗺 **Koordinat pelanggan otomatis dari PPPoE MikroTik** — parsing nama secret `Nama@-7.xxx,111.xxx` langsung ke `customers.lat/lng` (700+ pelanggan terpetakan tanpa input manual)
+- 📍 **Popup detail pelanggan di peta** — klik marker → detail lengkap: telepon, paket + harga, username PPPoE, alamat, status, badge tunggakan/lunas (lazy-load dari server)
+- 🛣 **Rute dari kantor pusat** — tombol di popup pelanggan menggambar jalur kantor pusat → lokasi user (via jalan OSRM, fallback garis lurus + estimasi km)
+- 🏢 **Marker kantor pusat** di semua halaman peta (`/map` & `/fo`), pusat tampilan peta otomatis ke kantor
+- 🔗 **Tombol "Rute" di PPPoE Active** — dari list user aktif langsung buka peta dengan rute tergambar (`/map?route=lat,lng&name=`)
+- 🧭 **Cross-reference PPPoE Active diperbaiki** — pencocokan user aktif ↔ pelanggan kini juga berdasarkan nama secret (bukan hanya `pppoe_username`)
+- 🗺 **Peta `/map` beralih ke OpenStreetMap** — tanpa watermark, zoom maksimal 19
+- 🔴 **Notifikasi Telegram user kritis (SLA)** — daftar ONU uptime < 90% dikirim ke semua teknisi & admin via Telegram
+  - Tombol manual "📢 Notify Teknisi (Kritis)" di halaman SLA
+  - **Cron otomatis terjadwal harian** — jam & aktif/nonaktif dikonfigurasi dari **Pengaturan → Notifikasi User Kritis (SLA)**, tanpa restart server
+  - Anti-spam: tidak kirim jika tidak ada user kritis; dibatasi 15 user per pesan
+- ♻️ **Refactor komputasi SLA** — logika perhitungan uptime diekstrak ke fungsi bersama `computeSla()` (dipakai dashboard + notifikasi)
+
 ### v2.6 — AI Agent & ONU Checker via Bot (Juni 2026)
 - 🤖 **AI Agent WhatsApp** — auto-reply pesan pelanggan menggunakan AI Groq/Llama (gratis). AI mendapat konteks otomatis: daftar paket + harga, area jangkauan, info pelanggan, tagihan, dan status isolir dari database
 - 📡 **ONU Checker via Telegram Bot** — teknisi di lapangan bisa cek status ONU langsung dari Telegram: `/cek [nama]`, `/status`, `/lemah`, `/kritis`, `/offline`
@@ -91,12 +105,26 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Test koneksi ke router langsung dari dashboard
 - Lihat daftar PPPoE active sessions secara real-time
 - Ping & Traceroute IP user langsung dari tabel PPPoE aktif (output terminal real-time)
+- **Tombol "Rute" di tabel PPPoE Active** — buka peta dengan rute dari kantor pusat langsung ke lokasi user (koordinat dari DB atau diparse dari nama secret)
+- **Cross-reference user aktif ↔ pelanggan diperbaiki** — mencocokkan berdasarkan `pppoe_username` DAN nama secret PPPoE (memotong suffix koordinat), jauh lebih akurat
 - Sync PPPoE secrets dari MikroTik ke database
 - Fetch daftar PPP Profile dari MikroTik untuk assign ke paket
 - Auto disable/enable PPPoE saat isolir/reaktivasi
 - Monitoring traffic per router
 - Dashboard PPPoE per router dengan donut chart online/offline
 - Tampilkan active PPPoE yang belum terhubung ke data pelanggan
+
+### 4b. 📈 Dashboard SLA (Service Level Agreement)
+- Perhitungan uptime per ONU berdasarkan history status Up/Down dari OLT (`onu_status_history`)
+- Filter per periode (bulan), OLT, cluster kualitas, dan pencarian nama ONU/pelanggan
+- Cluster otomatis: 🔴 Kritis (< 90%), 🟠 Buruk (90–95%), 🟡 Perlu Pantau (95–99%), 🟢 Baik (≥ 99%)
+- Timeline insiden Down→Up per ONU dengan durasi tiap insiden
+- Mapping manual ONU → pelanggan (otomatis mengisi `pppoe_username` pelanggan)
+- **Notifikasi Telegram user kritis** — daftar ONU uptime < 90% dikirim ke semua teknisi & admin:
+  - Tombol manual "📢 Notify Teknisi (Kritis)" di halaman SLA
+  - Cron otomatis harian — jam & aktif/nonaktif dikonfigurasi dari Pengaturan (tanpa restart server)
+  - Anti-spam: pesan tidak dikirim jika tidak ada user kritis; dibatasi 15 user per pesan
+  - Pesan berisi: nama pelanggan/ONU, OLT, uptime %, jam down, jumlah insiden, waktu down terakhir
 
 ### 5. 📡 Manajemen OLT (Optical Line Terminal)
 - Multi-brand OLT via SNMP: **HIOSO C, HIOSO B, HIOSO GPON, HIOSO HA73, ZTE, HSGQ, HSGQ GPON, Huawei**
@@ -154,8 +182,18 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Test kirim notifikasi Telegram dari Settings
 
 ### 9. 🗺 Peta Infrastruktur
-- Peta interaktif (Leaflet.js + OpenStreetMap)
+- Peta interaktif (Leaflet.js + OpenStreetMap — tanpa watermark, zoom 19)
 - Tampilkan objek infrastruktur: Server, ODP, dan titik kustom lainnya
+- **Marker kantor pusat** (🏢) dengan popup — jadi titik awal rute ke pelanggan
+- **Popup detail pelanggan** — klik marker pelanggan → nama, telepon, paket + harga, username PPPoE, alamat, status aktif/isolir, badge tunggakan/lunas (lazy-load dari server)
+- **Rute dari kantor pusat** — tombol di popup menggambar jalur ke lokasi pelanggan:
+  - Via jalan raya menggunakan OSRM (gratis) — mengikuti jalan sebenarnya
+  - Fallback otomatis ke garis lurus + jarak haversine jika OSRM tidak terjangkau
+  - Estimasi jarak km ditampilkan di popup garis rute + auto-fit bounds
+- **Tombol "Hapus Rute"** untuk membersihkan garis rute
+- **Pencarian berdasarkan username PPPoE** — kotak pencarian peta mencocokkan nama & username PPPoE
+- Koordinat pelanggan dapat diisi manual atau **diparsing otomatis dari nama secret PPPoE MikroTik** (format `Nama@-7.xxx,111.xxx`)
+- **URL langsung dengan rute** — `/map?route=lat,lng&name=Nama` langsung menggambar rute (dipakai dari halaman PPPoE Active)
 - Gambar jalur kabel pada peta dengan warna yang dapat dipilih
 - Tambah, edit, hapus objek dan kabel dari peta
 - Koordinat pusat peta & zoom default dapat dikustomisasi dari Settings
@@ -174,6 +212,8 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Manajemen splice point per kabel
 - Inventaris aset FO: kabel, splitter, ODP box, closure, konektor, dll
 - Peta visual infrastruktur FO lengkap dengan jalur kabel
+- **Popup detail pelanggan di peta FO** — klik titik pelanggan → telepon, paket, PPPoE, tunggakan + tombol "Rute dari Kantor" & "Profil"
+- **Marker kantor pusat + rute** di peta FO (sama seperti halaman Peta), tombol "🧹 Hapus Rute" di toolbar
 
 ### 11. 🎫 Tiket Gangguan (Trouble Ticket)
 - Buat tiket dari admin, portal pelanggan, atau portal teknisi
@@ -304,6 +344,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Payment Gateway**: pilih gateway default, konfigurasi Xendit & Tripay, data rekening bank manual
 - **GenieACS**: URL ACS, username, password, threshold online/offline, path virtual parameters
 - **Peta**: koordinat pusat, zoom default, mini preview map interaktif, ambil lokasi GPS
+- **Notifikasi SLA**: toggle aktif/nonaktif notifikasi user kritis + pilihan jam pengiriman (otomatis tanpa restart server)
 - **Presensi**: radius maksimal check-in (meter), jam batas tepat waktu
 - **Manajemen User**: tambah/edit/hapus user admin, teknisi, sales; set role, nomor HP, Telegram ID
 - **Import/Export**: export pelanggan & invoice ke CSV, import pelanggan massal dari CSV
@@ -461,12 +502,13 @@ Portal pelanggan otomatis tampilkan layar sukses ✅
 | Setiap hari pukul 00:00 | **Auto-Isolir**: cari invoice overdue → set status isolated → disable PPPoE MikroTik → kirim notif WA |
 | Setiap hari pukul 08:00 | **Reminder Tagihan**: kirim WA ke pelanggan yang jatuh tempo H-3 (atau sesuai setting) |
 | Setiap hari pukul 08:30 | **Laporan Harian**: ringkasan statistik ISP dikirim ke admin via WA & Telegram |
+| Setiap hari (jam konfigurasi, default 15:00) | **Notifikasi User Kritis SLA**: daftar ONU uptime < 90% dikirim ke teknisi & admin via Telegram (aktif/nonaktif & jam diatur di Pengaturan) |
 | Tanggal 1 setiap bulan pukul 06:00 | **Generate Invoice**: buat invoice bulanan untuk semua pelanggan aktif + kirim notif WA |
 | Setiap 5 menit | **Sync OLT**: update status & sinyal ONU dari semua OLT via SNMP + cek OLT Alert |
 | Setiap 5 menit | **Sync GenieACS**: update status online/offline device dari ACS server |
 | Setiap 1 menit | **IP Monitor**: ping semua target sesuai interval yang dikonfigurasi per target |
 
-> Auto-isolir dan auto-billing dapat dimatikan dari **Pengaturan → Billing**.
+> Auto-isolir dan auto-billing dapat dimatikan dari **Pengaturan → Billing**. Notifikasi SLA dari **Pengaturan → Notifikasi User Kritis (SLA)**.
 
 ---
 

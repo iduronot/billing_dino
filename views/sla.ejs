@@ -138,6 +138,9 @@
                 Filter: <span id="filterClusterName" style="font-weight:700;"></span>
                 <button onclick="filterCluster('')" style="background:none;border:none;color:var(--muted);cursor:pointer;margin-left:4px;font-size:14px;">✕</button>
             </span>
+            <button class="btn btn-primary" id="btnNotifyCritical" onclick="notifyCritical()" title="Kirim daftar user kritis ke semua teknisi via Telegram" style="white-space:nowrap;">
+                📢 Notify Teknisi (Kritis)
+            </button>
             <div id="loadingIndicator" style="font-size:12px;color:var(--muted);display:none;">⏳ Memuat...</div>
         </div>
 
@@ -270,6 +273,39 @@ async function loadData() {
 function debounceLoad() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(loadData, 400);
+}
+
+// ── Notifikasi Telegram ke teknisi (user kritis saja) ──
+async function notifyCritical() {
+    const period = document.getElementById('selPeriod').value;
+    const olt_id = document.getElementById('selOlt').value;
+    const btn    = document.getElementById('btnNotifyCritical');
+
+    if (!confirm('Kirim notifikasi Telegram berisi daftar user KRITIS (uptime < 90%) ke semua teknisi?')) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+    try {
+        const res = await fetch('/sla/api/notify-critical', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ period, olt_id })
+        });
+        const d = await res.json();
+        if (d.skipped) {
+            showToast(d.message, 'info');
+        } else if (!d.success) {
+            showToast('Gagal: ' + d.message, 'error');
+        } else {
+            const names = (d.recipients || []).map(r => r.username).join(', ');
+            showToast(`Terkirim ke ${names} — ${d.critical_count} user kritis (${d.sent} pesan sukses${d.failed ? ', ' + d.failed + ' gagal' : ''})`, 'success');
+        }
+    } catch (e) {
+        showToast('Gagal mengirim: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '📢 Notify Teknisi (Kritis)';
+    }
 }
 
 function filterCluster(key) {
@@ -447,8 +483,8 @@ function escHtml(s) {
 function showToast(msg, type) {
     const t = document.getElementById('toast');
     t.textContent = msg;
-    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : 'rgba(239,68,68,.4)';
-    t.style.color       = type === 'success' ? '#10B981' : '#EF4444';
+    t.style.borderColor = type === 'success' ? 'rgba(16,185,129,.4)' : type === 'info' ? 'rgba(245,158,11,.4)' : 'rgba(239,68,68,.4)';
+    t.style.color       = type === 'success' ? '#10B981' : type === 'info' ? '#FCD34D' : '#EF4444';
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 3500);
 }
