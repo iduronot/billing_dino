@@ -287,6 +287,13 @@
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Memproses...</span>';
         try {
             const resp = await fetch('/map/api/parse-coordinates', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            const ct = resp.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                const body = (await resp.text()).slice(0, 200);
+                if (resp.status === 404) throw new Error('Endpoint tidak ditemukan (404). Kemungkinan server Node belum di-restart setelah update — restart service Node lalu coba lagi.');
+                if (resp.status === 401 || resp.status === 302 || /login/i.test(body)) throw new Error('Sesi login habis. Silakan login ulang lalu coba lagi.');
+                throw new Error(`Server merespons halaman HTML (status ${resp.status}), bukan JSON. Periksa log server atau restart service Node.`);
+            }
             const d = await resp.json();
             if (!d.success) throw new Error(d.message || 'Error');
 
