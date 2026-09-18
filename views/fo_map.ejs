@@ -661,7 +661,7 @@ async function loadFoCustomerDetail(id, popupId) {
     const el = document.getElementById(popupId);
     if (!el) return;
     try {
-        const resp = await fetch(`/map/api/customer/${id}`);
+        const resp = await fetch(`/fo/api/customer/${id}`);
         const res = await resp.json();
         if (!res.success) throw new Error(res.message || 'Error');
         const d = res.data;
