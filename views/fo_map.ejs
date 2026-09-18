@@ -569,6 +569,18 @@ function clearRoute() {
     foRouteLine = null;
 }
 
+// Dukungan URL ?route=lat,lng&name=Nama — langsung gambar rute (dipakai dari halaman PPPoE Active dsb.)
+(function handleRouteParam() {
+    const params = new URLSearchParams(window.location.search);
+    const route = params.get('route');
+    if (!route) return;
+    const parts = route.split(',');
+    const destLat = parseFloat(parts[0]), destLng = parseFloat(parts[1]);
+    if (!isFinite(destLat) || !isFinite(destLng)) return;
+    const destName = params.get('name') || '';
+    setTimeout(() => showRouteFromHQ(destLat, destLng, destName), 800);
+})();
+
 // ── Render nodes ──
 const markerMap = {};
 function buildFeedInfo(n) {
