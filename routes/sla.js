@@ -32,23 +32,56 @@ function calcUptime(events, periodStart, periodEnd, initialStatus) {
     return { uptime: parseFloat(uptime.toFixed(2)), downMs };
 }
 
-// ── Helper: komputasi SLA (dipakai oleh /api/summary dan /api/notify-critical) ──
-async function computeSla(pool, { period, olt_id, cluster, search }) {
-    // Tentukan rentang periode
-    let periodStart, periodEnd;
+// ── Helper: resolve rentang periode ──
+// Prioritas: period=YYYY-MM (bulan kalender, kompatibilitas lama)
+//            → range (today|3d|7d|14d|30d|week|month)
+//            → setting sla_period_type di DB (default: month)
+const RANGES = {
+    today: { label: 'Hari Ini',        days: 0 },
+    '3d':  { label: '3 Hari Terakhir', days: 3 },
+    '7d':  { label: '7 Hari Terakhir', days: 7 },
+    '14d': { label: '14 Hari Terakhir',days: 14 },
+    '30d': { label: '30 Hari Terakhir',days: 30 },
+    week:  { label: 'Minggu Ini',      days: -1 }, // spesial: Senin s.d. sekarang
+    month: { label: 'Bulan Ini',       days: -2 }  // spesial: tgl 1 s.d. sekarang
+};
+
+async function resolvePeriod(dbPool, { period, range }) {
+    const now = new Date();
+
+    // 1. Bulan kalender eksplisit (YYYY-MM) — utuh dari tgl 1 s.d. akhir bulan
     if (period && /^\d{4}-\d{2}$/.test(period)) {
         const [y, m] = period.split('-').map(Number);
-        periodStart  = new Date(y, m - 1, 1, 0, 0, 0).getTime();
-        periodEnd    = new Date(y, m,     0, 23, 59, 59).getTime(); // hari terakhir bulan
-    } else {
-        // Default: bulan ini
-        const now   = new Date();
-        periodStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0).getTime();
-        periodEnd   = now.getTime();
+        return {
+            pStart: new Date(y, m - 1, 1, 0, 0, 0),
+            pEnd:   new Date(y, m, 0, 23, 59, 59),
+            label:  new Date(y, m - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+        };
     }
 
-    const pStart = new Date(periodStart);
-    const pEnd   = new Date(periodEnd);
+    // 2. Rentang cepat dari query
+    let key = range;
+    // 3. Fallback: setting sistem
+    if (!key || !RANGES[key]) {
+        try {
+            const [[row]] = await dbPool.query("SELECT setting_value FROM settings WHERE setting_key='sla_period_type'");
+            key = row && RANGES[row.setting_value] ? row.setting_value : 'month';
+        } catch (_) { key = 'month'; }
+    }
+
+    const r = RANGES[key];
+    let pStart;
+    if (key === 'week')      pStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7), 0, 0, 0); // Senin
+    else if (key === 'month')pStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+    else                     pStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - r.days, 0, 0, 0);
+    return { pStart, pEnd: now, label: r.label, key };
+}
+
+// ── Helper: komputasi SLA (dipakai oleh /api/summary dan /api/notify-critical) ──
+async function computeSla(pool, { period, range, olt_id, cluster, search }) {
+    const { pStart, pEnd } = await resolvePeriod(pool, { period, range });
+    const periodStart = pStart.getTime();
+    const periodEnd   = pEnd.getTime();
 
     // Step 1: Ambil ONU unik dari history — JOIN pakai CONVERT agar collation seragam
     let onuQuery = `
@@ -184,18 +217,20 @@ function clusterLabel(uptime) {
 router.get('/', async (req, res) => {
     try {
         const [olts]  = await pool.query('SELECT id, name FROM hioso_olts ORDER BY name ASC');
-        res.render('sla', { user: req.session, currentPage: 'sla', olts });
+        const [[s]]   = await pool.query("SELECT setting_value FROM settings WHERE setting_key='sla_period_type'");
+        const slaPeriod = (s && RANGES[s.setting_value]) ? s.setting_value : 'month';
+        res.render('sla', { user: req.session, currentPage: 'sla', olts, slaPeriod });
     } catch (e) {
         res.status(500).send('Error: ' + e.message);
     }
 });
 
 // ── GET /sla/api/summary ──
-// Query params: period (YYYY-MM), olt_id, cluster, search
+// Query params: period (YYYY-MM), range (today|3d|7d|14d|30d|week|month), olt_id, cluster, search
 router.get('/api/summary', async (req, res) => {
     try {
-        const { period, olt_id, cluster, search } = req.query;
-        const { results, stats, period: per } = await computeSla(pool, { period, olt_id, cluster, search });
+        const { period, range, olt_id, cluster, search } = req.query;
+        const { results, stats, period: per } = await computeSla(pool, { period, range, olt_id, cluster, search });
         res.json({ success: true, data: results, stats, period: per });
     } catch (e) {
         console.error('[SLA API]', e.message);
@@ -205,8 +240,8 @@ router.get('/api/summary', async (req, res) => {
 
 // ── Helper: kirim notifikasi user kritis ke teknisi + admin via Telegram ──
 // Dipakai oleh endpoint POST /api/notify-critical dan cron terjadwal (server.js)
-async function sendCriticalNotifications(dbPool, { period, olt_id } = {}) {
-    const { results, period: per } = await computeSla(dbPool, { period, olt_id, cluster: 'critical' });
+async function sendCriticalNotifications(dbPool, { period, range, olt_id } = {}) {
+    const { results, period: per } = await computeSla(dbPool, { period, range, olt_id, cluster: 'critical' });
     const critical = results;
 
     if (critical.length === 0) {
@@ -223,12 +258,13 @@ async function sendCriticalNotifications(dbPool, { period, olt_id } = {}) {
 
     // Susun pesan — batasi 15 user per pesan (batas Telegram 4096 char)
     const MAX_PER_MSG = 15;
-    const monthLabel = per.start.toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+    const fmtD = d => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const periodLabel = `${fmtD(per.start)} s.d. ${fmtD(per.end)}`;
     const esc = s => String(s ?? '-').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     const buildMsg = (list, offset) => {
         let msg = `🔴 <b>PERHATIAN — ${critical.length} USER KRITIS (SLA)</b>\n` +
-                  `📅 Periode: ${monthLabel}\n` +
+                  `📅 Periode: ${periodLabel}\n` +
                   `⚠️ Uptime di bawah 90% — mohon segera ditindaklanjuti\n\n`;
         list.forEach((r, i) => {
             const nama = r.customer_name || r.onu_name || 'Tanpa nama';
@@ -277,8 +313,8 @@ async function sendCriticalNotifications(dbPool, { period, olt_id } = {}) {
 // Kirim notifikasi Telegram ke teknisi + admin berisi daftar user kritis (uptime < 90%)
 router.post('/api/notify-critical', async (req, res) => {
     try {
-        const { period, olt_id } = req.body || {};
-        const result = await sendCriticalNotifications(pool, { period, olt_id });
+        const { period, range, olt_id } = req.body || {};
+        const result = await sendCriticalNotifications(pool, { period, range, olt_id });
         res.json(result);
     } catch (e) {
         console.error('[SLA Notify]', e.message);
@@ -290,17 +326,8 @@ router.post('/api/notify-critical', async (req, res) => {
 // ── GET /sla/api/timeline — Detail down events suatu ONU ──
 router.get('/api/timeline', async (req, res) => {
     try {
-        const { olt_id, onu_index, period } = req.query;
-        let pStart, pEnd;
-        if (period && /^\d{4}-\d{2}$/.test(period)) {
-            const [y, m] = period.split('-').map(Number);
-            pStart = new Date(y, m - 1, 1);
-            pEnd   = new Date(y, m, 0, 23, 59, 59);
-        } else {
-            const now = new Date();
-            pStart = new Date(now.getFullYear(), now.getMonth(), 1);
-            pEnd   = now;
-        }
+        const { olt_id, onu_index, period, range } = req.query;
+        const { pStart, pEnd } = await resolvePeriod(pool, { period, range });
 
         const [events] = await pool.query(`
             SELECT status, changed_at FROM onu_status_history
@@ -393,3 +420,4 @@ router.get('/api/customers-search', async (req, res) => {
 
 module.exports = router;
 module.exports.sendCriticalNotifications = sendCriticalNotifications;
+module.exports.computeSla = computeSla;

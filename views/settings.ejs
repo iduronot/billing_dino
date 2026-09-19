@@ -201,7 +201,7 @@
                 <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
                     Kirim daftar user kritis (uptime &lt; 90%) ke semua teknisi &amp; admin via Telegram secara otomatis terjadwal.
                 </p>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
                     <div class="form-group" style="margin:0;">
                         <label>Status Notifikasi</label>
                         <select id="sla_notify_enabled" class="form-control">
@@ -219,8 +219,21 @@
                         </select>
                         <p style="font-size:11px; color:var(--muted); margin-top:4px;">Notifikasi dikirim setiap hari di jam ini</p>
                     </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Periode Hitung SLA</label>
+                        <select id="sla_period_type" class="form-control">
+                            <option value="month"  <%= (settings.sla_period_type||'month')==='month' ?'selected':'' %>>📅 Bulan Ini (tgl 1 s.d. hari ini)</option>
+                            <option value="week"   <%= (settings.sla_period_type||'')==='week'  ?'selected':'' %>>📅 Minggu Ini (Senin s.d. hari ini)</option>
+                            <option value="30d"    <%= (settings.sla_period_type||'')==='30d'   ?'selected':'' %>>⏪ 30 Hari Terakhir</option>
+                            <option value="14d"    <%= (settings.sla_period_type||'')==='14d'   ?'selected':'' %>>⏪ 14 Hari Terakhir</option>
+                            <option value="7d"     <%= (settings.sla_period_type||'')==='7d'    ?'selected':'' %>>⏪ 7 Hari Terakhir</option>
+                            <option value="3d"     <%= (settings.sla_period_type||'')==='3d'    ?'selected':'' %>>⏪ 3 Hari Terakhir</option>
+                            <option value="today"  <%= (settings.sla_period_type||'')==='today' ?'selected':'' %>>🕐 Hari Ini</option>
+                        </select>
+                        <p style="font-size:11px; color:var(--muted); margin-top:4px;">Periode default dashboard SLA & notifikasi otomatis (cron)</p>
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="save(['sla_notify_enabled','sla_notify_hour'])">💾 Simpan Pengaturan Notifikasi SLA</button>
+                <button class="btn btn-primary" onclick="save(['sla_notify_enabled','sla_notify_hour','sla_period_type'])">💾 Simpan Pengaturan Notifikasi SLA</button>
             </div>
             </div>
         </div>

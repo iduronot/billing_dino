@@ -222,30 +222,56 @@ let activeCluster = '';
 let currentData   = [];
 let debounceTimer = null;
 
-// ── Isi dropdown periode (6 bulan terakhir) ──
+// ── Isi dropdown periode: rentang cepat + 6 bulan kalender terakhir ──
+const RANGE_OPTS = [
+    { v: 'month',  l: '📅 Bulan Ini (tgl 1 s.d. hari ini)' },
+    { v: 'week',   l: '📅 Minggu Ini (Senin s.d. hari ini)' },
+    { v: '30d',    l: '⏪ 30 Hari Terakhir' },
+    { v: '14d',    l: '⏪ 14 Hari Terakhir' },
+    { v: '7d',     l: '⏪ 7 Hari Terakhir' },
+    { v: '3d',     l: '⏪ 3 Hari Terakhir' },
+    { v: 'today',  l: '🕐 Hari Ini' },
+    { v: '',       l: '──────────' },
+];
 (function initPeriod() {
     const sel = document.getElementById('selPeriod');
     const now = new Date();
+    RANGE_OPTS.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.v; opt.textContent = o.l;
+        opt.disabled = !o.v;
+        if (o.v && o.v === '<%= slaPeriod %>') opt.selected = true;
+        sel.appendChild(opt);
+    });
+    // Bulan kalender utuh (6 bulan terakhir) — pakai prefix "m:" agar terpisah dari range
     for (let i = 0; i < 6; i++) {
         const d   = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        const lbl = d.toLocaleDateString('id-ID', { month:'long', year:'numeric' });
+        const val = `m:${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const lbl = '🗓️ ' + d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }) + ' (utuh)';
         const opt = document.createElement('option');
         opt.value = val; opt.textContent = lbl;
-        if (i === 0) opt.selected = true;
+        if (i === 0 && !'<%= slaPeriod %>') opt.selected = true;
         sel.appendChild(opt);
     }
 })();
 
+// Pecah nilai dropdown: "m:YYYY-MM" → periode bulan kalender, selain itu → range
+function periodParams() {
+    const v = document.getElementById('selPeriod').value;
+    if (v.startsWith('m:')) return { period: v.slice(2), range: '' };
+    if (v) return { period: '', range: v };
+    return { period: '', range: '' }; // fallback: ikut pengaturan sistem
+}
+
 // ── Load Data ──
 async function loadData() {
-    const period  = document.getElementById('selPeriod').value;
+    const { period, range } = periodParams();
     const olt_id  = document.getElementById('selOlt').value;
     const search  = document.getElementById('searchInput').value;
     document.getElementById('loadingIndicator').style.display = '';
 
     try {
-        const params = new URLSearchParams({ period, olt_id, cluster: activeCluster, search });
+        const params = new URLSearchParams({ period, range, olt_id, cluster: activeCluster, search });
         const res    = await fetch('/sla/api/summary?' + params);
         const d      = await res.json();
         if (!d.success) throw new Error(d.message);
@@ -262,7 +288,7 @@ async function loadData() {
         // Banner jika tidak ada data sama sekali
         document.getElementById('noHistoryBanner').style.display = (d.stats.total === 0 && !activeCluster) ? '' : 'none';
 
-        renderTable(currentData, period);
+        renderTable(currentData, { period, range });
     } catch (e) {
         showToast('Gagal memuat: ' + e.message, 'error');
     } finally {
@@ -277,7 +303,7 @@ function debounceLoad() {
 
 // ── Notifikasi Telegram ke teknisi (user kritis saja) ──
 async function notifyCritical() {
-    const period = document.getElementById('selPeriod').value;
+    const { period, range } = periodParams();
     const olt_id = document.getElementById('selOlt').value;
     const btn    = document.getElementById('btnNotifyCritical');
 
@@ -289,7 +315,7 @@ async function notifyCritical() {
         const res = await fetch('/sla/api/notify-critical', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ period, olt_id })
+            body: JSON.stringify({ period, range, olt_id })
         });
         const d = await res.json();
         if (d.skipped) {
@@ -408,14 +434,15 @@ function renderTable(data, period) {
 }
 
 // ── Tampilkan Timeline Detail ──
-async function showTimeline(row, period) {
+async function showTimeline(row, p) {
     document.getElementById('timelineTitle').textContent = `📉 Riwayat: ${row.onu_name || row.onu_index}`;
     document.getElementById('timelineBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">⏳ Memuat...</div>';
     document.getElementById('timelineSummary').innerHTML = '';
     document.getElementById('timelineModal').style.display = 'flex';
 
     try {
-        const params = new URLSearchParams({ olt_id: row.olt_id, onu_index: row.onu_index, period });
+        const { period, range } = (typeof p === 'object' && p !== null) ? p : { period: p, range: '' };
+        const params = new URLSearchParams({ olt_id: row.olt_id, onu_index: row.onu_index, period, range });
         const res  = await fetch('/sla/api/timeline?' + params);
         const d    = await res.json();
         if (!d.success) throw new Error(d.message);
