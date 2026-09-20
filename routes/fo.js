@@ -481,6 +481,93 @@ router.get('/api/customer/:id', async (req, res) => {
     } catch(e) { res.status(500).json({ success:false, message:e.message }); }
 });
 
+// ══════════════════════ HEATMAP GANGGUAN ══════════════════════
+// Titik panas dari total menit down per pelanggan pada periode tertentu.
+// Intensitas dinormalisasi 0..1 terhadap nilai maksimum.
+router.get('/api/heat', async (req, res) => {
+    try {
+        const { resolvePeriod } = require('./sla');
+        const { pStart, pEnd, label } = await resolvePeriod(pool, { period: req.query.period, range: req.query.range });
+
+        // Semua event Down/Up dalam periode, lengkap dengan nama ONU (untuk fallback matching)
+        const [events] = await pool.query(`
+            SELECT h.olt_id, h.onu_index, h.status, h.changed_at,
+                   u.customer_id, u.name as onu_name
+            FROM onu_status_history h
+            LEFT JOIN hioso_onus u ON u.olt_id = h.olt_id
+                   AND CONVERT(u.onu_index USING utf8mb4) = CONVERT(h.onu_index USING utf8mb4)
+            WHERE h.changed_at BETWEEN ? AND ?
+            ORDER BY h.olt_id, h.onu_index, h.changed_at ASC
+        `, [pStart, pEnd]);
+
+        // Total menit down per ONU — pasangkan event Down → Up berurutan
+        const downByOnu = {}; // key olt_id:onu_index → menit
+        const curDown   = {}; // ONU yang sedang down
+        for (const ev of events) {
+            const key = ev.olt_id + ':' + ev.onu_index;
+            if (ev.status === 'Down') {
+                if (!curDown[key]) curDown[key] = new Date(ev.changed_at).getTime();
+            } else if (ev.status === 'Up' && curDown[key]) {
+                const mins = (new Date(ev.changed_at).getTime() - curDown[key]) / 60000;
+                downByOnu[key] = (downByOnu[key] || 0) + mins;
+                delete curDown[key];
+            }
+        }
+        // Masih down sampai akhir periode — hitung sampai pEnd
+        for (const [key, t] of Object.entries(curDown)) {
+            const mins = (pEnd.getTime() - t) / 60000;
+            downByOnu[key] = (downByOnu[key] || 0) + mins;
+        }
+
+        // Mapping ONU → customer: 1) customer_id, 2) onu_name ↔ pppoe_username (seperti SLA)
+        const [allCustomers] = await pool.query('SELECT id, pppoe_username FROM customers');
+        const custByUser = {};
+        allCustomers.forEach(c => { if (c.pppoe_username) custByUser[c.pppoe_username.toLowerCase()] = c.id; });
+
+        const custIdOf = {};
+        for (const ev of events) {
+            const key = ev.olt_id + ':' + ev.onu_index;
+            if (custIdOf[key] !== undefined) continue;
+            if (ev.customer_id) custIdOf[key] = ev.customer_id;
+            else if (ev.onu_name && custByUser[ev.onu_name.toLowerCase()]) custIdOf[key] = custByUser[ev.onu_name.toLowerCase()];
+            else custIdOf[key] = null;
+        }
+
+        // Gabungkan per pelanggan (satu pelanggan bisa punya beberapa ONU)
+        const downByCustomer = {}; // customer_id → menit
+        for (const ev of events) {
+            const key = ev.olt_id + ':' + ev.onu_index;
+            const cid = custIdOf[key];
+            if (!cid) continue;
+            const mins = downByOnu[key] || 0;
+            if (mins > 0) downByCustomer[cid] = (downByCustomer[cid] || 0) + mins;
+        }
+
+        // Ambil koordinat pelanggan
+        const custIds = Object.keys(downByCustomer);
+        if (!custIds.length) return res.json({ success: true, points: [], period_label: label, max_minutes: 0, affected: 0 });
+
+        const [custs] = await pool.query(
+            `SELECT id, name, lat, lng FROM customers
+             WHERE id IN (${custIds.map(() => '?').join(',')}) AND lat IS NOT NULL AND lat != '' AND lng IS NOT NULL AND lng != ''`,
+            custIds
+        );
+
+        let maxMin = 0;
+        const points = [];
+        for (const c of custs) {
+            const mins = downByCustomer[c.id];
+            if (!mins) continue;
+            if (mins > maxMin) maxMin = mins;
+            points.push({ lat: parseFloat(c.lat), lng: parseFloat(c.lng), name: c.name, minutes: Math.round(mins) });
+        }
+        // Normalisasi intensitas 0.25..1 (0.25 agar titik kecil tetap terlihat)
+        points.forEach(p => { p.intensity = maxMin > 0 ? Math.max(0.25, p.minutes / maxMin) : 0; });
+
+        res.json({ success: true, points, period_label: label, max_minutes: Math.round(maxMin), affected: points.length });
+    } catch(e) { res.status(500).json({ success:false, message:e.message }); }
+});
+
 // ══════════════════════ PORT ══════════════════════
 
 router.put('/api/ports/:id', async (req, res) => {

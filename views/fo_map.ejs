@@ -4,6 +4,7 @@
     <%- include('partials/head') %>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <style>
         .fo-layout { display:grid; grid-template-columns:300px 1fr; gap:0; height:calc(100vh - 140px); min-height:500px; border:1px solid var(--border); border-radius:18px; overflow:hidden; }
         .fo-sidebar { background:var(--card-bg); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
@@ -186,6 +187,16 @@
                     </label>
                     <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
                         <input type="checkbox" id="toggleCables" onchange="toggleCablesLayer()" checked> Kabel
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;" title="Titik panas dari total waktu down pelanggan (30 hari terakhir)">
+                        <input type="checkbox" id="toggleHeat" onchange="toggleHeatmap()"> 🔥 Heatmap Gangguan
+                        <select id="selHeatRange" onchange="if(document.getElementById('toggleHeat').checked) loadHeatmap()" style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);background:var(--sub-bg);color:var(--text);">
+                            <option value="30d">30 hari</option>
+                            <option value="14d">14 hari</option>
+                            <option value="7d">7 hari</option>
+                            <option value="3d">3 hari</option>
+                            <option value="today">hari ini</option>
+                        </select>
                     </label>
                 </div>
 
@@ -1188,6 +1199,46 @@ function switchSidebar(tab, btn) {
 // ── Layer toggles ──
 function toggleCustomers() { document.getElementById('toggleCust').checked ? custLayer.addTo(map) : map.removeLayer(custLayer); }
 function toggleCablesLayer() { document.getElementById('toggleCables').checked ? cableLayer.addTo(map) : map.removeLayer(cableLayer); }
+
+// ── Heatmap Gangguan ──
+let heatLayer = null;
+let heatCache = {}; // range → data
+
+async function toggleHeatmap() {
+    const on = document.getElementById('toggleHeat').checked;
+    if (!on) { if (heatLayer) map.removeLayer(heatLayer); heatLayer = null; return; }
+    await loadHeatmap();
+}
+
+async function loadHeatmap() {
+    const range = document.getElementById('selHeatRange').value;
+    try {
+        showToast('Memuat heatmap gangguan...', 'info');
+        let d = heatCache[range];
+        if (!d) {
+            const res = await fetch('/fo/api/heat?range=' + encodeURIComponent(range));
+            d = await res.json();
+            if (!d.success) throw new Error(d.message || 'Error');
+            heatCache[range] = d;
+        }
+        if (heatLayer) map.removeLayer(heatLayer);
+        if (!d.points.length) {
+            showToast(`Tidak ada gangguan tercatat (${d.period_label || range}) 🎉`, 'success');
+            return;
+        }
+        const pts = d.points.map(p => [p.lat, p.lng, p.intensity]);
+        heatLayer = L.heatLayer(pts, {
+            radius: 28, blur: 22, maxZoom: 17, minOpacity: 0.35,
+            gradient: { 0.2: '#3B82F6', 0.45: '#F59E0B', 0.7: '#F97316', 1.0: '#EF4444' }
+        }).addTo(map);
+        const worst = d.points.reduce((a, b) => b.minutes > a.minutes ? b : a);
+        const jam = (worst.minutes / 60).toFixed(1);
+        showToast(`🔥 ${d.affected} pelanggan terdampak (${d.period_label || range}) — terparah: ${worst.name} ~${jam} jam down`, 'info');
+    } catch (e) {
+        document.getElementById('toggleHeat').checked = false;
+        showToast('Gagal memuat heatmap: ' + e.message, 'error');
+    }
+}
 
 // ── Helpers ──
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }

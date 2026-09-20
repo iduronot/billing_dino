@@ -421,3 +421,4 @@ router.get('/api/customers-search', async (req, res) => {
 module.exports = router;
 module.exports.sendCriticalNotifications = sendCriticalNotifications;
 module.exports.computeSla = computeSla;
+module.exports.resolvePeriod = resolvePeriod;
