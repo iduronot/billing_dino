@@ -173,6 +173,9 @@
                     <button class="map-btn active" id="btnModeView" onclick="setMode('view',this)">👆 View</button>
                     <% if (user && (user.role === 'admin' || user.role === 'technician')) { %>
                     <button class="map-btn" id="btnModeNode" onclick="setMode('addNode',this)">📍 Tambah Node</button>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:11px; cursor:pointer;" title="Menempelkan titik ke jalan terdekat (OSRM) — aktifkan jika GPS bergeser">
+                        <input type="checkbox" id="snapRoad" checked> 🧲 Snap ke Jalan
+                    </label>
                     <% } %>
                     <% if (user && user.role === 'admin') { %>
                     <button class="map-btn" id="btnModeCable" onclick="setMode('drawCable',this)">✏️ Gambar Kabel</button>
@@ -763,11 +766,34 @@ function toggleFollowRoad() {
     showToast('Mode ikuti jalan: Klik titik-titik sepanjang jalan', 'info');
 }
 
+// ── Snap koordinat ke jalan terdekat via OSRM ──
+// Mengembalikan {lat, lng, distance} atau null jika gagal/tidak jauh
+async function snapToRoad(lat, lng) {
+    try {
+        const resp = await fetch(`https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}?number=1`, { signal: AbortSignal.timeout(6000) });
+        const data = await resp.json();
+        if (data.code === 'Ok' && data.waypoints && data.waypoints.length) {
+            const wp = data.waypoints[0];
+            return { lat: wp.location[1], lng: wp.location[0], distance: wp.distance };
+        }
+    } catch (_) { /* offline / timeout → pakai koordinat asli */ }
+    return null;
+}
+
 // Map click handler
 map.on('click', async (e) => {
     if (currentMode === 'addNode') {
         pendingLat = e.latlng.lat;
         pendingLng = e.latlng.lng;
+        // Snap ke jalan terdekat jika opsi aktif
+        if (document.getElementById('snapRoad') && document.getElementById('snapRoad').checked) {
+            const snap = await snapToRoad(pendingLat, pendingLng);
+            if (snap) {
+                pendingLat = snap.lat;
+                pendingLng = snap.lng;
+                if (snap.distance > 2) showToast(`🧲 Titik diselaraskan ke jalan (geser ${Math.round(snap.distance)} m)`, 'info');
+            }
+        }
         openAddNodeModal(pendingLat, pendingLng);
     } else if (currentMode === 'drawCable') {
         const pt = [e.latlng.lat, e.latlng.lng];
@@ -987,20 +1013,29 @@ function getGPSLocation() {
     status.style.display = '';
 
     navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            const lat = pos.coords.latitude.toFixed(7);
-            const lng = pos.coords.longitude.toFixed(7);
+        async (pos) => {
+            let lat = parseFloat(pos.coords.latitude.toFixed(7));
+            let lng = parseFloat(pos.coords.longitude.toFixed(7));
             const acc = Math.round(pos.coords.accuracy);
-            document.getElementById('nodeLatDisplay').value = lat;
-            document.getElementById('nodeLngDisplay').value = lng;
+            // Snap ke jalan terdekat jika opsi aktif
+            if (document.getElementById('snapRoad') && document.getElementById('snapRoad').checked) {
+                status.textContent = '🧲 Menyelaraskan ke jalan terdekat...';
+                const snap = await snapToRoad(lat, lng);
+                if (snap) {
+                    lat = snap.lat; lng = snap.lng;
+                    if (snap.distance > 2) showToast(`🧲 GPS diselaraskan ke jalan (geser ${Math.round(snap.distance)} m)`, 'info');
+                }
+            }
+            document.getElementById('nodeLatDisplay').value = lat.toFixed(7);
+            document.getElementById('nodeLngDisplay').value = lng.toFixed(7);
             document.getElementById('nodeLat').value = lat;
             document.getElementById('nodeLng').value = lng;
             // Gerakkan peta ke lokasi
-            map.flyTo([parseFloat(lat), parseFloat(lng)], 18, { animate:true, duration:0.8 });
+            map.flyTo([lat, lng], 18, { animate:true, duration:0.8 });
             if (window._gpsMarker) map.removeLayer(window._gpsMarker);
-            window._gpsMarker = L.circleMarker([parseFloat(lat), parseFloat(lng)], {
+            window._gpsMarker = L.circleMarker([lat, lng], {
                 radius:10, color:'#10B981', fillColor:'#10B981', fillOpacity:0.4, weight:2
-            }).addTo(map).bindPopup('📍 Lokasi Anda (akurasi ±' + acc + 'm)').openPopup();
+            }).addTo(map).bindPopup('📍 Lokasi Anda' + (document.getElementById('snapRoad') && document.getElementById('snapRoad').checked ? ' (snap ke jalan)' : '') + ' (akurasi ±' + acc + 'm)').openPopup();
 
             status.textContent = '✅ Koordinat berhasil diambil — Akurasi ±' + acc + ' meter';
             status.style.color = '#10B981';
@@ -1031,11 +1066,17 @@ function openMapPicker() {
     showToast('Klik lokasi di peta untuk mengambil koordinat', 'info');
     setMode('addNode', null);
     // Override click handler sementara untuk pilih koordinat saja
-    map.once('click', (e) => {
-        const lat = e.latlng.lat.toFixed(7);
-        const lng = e.latlng.lng.toFixed(7);
-        document.getElementById('nodeLatDisplay').value = lat;
-        document.getElementById('nodeLngDisplay').value = lng;
+    map.once('click', async (e) => {
+        let lat = e.latlng.lat, lng = e.latlng.lng;
+        if (document.getElementById('snapRoad') && document.getElementById('snapRoad').checked) {
+            const snap = await snapToRoad(lat, lng);
+            if (snap) {
+                lat = snap.lat; lng = snap.lng;
+                if (snap.distance > 2) showToast(`🧲 Titik diselaraskan ke jalan (geser ${Math.round(snap.distance)} m)`, 'info');
+            }
+        }
+        document.getElementById('nodeLatDisplay').value = lat.toFixed(7);
+        document.getElementById('nodeLngDisplay').value = lng.toFixed(7);
         document.getElementById('nodeLat').value = lat;
         document.getElementById('nodeLng').value = lng;
         document.getElementById('nodeModal').style.display = 'flex';
