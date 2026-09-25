@@ -481,6 +481,23 @@ router.get('/api/customer/:id', async (req, res) => {
     } catch(e) { res.status(500).json({ success:false, message:e.message }); }
 });
 
+// ══════════════════════ KANTOR PUSAT ══════════════════════
+// Simpan koordinat kantor pusat (map_center_lat/lng) — admin only.
+// Dipakai sebagai titik awal rute & marker kantor di peta FO.
+router.post('/api/hq', requireAdmin, async (req, res) => {
+    try {
+        const lat = parseFloat(req.body.lat);
+        const lng = parseFloat(req.body.lng);
+        if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+            return res.json({ success:false, message:'Koordinat tidak valid' });
+        }
+        await pool.query('INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?', ['map_center_lat', String(lat), String(lat)]);
+        await pool.query('INSERT INTO settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?', ['map_center_lng', String(lng), String(lng)]);
+        if (global.invalidateSettingsCache) global.invalidateSettingsCache();
+        res.json({ success:true, message:'Koordinat kantor pusat tersimpan', lat, lng });
+    } catch(e) { res.status(500).json({ success:false, message:e.message }); }
+});
+
 // ══════════════════════ HEATMAP GANGGUAN ══════════════════════
 // Titik panas dari total menit down per pelanggan pada periode tertentu.
 // Intensitas dinormalisasi 0..1 terhadap nilai maksimum.

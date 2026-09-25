@@ -182,6 +182,9 @@
                     <% } %>
                     <button class="map-btn" id="btnFollowRoad" onclick="toggleFollowRoad()" style="display:none;">🛣 Ikuti Jalan</button>
                     <button class="map-btn" onclick="clearRoute()" title="Hapus garis rute">🧹 Hapus Rute</button>
+                    <% if (user && user.role === 'admin') { %>
+                    <button class="map-btn" id="btnModeHQ" onclick="setMode('setHQ',this)" title="Tentukan ulang lokasi kantor pusat">🏢 Set Kantor</button>
+                    <% } %>
                     <button class="map-btn" id="btnFinishCable" onclick="finishCable()" style="display:none; background:#10B981; color:white; border-color:#10B981;">✓ Selesai</button>
                     <button class="map-btn" id="btnCancelCable" onclick="cancelCable()" style="display:none; background:#EF4444; color:white; border-color:#EF4444;">✗ Batal</button>
                     <div style="width:1px; background:var(--border);"></div>
@@ -545,16 +548,50 @@ const routeLayer  = L.layerGroup().addTo(map); // Rute dari kantor pusat
 
 // ── Kantor Pusat & Rute ──
 const HQ = { lat: CFG_LAT, lng: CFG_LNG };
+const IS_ADMIN_FO = '<%= user && user.role === "admin" ? "1" : "0" %>' === '1';
 
-if (HQ.lat && HQ.lng) {
-    L.marker([HQ.lat, HQ.lng], {
+async function saveHQ(lat, lng) {
+    try {
+        const res  = await fetch('/fo/api/hq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lat, lng })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Error');
+        HQ.lat = lat; HQ.lng = lng;
+        showToast('🏢 Koordinat kantor pusat tersimpan', 'success');
+        return true;
+    } catch (e) {
+        showToast('Gagal menyimpan: ' + e.message, 'error');
+        return false;
+    }
+}
+
+let hqMarker = null;
+function placeHQMarker(lat, lng) {
+    if (hqMarker) map.removeLayer(hqMarker);
+    hqMarker = L.marker([lat, lng], {
+        draggable: IS_ADMIN_FO, // admin bisa drag langsung
         icon: L.divIcon({
             className: '',
             html: '<div style="color:#3B82F6; font-size:24px; filter:drop-shadow(0 0 8px rgba(59,130,246,.8));"><i class="fas fa-building"></i></div>',
             iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14]
         })
-    }).addTo(map).bindPopup('<b><i class="fas fa-building" style="color:#3B82F6;"></i> Kantor Pusat</b>');
+    }).addTo(map);
+    hqMarker.bindPopup(IS_ADMIN_FO
+        ? '<b><i class="fas fa-building" style="color:#3B82F6;"></i> Kantor Pusat</b><br><span style="font-size:11px;color:var(--muted);">Drag marker untuk memindahkan, posisi otomatis tersimpan.</span>'
+        : '<b><i class="fas fa-building" style="color:#3B82F6;"></i> Kantor Pusat</b>');
+    if (IS_ADMIN_FO) {
+        hqMarker.on('dragend', async () => {
+            const p = hqMarker.getLatLng();
+            const ok = await saveHQ(p.lat, p.lng);
+            if (!ok) hqMarker.setLatLng([HQ.lat, HQ.lng]); // kembalikan jika gagal simpan
+        });
+    }
 }
+
+if (HQ.lat && HQ.lng) placeHQMarker(HQ.lat, HQ.lng);
 
 let foRouteLine = null;
 async function showRouteFromHQ(destLat, destLng, destName) {
@@ -751,6 +788,9 @@ function setMode(mode, btn) {
     if (mode === 'addNode') {
         hint.textContent = '🖱 Klik di peta untuk meletakkan node baru';
         hint.style.display = '';
+    } else if (mode === 'setHQ') {
+        hint.textContent = '🏢 Klik lokasi kantor pusat di peta (otomatis snap ke jalan bila 🧲 aktif)';
+        hint.style.display = '';
     } else if (mode === 'drawCable') {
         hint.textContent = '✏️ Klik untuk menambah titik jalur kabel. Klik titik pertama/terakhir atau tombol Selesai untuk menyimpan.';
         hint.style.display = '';
@@ -782,6 +822,24 @@ async function snapToRoad(lat, lng) {
 
 // Map click handler
 map.on('click', async (e) => {
+    if (currentMode === 'setHQ') {
+        let lat = e.latlng.lat, lng = e.latlng.lng;
+        // Snap ke jalan terdekat jika opsi aktif
+        if (document.getElementById('snapRoad') && document.getElementById('snapRoad').checked) {
+            const snap = await snapToRoad(lat, lng);
+            if (snap) {
+                lat = snap.lat; lng = snap.lng;
+                if (snap.distance > 2) showToast(`🧲 Titik diselaraskan ke jalan (geser ${Math.round(snap.distance)} m)`, 'info');
+            }
+        }
+        const ok = await saveHQ(lat, lng);
+        if (ok) {
+            placeHQMarker(lat, lng);
+            map.flyTo([lat, lng], Math.max(map.getZoom(), 16));
+        }
+        setMode('view', document.getElementById('btnModeView'));
+        return;
+    }
     if (currentMode === 'addNode') {
         pendingLat = e.latlng.lat;
         pendingLng = e.latlng.lng;
