@@ -1070,6 +1070,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById('googleCbUri');
     if (el) el.textContent = location.origin + '/auth/google/callback';
 });
+async function testWA(){
     const phone=prompt('Masukkan nomor HP tujuan test (format 628xxx):');
     if(!phone)return;
     const res=await fetch('/settings/api/test-wa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,message:'Test from Dino-Bill ✅'})});
