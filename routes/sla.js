@@ -78,7 +78,27 @@ async function resolvePeriod(dbPool, { period, range }) {
 }
 
 // ── Helper: komputasi SLA (dipakai oleh /api/summary dan /api/notify-critical) ──
+// Hasil di-cache 60 detik per kombinasi parameter — mencegah hitungan berat
+// berulang saat beberapa user/teknisi membuka dashboard bersamaan.
+const _slaCache = new Map();
+const SLA_CACHE_TTL = 60 * 1000;
+
 async function computeSla(pool, { period, range, olt_id, cluster, search }) {
+    const cacheKey = JSON.stringify({ period: period || '', range: range || '', olt_id: olt_id || '', cluster: cluster || '', search: search || '' });
+    const cached = _slaCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < SLA_CACHE_TTL) return cached.data;
+
+    const data = await computeSlaUncached(pool, { period, range, olt_id, cluster, search });
+    _slaCache.set(cacheKey, { at: Date.now(), data });
+    // Batasi ukuran cache — buang entri tertua kalau sudah > 50
+    if (_slaCache.size > 50) {
+        const oldest = _slaCache.keys().next().value;
+        _slaCache.delete(oldest);
+    }
+    return data;
+}
+
+async function computeSlaUncached(pool, { period, range, olt_id, cluster, search }) {
     const { pStart, pEnd } = await resolvePeriod(pool, { period, range });
     const periodStart = pStart.getTime();
     const periodEnd   = pEnd.getTime();
@@ -137,25 +157,44 @@ async function computeSla(pool, { period, range, olt_id, cluster, search }) {
           )
         : onuList;
 
-    // Untuk setiap ONU, hitung uptime
+    // Ambil SEMUA event dalam periode SEKALIGUS (hindari N+1 query per ONU)
+    const [allEvents] = await pool.query(`
+            SELECT olt_id, onu_index, status, changed_at
+            FROM onu_status_history
+            WHERE changed_at BETWEEN ? AND ?
+            ORDER BY olt_id, onu_index, changed_at ASC
+        `, [pStart, pEnd]);
+
+    // Status terakhir SEBELUM periode, per ONU — satu query pakai self-join
+    const [lastStatusRows] = await pool.query(`
+            SELECT h.olt_id, h.onu_index, h.status
+            FROM onu_status_history h
+            INNER JOIN (
+                SELECT olt_id, onu_index, MAX(changed_at) AS mx
+                FROM onu_status_history
+                WHERE changed_at < ?
+                GROUP BY olt_id, onu_index
+            ) t ON t.olt_id = h.olt_id AND t.onu_index = h.onu_index AND t.mx = h.changed_at
+        `, [pStart]);
+
+    // Kelompokkan event & status awal per ONU di JavaScript
+    const eventsByOnu = {};
+    for (const ev of allEvents) {
+        const key = ev.olt_id + ':' + ev.onu_index;
+        (eventsByOnu[key] = eventsByOnu[key] || []).push(ev);
+    }
+    const initialByOnu = {};
+    for (const r of lastStatusRows) {
+        initialByOnu[r.olt_id + ':' + r.onu_index] = r.status;
+    }
+
+    // Untuk setiap ONU, hitung uptime dari data yang sudah digrup
     const results = [];
     for (const onu of filteredList) {
-        // Status sebelum periode dimulai (untuk tahu state awal)
-        const [[lastBefore]] = await pool.query(`
-                SELECT status FROM onu_status_history
-                WHERE olt_id = ? AND onu_index = ? AND changed_at < ?
-                ORDER BY changed_at DESC LIMIT 1
-            `, [onu.olt_id, onu.onu_index, pStart]);
+        const key = onu.olt_id + ':' + onu.onu_index;
+        const events = eventsByOnu[key] || [];
+        const initialStatus = initialByOnu[key] || 'Up';
 
-        // Semua event dalam periode
-        const [events] = await pool.query(`
-                SELECT status, changed_at FROM onu_status_history
-                WHERE olt_id = ? AND onu_index = ?
-                  AND changed_at BETWEEN ? AND ?
-                ORDER BY changed_at ASC
-            `, [onu.olt_id, onu.onu_index, pStart, pEnd]);
-
-        const initialStatus = lastBefore ? lastBefore.status : 'Up';
         const { uptime, downMs } = calcUptime(events, periodStart, periodEnd, initialStatus);
         const downHours = msToHours(downMs);
         const cl = clusterLabel(uptime);
@@ -163,9 +202,11 @@ async function computeSla(pool, { period, range, olt_id, cluster, search }) {
         // Filter cluster
         if (cluster && cl.key !== cluster) continue;
 
-        // Cari waktu down terakhir
-        const lastDownEv = events.slice().reverse().find(e => e.status === 'Down');
-        const lastDown   = lastDownEv ? lastDownEv.changed_at : null;
+        // Cari waktu down terakhir (scan dari belakang)
+        let lastDown = null;
+        for (let i = events.length - 1; i >= 0; i--) {
+            if (events[i].status === 'Down') { lastDown = events[i].changed_at; break; }
+        }
 
         results.push({
             olt_id:          onu.olt_id,

@@ -942,6 +942,9 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     "ALTER TABLE fo_nodes ADD INDEX IF NOT EXISTS idx_type (type)",
     "ALTER TABLE fo_cores ADD INDEX IF NOT EXISTS idx_cable (cable_id)",
     "ALTER TABLE fo_core_assignments ADD INDEX IF NOT EXISTS idx_core (core_id)",
+    // Index kritis untuk SLA & heatmap — tabel event ONU bisa jutaan baris
+    "ALTER TABLE onu_status_history ADD INDEX IF NOT EXISTS idx_time (changed_at)",
+    "ALTER TABLE onu_status_history ADD INDEX IF NOT EXISTS idx_onu_time (olt_id, onu_index, changed_at)",
   ];
   for (const sql of addIndexes) {
     pool.query(sql).catch(() => {});
