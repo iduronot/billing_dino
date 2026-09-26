@@ -6,6 +6,21 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 ## 🆕 Pembaruan Terbaru
 
+### v2.8 — Manajemen Magang & Login Google SSO (September 2026)
+- 🎓 **Modul Manajemen Magang** — kelola siswa/mahasiswa magang lengkap:
+  - Admin: tambah/edit/hapus siswa (akun langsung bisa login), rekap logbook per siswa per bulan, rekap presensi, **sertifikat magang siap cetak** (A4 landscape, statistik kehadiran & logbook, nama/logo perusahaan)
+  - Siswa: **presensi GPS** (radius & jam dari pengaturan yang sama dengan teknisi) + **logbook harian** (1 entri/hari, bisa di-edit, riwayat bulanan)
+  - Tabel baru `interns` & `logbooks` dibuat otomatis saat server start
+  - Role baru `intern` — sidebar, redirect login, dan hak akses terpisah dari karyawan
+- 🔐 **Halaman login khusus siswa magang** di `/magang/login` — terpisah dari login karyawan, hanya menerima role intern, saling terhubung dengan halaman login utama
+- 🔑 **Login Google SSO (OAuth2)** — karyawan & siswa bisa masuk dengan akun Google (selain username/password):
+  - Konfigurasi di **Pengaturan → 🔐 Login dengan Google** (Client ID, Client Secret, toggle aktif/nonaktif)
+  - Pencocokan akun via **email** — cukup isi email Gmail user, `google_id` tertaut otomatis saat pertama kali login
+  - Proteksi state & penanganan error lengkap (belum dikonfigurasi / email tidak terdaftar / dibatalkan user)
+  - Kolom `users.email` & `users.google_id` dibuat otomatis (auto-migrasi)
+- 🗂 **Menu Manajemen Magang** — grup menu tersendiri di sidebar admin (Siswa Magang, Logbook Magang, Presensi Magang) dengan highlight aktif per sub-halaman
+- 🐛 **Fix Invalid Date global** — pool MySQL kini menggunakan `dateStrings: true` sehingga kolom DATE/DATETIME dikembalikan sebagai string `YYYY-MM-DD`; pola `new Date(row.date+'T00:00:00')` di seluruh view tidak lagi menghasilkan Invalid Date
+
 ### v2.7 — Peta Interaktif & Notifikasi SLA Kritis (September 2026)
 - 🗺 **Koordinat pelanggan otomatis dari PPPoE MikroTik** — parsing nama secret `Nama@-7.xxx,111.xxx` langsung ke `customers.lat/lng` (700+ pelanggan terpetakan tanpa input manual)
 - 📍 **Popup detail pelanggan di peta** — klik marker → detail lengkap: telepon, paket + harga, username PPPoE, alamat, status, badge tunggakan/lunas (lazy-load dari server)
@@ -324,12 +339,25 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Filter default bulan ini** — saat pertama buka halaman, otomatis menampilkan pengeluaran bulan berjalan
 - Ringkasan pengeluaran per kategori
 
-### 20. 📍 Presensi Teknisi
-- Form check-in berbasis GPS dari portal teknisi
+### 20. 📍 Presensi Teknisi & Siswa Magang
+- Form check-in berbasis GPS dari portal teknisi **dan dashboard siswa magang**
 - Validasi radius: presensi ditolak jika jarak melebihi batas dari titik kantor
 - Batas jam tepat waktu dapat dikonfigurasi (contoh: 08:30, setelahnya = terlambat)
-- Laporan presensi per user per periode (tepat waktu / terlambat)
+- Laporan presensi per user per periode (tepat waktu / terlambat) — tersedia untuk teknisi (Rekap Presensi) dan siswa magang (Presensi Magang)
 - Admin dapat hapus data presensi
+
+### 20b. 🎓 Manajemen Magang (Siswa / Mahasiswa Magang)
+- **Role khusus `intern`** — akun siswa dibuat admin, login otomatis masuk ke dashboard magang
+- **Halaman login terpisah** di `/magang/login` (hanya menerima role intern)
+- **Sisi admin** (menu *Manajemen Magang*):
+  - *Siswa Magang* — tambah akun siswa (username + password), edit profil (sekolah/kampus, jurusan, periode magang, pembimbing, status), reset password, hapus beserta seluruh datanya; field **email** untuk keperluan login Google
+  - *Logbook Magang* — rekap kegiatan harian semua/per siswa, filter per bulan
+  - *Presensi Magang* — rekap kehadiran per siswa (tepat waktu/terlambat) + detail harian
+  - **Sertifikat magang** siap cetak (A4 landscape) — statistik kehadiran & jumlah logbook, nama/logo/ alamat perusahaan otomatis dari Pengaturan
+- **Sisi siswa** (dashboard `/intern`):
+  - **Presensi GPS** — memakai pengaturan radius & jam yang sama dengan presensi teknisi
+  - **Logbook harian** — 1 entri per hari (bisa di-edit), riwayat bulan ini dengan opsi hapus per baris
+  - Statistik mini: tepat waktu, terlambat, total logbook
 
 ### 21. 🔧 Pengaturan Sistem
 - **Profil Perusahaan**: nama ISP, logo, ikon, telepon, alamat, email, website, timezone, mata uang
@@ -346,6 +374,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Peta**: koordinat pusat, zoom default, mini preview map interaktif, ambil lokasi GPS
 - **Notifikasi SLA**: toggle aktif/nonaktif notifikasi user kritis + pilihan jam pengiriman (otomatis tanpa restart server)
 - **Presensi**: radius maksimal check-in (meter), jam batas tepat waktu
+- **Login Google (SSO)**: Client ID & Client Secret OAuth Google, toggle aktif/nonaktif — tombol "Masuk dengan Google" hanya tampil jika diaktifkan
 - **Manajemen User**: tambah/edit/hapus user admin, teknisi, sales; set role, nomor HP, Telegram ID
 - **Import/Export**: export pelanggan & invoice ke CSV, import pelanggan massal dari CSV
 - **Git Repository**: konfigurasi URL repo & branch untuk update sistem
@@ -353,8 +382,9 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Multi-bahasa**: Indonesia & English (dapat diganti dari topbar)
 
 ### 22. 🔐 Keamanan & Akses
-- Role-based access control: **Admin** (akses penuh), **Teknisi** (portal teknisi), **Sales** (portal sales)
-- Password hashing dengan bcrypt (salt round 10)
+- Role-based access control: **Admin** (akses penuh), **Teknisi** (portal teknisi), **Sales** (portal sales), **Intern/Siswa Magang** (dashboard magang: presensi & logbook saja)
+- Login ganda: **username + password** (bcrypt, salt round 10) atau **Google SSO** (OAuth2, dicocokkan via email & google_id)
+- Halaman login terpisah untuk karyawan (`/login`) dan siswa magang (`/magang/login`) — masing-masing hanya menerima role yang sesuai
 - Session management dengan express-session
 - Middleware autentikasi per route group
 - Verifikasi webhook Xendit via `x-callback-token` header
@@ -429,6 +459,11 @@ pm2 save && pm2 startup
 - Password default: `1234`
 - Link **Portal Pelanggan** juga tersedia di sidebar dashboard admin
 
+### 1c. Login Portal Magang (Siswa/Mahasiswa Magang)
+- URL: `http://IP-SERVER:3999/magang/login`
+- Username & password dibuatkan oleh admin dari menu **Manajemen Magang → Siswa Magang**
+- Halaman ini khusus siswa magang — akun karyawan tidak bisa masuk di sini (dan sebaliknya)
+
 ### 2. Profil Perusahaan
 **Pengaturan → Perusahaan** → isi nama ISP, logo, telepon, alamat, timezone.
 
@@ -464,6 +499,16 @@ pm2 save && pm2 startup
 ### 9. IP Monitor
 **IP Monitor** → Tambah target → isi nama, IP/host, interval cek (menit).
 Notifikasi Telegram dikirim saat host down atau kembali online.
+
+### 10. Login Google (SSO)
+**Pengaturan → 🔐 Login dengan Google:**
+1. Buka [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) → **Create Credentials → OAuth Client ID** (tipe **Web application**)
+2. Di bagian *Authorized redirect URIs*, daftarkan URI callback yang tampil di halaman Pengaturan, contoh:
+   - `http://localhost:3999/auth/google/callback` (lokal)
+   - `https://invoice.gigaboot.id/auth/google/callback` (production)
+3. Salin **Client ID** & **Client Secret** ke kolom yang tersedia, lalu **aktifkan toggle**
+4. Isi **email Gmail** pada tiap user yang ingin login via Google (Kelola User / data siswa magang) — akun tertaut otomatis saat pertama kali login
+5. Tombol **"Masuk dengan Google"** kini tampil di halaman login karyawan & portal magang
 
 ---
 
