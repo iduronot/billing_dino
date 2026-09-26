@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sertifikat Magang — <%= intern.full_name %></title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+            background: #e8e8e8;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px;
+        }
+        .no-print { font-family: Arial, sans-serif; margin-bottom: 16px; display: flex; gap: 10px; }
+        .no-print button {
+            padding: 10px 22px; border: none; border-radius: 8px; font-size: 14px;
+            font-weight: 600; cursor: pointer; font-family: Arial, sans-serif;
+        }
+        .btn-print { background: linear-gradient(135deg,#3B82F6,#2563EB); color: #fff; }
+        .btn-back  { background: #fff; color: #333; border: 1px solid #ccc !important; }
+
+        .certificate {
+            width: 1000px; max-width: 100%;
+            background: #fffdf7;
+            border: 12px double #b8860b;
+            outline: 4px solid #b8860b;
+            outline-offset: -22px;
+            padding: 70px 60px;
+            text-align: center;
+            position: relative;
+        }
+        .cert-header { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom: 10px; }
+        .cert-logo { max-height: 70px; max-width: 90px; object-fit: contain; }
+        .cert-company { font-family: Arial, sans-serif; font-size: 22px; font-weight: 800; color: #1a3a6b; letter-spacing: .5px; }
+        .cert-company-sub { font-family: Arial, sans-serif; font-size: 12px; color: #555; margin-top: 3px; }
+        .cert-title {
+            font-size: 52px; font-weight: 700; letter-spacing: 8px;
+            color: #b8860b; margin: 34px 0 6px;
+            font-variant: small-caps;
+        }
+        .cert-subtitle { font-size: 16px; color: #444; letter-spacing: 2px; margin-bottom: 36px; font-style: italic; }
+        .cert-present { font-size: 15px; color: #333; }
+        .cert-name {
+            font-size: 40px; font-weight: 700; color: #1a3a6b;
+            margin: 14px 0 4px; text-decoration: underline; text-decoration-color: #b8860b;
+            text-underline-offset: 8px;
+        }
+        .cert-school { font-size: 16px; color: #555; margin-bottom: 30px; }
+        .cert-body { font-size: 15px; color: #333; line-height: 1.9; max-width: 720px; margin: 0 auto; }
+        .cert-period { font-weight: 700; }
+        .cert-stats {
+            display: flex; justify-content: center; gap: 40px; margin: 34px 0 10px;
+            font-family: Arial, sans-serif;
+        }
+        .cert-stat { text-align: center; }
+        .cert-stat .v { font-size: 30px; font-weight: 800; color: #1a3a6b; }
+        .cert-stat .l { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+        .cert-footer { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 60px; }
+        .cert-sign { text-align: center; font-size: 14px; color: #333; }
+        .cert-sign .role { margin-bottom: 76px; }
+        .cert-sign .name { font-weight: 700; text-decoration: underline; }
+        .cert-sign .title { font-size: 12px; color: #555; margin-top: 4px; }
+        .cert-no {
+            position: absolute; bottom: 26px; right: 40px;
+            font-family: Arial, sans-serif; font-size: 11px; color: #888;
+        }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .no-print { display: none; }
+            .certificate { border-width: 10px; box-shadow: none; }
+            @page { size: A4 landscape; margin: 8mm; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <button class="btn-print" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+    <button class="btn-back" onclick="location.href='/interns'">← Kembali</button>
+</div>
+
+<div class="certificate">
+    <div class="cert-header">
+        <% if (settings.company_logo) { %>
+        <img src="<%= settings.company_logo %>" class="cert-logo" alt="Logo">
+        <% } %>
+        <div>
+            <div class="cert-company"><%= settings.company_name || 'Perusahaan' %></div>
+            <% if (settings.company_address) { %><div class="cert-company-sub"><%= settings.company_address %></div><% } %>
+        </div>
+    </div>
+
+    <div class="cert-title">Sertifikat</div>
+    <div class="cert-subtitle">Praktik Kerja Lapangan / Magang</div>
+
+    <div class="cert-present">Dengan bangga diberikan kepada:</div>
+    <div class="cert-name"><%= intern.full_name %></div>
+    <% if (intern.school) { %><div class="cert-school"><%= intern.school %><%= intern.major ? ' — ' + intern.major : '' %></div><% } %>
+
+    <div class="cert-body">
+        Telang melaksanakan Praktik Kerja Lapangan (Magang) di
+        <b><%= settings.company_name || 'Perusahaan' %></b>
+        <% if (intern.start_date || intern.end_date) { %>
+            pada periode
+            <span class="cert-period">
+                <%= intern.start_date ? new Date(intern.start_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
+                s.d.
+                <%= intern.end_date ? new Date(intern.end_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
+            </span>
+        <% } %>
+        dengan menunjukkan sikap disiplin, tanggung jawab, dan kemauan belajar yang baik
+        selama menjalankan kegiatan magang.
+    </div>
+
+    <div class="cert-stats">
+        <div class="cert-stat"><div class="v"><%= att.total || 0 %></div><div class="l">Hari Hadir</div></div>
+        <div class="cert-stat"><div class="v"><%= att.hadir || 0 %></div><div class="l">Tepat Waktu</div></div>
+        <div class="cert-stat"><div class="v"><%= log_count %></div><div class="l">Logbook Diisi</div></div>
+    </div>
+
+    <div class="cert-footer">
+        <div class="cert-sign">
+            <div class="role">Pembimbing Lapangan</div>
+            <div class="name"><%= intern.mentor || '...........................' %></div>
+            <div class="title"><%= intern.mentor ? 'Pembimbing Magang' : '( Nama Jelas )' %></div>
+        </div>
+        <div class="cert-sign">
+            <div class="role"><%= new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) %><br>Direktur / Pimpinan</div>
+            <div class="name">...........................</div>
+            <div class="title">( Nama Jelas )</div>
+        </div>
+    </div>
+
+    <div class="cert-no">No: MAG/<%= String(intern.id).padStart(4,'0') %>/<%= new Date().getFullYear() %></div>
+</div>
+
+</body>
+</html>

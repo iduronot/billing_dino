@@ -690,6 +690,33 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       INDEX idx_user (user_id)
     )
   `).catch(console.error);
+  // Tabel modul magang (siswa magang & logbook harian)
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS interns (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL UNIQUE,
+      full_name VARCHAR(150) NOT NULL,
+      school VARCHAR(150) NULL,
+      major VARCHAR(100) NULL,
+      start_date DATE NULL,
+      end_date DATE NULL,
+      mentor VARCHAR(100) NULL,
+      status ENUM('active','finished') DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(console.error);
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS logbooks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      log_date DATE NOT NULL,
+      activities TEXT NOT NULL,
+      problems TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_user_date (user_id, log_date),
+      INDEX idx_log_date (log_date)
+    )
+  `).catch(console.error);
   checkAndAddColumn('fo_nodes', 'feed_cable_id', 'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_tube_id',  'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_core_id',  'INT NULL');
@@ -1086,6 +1113,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       // Teknisi redirect ke portal, sales redirect ke sales
       if (req.session.role === 'technician') return res.redirect('/tickets');
       if (req.session.role === 'sales') return res.redirect('/sales');
+      if (req.session.role === 'intern') return res.redirect('/intern');
       return res.status(403).send('Akses ditolak');
     }
     next();
@@ -1379,6 +1407,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           
           if (user.role === 'technician') return res.redirect('/tickets');
           if (user.role === 'sales') return res.redirect('/sales');
+          if (user.role === 'intern') return res.redirect('/intern');
           return res.redirect('/');
         }
       }
@@ -1730,6 +1759,15 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   const attendanceRouter = require('./routes/attendance');
   attendanceRouter.setPool(pool);
   app.use('/attendance', requireAuth, attendanceRouter);
+
+  // Modul magang — /interns untuk admin, /intern untuk siswa magang
+  const internsRouter = require('./routes/interns');
+  internsRouter.setPool(pool);
+  app.use('/interns', adminOnly, internsRouter);
+  app.use('/intern', requireAuth, (req, res, next) => {
+      if (req.session.role !== 'intern' && req.session.role !== 'admin') return res.status(403).send('Akses ditolak');
+      next();
+  }, internsRouter);
 
   const foRouter = require('./routes/fo');
   foRouter.setPool(pool);
