@@ -5,71 +5,199 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sertifikat Magang — <%= intern.full_name %></title>
     <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body {
-            font-family: Georgia, 'Times New Roman', serif;
-            background: #e8e8e8;
-            display: flex; flex-direction: column; align-items: center;
-            padding: 20px;
-        }
-        .no-print { font-family: Arial, sans-serif; margin-bottom: 16px; display: flex; gap: 10px; }
-        .no-print button {
-            padding: 10px 22px; border: none; border-radius: 8px; font-size: 14px;
-            font-weight: 600; cursor: pointer; font-family: Arial, sans-serif;
-        }
-        .btn-print { background: linear-gradient(135deg,#3B82F6,#2563EB); color: #fff; }
-        .btn-back  { background: #fff; color: #333; border: 1px solid #ccc !important; }
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,500&display=swap');
 
+        * { margin:0; padding:0; box-sizing:border-box; }
+        :root {
+            --orange: #F97316;
+            --orange-deep: #EA580C;
+            --blue: #2563EB;
+            --blue-deep: #1E3A8A;
+            --ink: #1E293B;
+            --muted: #64748B;
+        }
+        body {
+            font-family: 'Outfit', Arial, sans-serif;
+            background: #CBD5E1;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 24px 12px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .no-print { margin-bottom: 18px; display: flex; gap: 10px; }
+        .no-print button {
+            padding: 11px 26px; border: none; border-radius: 12px; font-size: 14px;
+            font-weight: 700; cursor: pointer; font-family: 'Outfit', sans-serif;
+            transition: all .2s;
+        }
+        .btn-print { background: linear-gradient(135deg,var(--orange),var(--orange-deep)); color: #fff; box-shadow: 0 6px 18px rgba(249,115,22,.4); }
+        .btn-print:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(249,115,22,.5); }
+        .btn-back  { background: #fff; color: var(--ink); }
+
+        /* ═══ KERTAS A4 LANDSCAPE 297×210mm ═══ */
         .certificate {
-            width: 1000px; max-width: 100%;
-            background: #fffdf7;
-            border: 12px double #b8860b;
-            outline: 4px solid #b8860b;
-            outline-offset: -22px;
-            padding: 70px 60px;
-            text-align: center;
+            width: 297mm; height: 210mm;
+            background: #FFFFFF;
             position: relative;
+            overflow: hidden;
+            box-shadow: 0 24px 60px rgba(15,23,42,.35);
+            display: flex; flex-direction: column;
         }
-        .cert-header { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom: 10px; }
-        .cert-logo { max-height: 70px; max-width: 90px; object-fit: contain; }
-        .cert-company { font-family: Arial, sans-serif; font-size: 22px; font-weight: 800; color: #1a3a6b; letter-spacing: .5px; }
-        .cert-company-sub { font-family: Arial, sans-serif; font-size: 12px; color: #555; margin-top: 3px; }
+
+        /* Bingkai gradien oranye-biru */
+        .frame {
+            position: absolute; inset: 0; pointer-events: none;
+            border: 1.6mm solid transparent;
+            background: linear-gradient(#fff,#fff) padding-box,
+                        linear-gradient(135deg, var(--orange) 0%, #FBBF24 30%, var(--blue) 70%, var(--blue-deep) 100%) border-box;
+        }
+        .frame-inner {
+            position: absolute; inset: 4mm; pointer-events: none;
+            border: 0.35mm solid rgba(37,99,235,.25);
+        }
+
+        /* Dekorasi sudut */
+        .deco { position: absolute; pointer-events: none; }
+        .deco-tr {
+            top: -34mm; right: -34mm; width: 95mm; height: 95mm; border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, rgba(249,115,22,.16), rgba(249,115,22,.05) 60%, transparent 72%);
+        }
+        .deco-tr2 {
+            top: -18mm; right: -18mm; width: 46mm; height: 46mm; border-radius: 50%;
+            background: conic-gradient(from 180deg, var(--orange), #FBBF24, var(--orange));
+            opacity: .9;
+        }
+        .deco-bl {
+            bottom: -38mm; left: -38mm; width: 105mm; height: 105mm; border-radius: 50%;
+            background: radial-gradient(circle at 70% 70%, rgba(37,99,235,.16), rgba(37,99,235,.05) 60%, transparent 72%);
+        }
+        .deco-bl2 {
+            bottom: -20mm; left: -20mm; width: 48mm; height: 48mm; border-radius: 50%;
+            background: conic-gradient(from 0deg, var(--blue), #60A5FA, var(--blue));
+            opacity: .9;
+        }
+        .deco-line {
+            top: 0; left: 0; width: 100%; height: 2.4mm;
+            background: linear-gradient(90deg, var(--orange) 0%, #FBBF24 35%, var(--blue) 75%, var(--blue-deep) 100%);
+        }
+        .deco-line-b {
+            top: auto; bottom: 0;
+        }
+
+        .inner {
+            position: relative; z-index: 2;
+            flex: 1;
+            padding: 10mm 18mm 8mm;
+            display: flex; flex-direction: column;
+            text-align: center;
+        }
+
+        /* Header perusahaan */
+        .cert-header { display:flex; align-items:center; justify-content:center; gap:5mm; }
+        .cert-logo-wrap {
+            width: 17mm; height: 17mm; border-radius: 5mm;
+            background: linear-gradient(135deg, var(--orange), var(--blue));
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 3mm 8mm rgba(37,99,235,.25);
+            overflow: hidden;
+        }
+        .cert-logo { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .cert-logo-fallback { font-size: 9mm; }
+        .cert-company { font-size: 6mm; font-weight: 800; color: var(--blue-deep); letter-spacing: .2mm; }
+        .cert-company-sub { font-size: 2.9mm; color: var(--muted); margin-top: 1mm; }
+
+        /* Judul */
+        .cert-badge-row { margin-top: 6mm; }
+        .cert-badge {
+            display: inline-block; padding: 1.6mm 7mm; border-radius: 10mm;
+            background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(37,99,235,.12));
+            border: 0.3mm solid rgba(249,115,22,.35);
+            font-size: 3.2mm; font-weight: 700; letter-spacing: 1.2mm; color: var(--orange-deep);
+            text-transform: uppercase;
+        }
         .cert-title {
-            font-size: 52px; font-weight: 700; letter-spacing: 8px;
-            color: #b8860b; margin: 34px 0 6px;
-            font-variant: small-caps;
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 15mm; font-weight: 700; line-height: 1.1;
+            background: linear-gradient(100deg, var(--orange-deep) 10%, var(--orange) 40%, var(--blue) 75%, var(--blue-deep));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-top: 3mm;
         }
-        .cert-subtitle { font-size: 16px; color: #444; letter-spacing: 2px; margin-bottom: 36px; font-style: italic; }
-        .cert-present { font-size: 15px; color: #333; }
+        .cert-subtitle { font-size: 3.6mm; color: var(--muted); letter-spacing: .8mm; margin-top: 1.5mm; text-transform: uppercase; font-weight: 500; }
+        .cert-divider {
+            width: 60mm; height: 1mm; margin: 4mm auto 0; border-radius: 1mm;
+            background: linear-gradient(90deg, transparent, var(--orange) 30%, var(--blue) 70%, transparent);
+        }
+
+        /* Penerima */
+        .cert-present { font-size: 3.8mm; color: var(--muted); margin-top: 5.5mm; }
         .cert-name {
-            font-size: 40px; font-weight: 700; color: #1a3a6b;
-            margin: 14px 0 4px; text-decoration: underline; text-decoration-color: #b8860b;
-            text-underline-offset: 8px;
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 11mm; font-weight: 700; color: var(--ink);
+            margin-top: 2mm;
         }
-        .cert-school { font-size: 16px; color: #555; margin-bottom: 30px; }
-        .cert-body { font-size: 15px; color: #333; line-height: 1.9; max-width: 720px; margin: 0 auto; }
-        .cert-period { font-weight: 700; }
-        .cert-stats {
-            display: flex; justify-content: center; gap: 40px; margin: 34px 0 10px;
-            font-family: Arial, sans-serif;
+        .cert-name-underline {
+            width: 110mm; height: .8mm; margin: 1.8mm auto 0; border-radius: 1mm;
+            background: linear-gradient(90deg, var(--orange), var(--blue));
         }
-        .cert-stat { text-align: center; }
-        .cert-stat .v { font-size: 30px; font-weight: 800; color: #1a3a6b; }
-        .cert-stat .l { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
-        .cert-footer { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 60px; }
-        .cert-sign { text-align: center; font-size: 14px; color: #333; }
-        .cert-sign .role { margin-bottom: 76px; }
-        .cert-sign .name { font-weight: 700; text-decoration: underline; }
-        .cert-sign .title { font-size: 12px; color: #555; margin-top: 4px; }
+        .cert-school { font-size: 3.6mm; color: var(--muted); margin-top: 2.2mm; font-weight: 500; }
+
+        .cert-body {
+            font-size: 3.7mm; color: #334155; line-height: 1.75;
+            max-width: 200mm; margin: 4.5mm auto 0;
+        }
+        .cert-period { font-weight: 700; color: var(--blue-deep); }
+
+        /* Statistik */
+        .cert-stats { display: flex; justify-content: center; gap: 8mm; margin-top: 5mm; }
+        .cert-stat {
+            min-width: 40mm; padding: 3mm 6mm; border-radius: 4mm;
+            background: linear-gradient(145deg, #FFF7ED, #EFF6FF);
+            border: 0.3mm solid rgba(37,99,235,.18);
+        }
+        .cert-stat .v {
+            font-size: 7mm; font-weight: 800;
+            background: linear-gradient(135deg, var(--orange), var(--blue));
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .cert-stat .l { font-size: 2.7mm; color: var(--muted); text-transform: uppercase; letter-spacing: .6mm; margin-top: .8mm; font-weight: 600; }
+
+        /* Footer tanda tangan */
+        .cert-footer {
+            margin-top: auto;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            padding: 0 12mm;
+        }
+        .cert-sign { text-align: center; font-size: 3.4mm; color: var(--ink); }
+        .cert-sign .role { color: var(--muted); margin-bottom: 13mm; line-height: 1.5; }
+        .cert-sign .name {
+            font-weight: 700; color: var(--blue-deep); font-size: 3.8mm;
+            border-bottom: .3mm solid var(--orange); display: inline-block; padding: 0 4mm 1mm;
+        }
+        .cert-sign .title { font-size: 2.9mm; color: var(--muted); margin-top: 1.2mm; }
+
+        /* Segel */
+        .cert-seal {
+            width: 26mm; height: 26mm; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #FDBA74, var(--orange) 55%, var(--orange-deep));
+            border: 1mm double rgba(255,255,255,.85);
+            box-shadow: 0 2mm 6mm rgba(249,115,22,.4);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; text-align: center;
+        }
+        .cert-seal .seal-text { font-size: 2.4mm; font-weight: 800; letter-spacing: .4mm; line-height: 1.35; padding: 0 2mm; }
+        .cert-seal .seal-star { font-size: 5mm; line-height: 1; }
+
         .cert-no {
-            position: absolute; bottom: 26px; right: 40px;
-            font-family: Arial, sans-serif; font-size: 11px; color: #888;
+            position: absolute; bottom: 4.5mm; right: 8mm; z-index: 3;
+            font-size: 2.8mm; color: var(--muted); font-weight: 500;
         }
+
         @media print {
             body { background: #fff; padding: 0; }
             .no-print { display: none; }
-            .certificate { border-width: 10px; box-shadow: none; }
-            @page { size: A4 landscape; margin: 8mm; }
+            .certificate { box-shadow: none; }
+            @page { size: A4 landscape; margin: 0; }
         }
     </style>
 </head>
@@ -81,54 +209,78 @@
 </div>
 
 <div class="certificate">
-    <div class="cert-header">
-        <% if (settings.company_logo) { %>
-        <img src="<%= settings.company_logo %>" class="cert-logo" alt="Logo">
-        <% } %>
-        <div>
-            <div class="cert-company"><%= settings.company_name || 'Perusahaan' %></div>
-            <% if (settings.company_address) { %><div class="cert-company-sub"><%= settings.company_address %></div><% } %>
+    <div class="frame"></div>
+    <div class="frame-inner"></div>
+    <div class="deco deco-line"></div>
+    <div class="deco deco-line deco-line-b"></div>
+    <div class="deco deco-tr"></div>
+    <div class="deco deco-tr2"></div>
+    <div class="deco deco-bl"></div>
+    <div class="deco deco-bl2"></div>
+
+    <div class="inner">
+        <div class="cert-header">
+            <div class="cert-logo-wrap">
+                <% if (settings.company_logo) { %>
+                <img src="<%= settings.company_logo %>" class="cert-logo" alt="Logo">
+                <% } else { %>
+                <span class="cert-logo-fallback">🎓</span>
+                <% } %>
+            </div>
+            <div>
+                <div class="cert-company"><%= settings.company_name || 'Perusahaan' %></div>
+                <% if (settings.company_address) { %><div class="cert-company-sub"><%= settings.company_address %></div><% } %>
+            </div>
         </div>
-    </div>
 
-    <div class="cert-title">Sertifikat</div>
-    <div class="cert-subtitle">Praktik Kerja Lapangan / Magang</div>
+        <div class="cert-badge-row"><span class="cert-badge">Sertifikat Penghargaan</span></div>
+        <div class="cert-title">Sertifikat Magang</div>
+        <div class="cert-subtitle">Praktik Kerja Lapangan / Magang</div>
+        <div class="cert-divider"></div>
 
-    <div class="cert-present">Dengan bangga diberikan kepada:</div>
-    <div class="cert-name"><%= intern.full_name %></div>
-    <% if (intern.school) { %><div class="cert-school"><%= intern.school %><%= intern.major ? ' — ' + intern.major : '' %></div><% } %>
+        <div class="cert-present">Dengan bangga diberikan kepada:</div>
+        <div class="cert-name"><%= intern.full_name %></div>
+        <div class="cert-name-underline"></div>
+        <% if (intern.school) { %><div class="cert-school"><%= intern.school %><%= intern.major ? ' · ' + intern.major : '' %></div><% } %>
 
-    <div class="cert-body">
-        Telang melaksanakan Praktik Kerja Lapangan (Magang) di
-        <b><%= settings.company_name || 'Perusahaan' %></b>
-        <% if (intern.start_date || intern.end_date) { %>
-            pada periode
-            <span class="cert-period">
-                <%= intern.start_date ? new Date(intern.start_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
-                s.d.
-                <%= intern.end_date ? new Date(intern.end_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
-            </span>
-        <% } %>
-        dengan menunjukkan sikap disiplin, tanggung jawab, dan kemauan belajar yang baik
-        selama menjalankan kegiatan magang.
-    </div>
-
-    <div class="cert-stats">
-        <div class="cert-stat"><div class="v"><%= att.total || 0 %></div><div class="l">Hari Hadir</div></div>
-        <div class="cert-stat"><div class="v"><%= att.hadir || 0 %></div><div class="l">Tepat Waktu</div></div>
-        <div class="cert-stat"><div class="v"><%= log_count %></div><div class="l">Logbook Diisi</div></div>
-    </div>
-
-    <div class="cert-footer">
-        <div class="cert-sign">
-            <div class="role">Pembimbing Lapangan</div>
-            <div class="name"><%= intern.mentor || '...........................' %></div>
-            <div class="title"><%= intern.mentor ? 'Pembimbing Magang' : '( Nama Jelas )' %></div>
+        <div class="cert-body">
+            Telah melaksanakan Praktik Kerja Lapangan (Magang) di
+            <b><%= settings.company_name || 'Perusahaan' %></b>
+            <% if (intern.start_date || intern.end_date) { %>
+                pada periode
+                <span class="cert-period">
+                    <%= intern.start_date ? new Date(intern.start_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
+                    s.d.
+                    <%= intern.end_date ? new Date(intern.end_date+'T00:00:00').toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) : '-' %>
+                </span>
+            <% } %>
+            dengan menunjukkan sikap disiplin, tanggung jawab, dan kemauan belajar yang baik
+            selama menjalankan kegiatan magang.
         </div>
-        <div class="cert-sign">
-            <div class="role"><%= new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) %><br>Direktur / Pimpinan</div>
-            <div class="name">...........................</div>
-            <div class="title">( Nama Jelas )</div>
+
+        <div class="cert-stats">
+            <div class="cert-stat"><div class="v"><%= att.total || 0 %></div><div class="l">Hari Hadir</div></div>
+            <div class="cert-stat"><div class="v"><%= att.hadir || 0 %></div><div class="l">Tepat Waktu</div></div>
+            <div class="cert-stat"><div class="v"><%= log_count %></div><div class="l">Logbook Diisi</div></div>
+        </div>
+
+        <div class="cert-footer">
+            <div class="cert-sign">
+                <div class="role">Pembimbing Lapangan</div>
+                <div class="name"><%= intern.mentor || '...........................' %></div>
+                <div class="title"><%= intern.mentor ? 'Pembimbing Magang' : '( Nama Jelas )' %></div>
+            </div>
+            <div class="cert-seal">
+                <div>
+                    <div class="seal-star">★</div>
+                    <div class="seal-text"><%= settings.company_name || 'MAGANG' %></div>
+                </div>
+            </div>
+            <div class="cert-sign">
+                <div class="role"><%= new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) %><br>Direktur / Pimpinan</div>
+                <div class="name">...........................</div>
+                <div class="title">( Nama Jelas )</div>
+            </div>
         </div>
     </div>
 
