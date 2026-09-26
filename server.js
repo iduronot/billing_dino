@@ -174,7 +174,11 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
     keepAliveInitialDelay: 0,
     multipleStatements: false,
     charset:           'utf8mb4',
-    timezone:          '+07:00'   // WIB — sinkronkan parsing JS Date ↔ MySQL
+    timezone:          '+07:00',  // WIB — sinkronkan parsing JS Date ↔ MySQL
+    // FIX (2026-09-27): kembalikan DATE/DATETIME/TIMESTAMP sebagai string
+    // 'YYYY-MM-DD[ HH:MM:SS]'. Tanpa ini mysql2 mengembalikan objek Date sehingga
+    // pola umum di view `new Date(row.date+'T00:00:00')` menghasilkan Invalid Date.
+    dateStrings:       true
   });
 
   // Auto-initialize tables that might be missing
@@ -421,6 +425,10 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // Default setting presensi
   pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('attendance_radius','100')").catch(()=>{});
   pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('attendance_late_time','08:30')").catch(()=>{});
+  // Google SSO — isi Client ID/Secret di Pengaturan untuk mengaktifkan
+  pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_login_enabled','0')").catch(()=>{});
+  pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_client_id','')").catch(()=>{});
+  pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_client_secret','')").catch(()=>{});
   }
 
   pool.query(`
@@ -717,6 +725,9 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
       INDEX idx_log_date (log_date)
     )
   `).catch(console.error);
+  // Kolom untuk Google SSO (ditambahkan ke tabel users yang sudah ada)
+  checkAndAddColumn('users', 'email',     "VARCHAR(150) NULL");
+  checkAndAddColumn('users', 'google_id', "VARCHAR(50) NULL");
   checkAndAddColumn('fo_nodes', 'feed_cable_id', 'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_tube_id',  'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_core_id',  'INT NULL');
@@ -1390,7 +1401,7 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
 
   app.get('/login', (req, res) => {
     if (req.session.userId) return res.redirect('/');
-    res.render('login', { error: null });
+    res.render('login', { error: req.query.err || null, googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
   });
 
   app.post('/login', async (req, res) => {
@@ -1411,9 +1422,128 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
           return res.redirect('/');
         }
       }
-      res.render('login', { error: 'invalid_credentials' });
+      res.render('login', { error: 'invalid_credentials', googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
     } catch (err) {
-      res.render('login', { error: 'database_error' });
+      res.render('login', { error: 'database_error', googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
+    }
+  });
+
+  // ── Login terpisah khusus siswa magang ──
+  app.get('/magang/login', (req, res) => {
+    if (req.session.userId) {
+      if (req.session.role === 'intern') return res.redirect('/intern');
+      return res.redirect('/');
+    }
+    res.render('intern_login', { error: req.query.err || null, googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
+  });
+
+  app.post('/magang/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+      const [rows] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
+      if (rows.length > 0) {
+        const user = rows[0];
+        if (user.role !== 'intern') {
+          return res.render('intern_login', { error: 'bukan_siswa_magang', googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
+        }
+        const match = await bcrypt.compare(password, user.password);
+        if (match) {
+          req.session.userId = user.id;
+          req.session.role = user.role;
+          req.session.username = user.username;
+          return res.redirect('/intern');
+        }
+      }
+      res.render('intern_login', { error: 'invalid_credentials', googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
+    } catch (err) {
+      res.render('intern_login', { error: 'database_error', googleEnabled: isGoogleLoginEnabled(res.locals.settings) });
+    }
+  });
+
+  // ── Google SSO (OAuth2, tanpa passport) ──
+  function isGoogleLoginEnabled(s) {
+    s = s || {};
+    return !!(s.google_client_id && s.google_client_secret && s.google_login_enabled === '1');
+  }
+
+  app.get('/auth/google', async (req, res) => {
+    try {
+      const [rows] = await pool.query(
+        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('google_client_id','google_client_secret','google_login_enabled')");
+      const cfg = {};
+      rows.forEach(r => cfg[r.setting_key] = r.setting_value);
+      if (!cfg.google_client_id || !cfg.google_client_secret || cfg.google_login_enabled !== '1') {
+        return res.redirect('/login?err=google_not_configured');
+      }
+      const redirectUri = `${req.protocol}://${req.get('host')}/auth/google/callback`;
+      const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      req.session.oauthState = state;
+      // Ingat halaman asal agar error kembali ke sana
+      req.session.oauthFrom = (req.get('referer') || '').includes('/magang/login') ? 'magang' : 'login';
+      const url = 'https://accounts.google.com/o/oauth2/v2/auth'
+        + `?client_id=${encodeURIComponent(cfg.google_client_id)}`
+        + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+        + '&response_type=code&scope=openid%20email%20profile'
+        + `&state=${state}&access_type=online&prompt=select_account`;
+      res.redirect(url);
+    } catch (e) { res.redirect('/login?err=google_error'); }
+  });
+
+  app.get('/auth/google/callback', async (req, res) => {
+    const base = req.session.oauthFrom === 'magang' ? '/magang/login?err=' : '/login?err=';
+    const sendErr = (code) => res.redirect(base + code);
+    try {
+      if (!req.query.state || req.query.state !== req.session.oauthState) return sendErr('google_state');
+      if (req.query.error) return sendErr('google_cancelled');
+      const [rows] = await pool.query(
+        "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('google_client_id','google_client_secret')");
+      const cfg = {};
+      rows.forEach(r => cfg[r.setting_key] = r.setting_value);
+      const redirectUri = `${req.protocol}://${req.get('host')}/auth/google/callback`;
+
+      // Tukar code → token
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: req.query.code,
+          client_id: cfg.google_client_id,
+          client_secret: cfg.google_client_secret,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code'
+        })
+      });
+      const token = await tokenRes.json();
+      if (!token.access_token) return sendErr('google_token');
+
+      // Ambil profil
+      const infoRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+        headers: { Authorization: `Bearer ${token.access_token}` }
+      });
+      const info = await infoRes.json();
+      if (!info.sub || !info.email) return sendErr('google_profile');
+
+      // Cari user: dulu by google_id, lalu by email (otomatis tautkan)
+      let [users] = await pool.query('SELECT * FROM users WHERE google_id = ?', [info.sub]);
+      if (users.length === 0) {
+        [users] = await pool.query('SELECT * FROM users WHERE email = ?', [info.email]);
+        if (users.length > 0) {
+          await pool.query('UPDATE users SET google_id = ? WHERE id = ?', [info.sub, users[0].id]);
+        }
+      }
+      if (users.length === 0) return sendErr('google_no_account');
+
+      const user = users[0];
+      req.session.userId = user.id;
+      req.session.role = user.role;
+      req.session.username = user.username;
+
+      if (user.role === 'technician') return res.redirect('/tickets');
+      if (user.role === 'sales') return res.redirect('/sales');
+      if (user.role === 'intern') return res.redirect('/intern');
+      return res.redirect('/');
+    } catch (e) {
+      sendErr('google_error');
     }
   });
 

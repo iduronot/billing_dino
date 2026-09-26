@@ -21,7 +21,7 @@ const internGuard = (req, res, next) => {
 // POST /interns/api — tambah siswa magang (buat akun user role=intern + profil)
 router.post('/api', adminGuard, async (req, res) => {
     try {
-        const { username, password, full_name, school, major, start_date, end_date, mentor } = req.body;
+        const { username, password, full_name, school, major, start_date, end_date, mentor, email } = req.body;
         if (!username || !password || !full_name) {
             return res.json({ success: false, message: 'Username, password, dan nama lengkap wajib diisi' });
         }
@@ -30,8 +30,8 @@ router.post('/api', adminGuard, async (req, res) => {
 
         // Buat akun user
         const [uResult] = await pool.query(
-            'INSERT INTO users (username, password, role) VALUES (?,?,?)',
-            [username, hashed, 'intern']);
+            'INSERT INTO users (username, password, role, email) VALUES (?,?,?,?)',
+            [username, hashed, 'intern', email || null]);
 
         // Buat profil magang
         await pool.query(
@@ -52,12 +52,19 @@ router.post('/api', adminGuard, async (req, res) => {
 // PUT /interns/api/:id — edit profil magang
 router.put('/api/:id', adminGuard, async (req, res) => {
     try {
-        const { full_name, school, major, start_date, end_date, mentor, status, password } = req.body;
+        const { full_name, school, major, start_date, end_date, mentor, status, password, email } = req.body;
         await pool.query(
             `UPDATE interns SET full_name=?, school=?, major=?, start_date=?, end_date=?, mentor=?, status=?
              WHERE id=?`,
             [full_name, school || null, major || null, start_date || null,
              end_date || null, mentor || null, status || 'active', req.params.id]);
+
+        // Update email akun
+        if (typeof email !== 'undefined') {
+            await pool.query(
+                'UPDATE users u JOIN interns i ON i.user_id = u.id SET u.email=? WHERE i.id=?',
+                [email || null, req.params.id]);
+        }
 
         // Reset password jika diisi
         if (password && password.trim()) {
@@ -112,7 +119,8 @@ router.get('/logbook', adminGuard, async (req, res) => {
                  ORDER BY l.log_date DESC, i.full_name ASC`, [month]);
         }
         res.render('interns_logbook', {
-            user: req.session, interns, logs, userId, month, currentPage: 'interns'
+            user: req.session, interns, logs, userId, month, currentPage: 'interns',
+            subPage: 'logbook'
         });
     } catch (e) { res.status(500).send('Error: ' + e.message); }
 });
@@ -144,7 +152,8 @@ router.get('/attendance', adminGuard, async (req, res) => {
             "SELECT DISTINCT DATE_FORMAT(date,'%Y-%m') as m FROM attendances a JOIN interns i ON i.user_id=a.user_id ORDER BY m DESC");
 
         res.render('interns_attendance', {
-            user: req.session, month, months, recap, details, currentPage: 'interns'
+            user: req.session, month, months, recap, details, currentPage: 'interns',
+            subPage: 'attendance'
         });
     } catch (e) { res.status(500).send('Error: ' + e.message); }
 });
@@ -194,7 +203,7 @@ router.get('/', async (req, res) => {
 async function adminList(req, res) {
     try {
         const [interns] = await pool.query(`
-            SELECT i.*, u.username, u.role
+            SELECT i.*, u.username, u.role, u.email
             FROM interns i
             JOIN users u ON u.id = i.user_id
             ORDER BY i.created_at DESC`);

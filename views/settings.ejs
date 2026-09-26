@@ -195,6 +195,35 @@
                 <button class="btn btn-primary" onclick="save(['attendance_radius','attendance_late_time'])">💾 Simpan Pengaturan Presensi</button>
             </div>
 
+            <!-- Setting Google SSO -->
+            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <h2 class="section-title">🔐 Login dengan Google (SSO)</h2>
+                <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+                    Aktifkan agar karyawan &amp; siswa magang bisa masuk memakai akun Google.
+                    Buat kredensial OAuth di <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#60A5FA;">Google Cloud Console</a>
+                    (OAuth Client ID → Web), lalu daftarkan URI callback:
+                    <code style="background:var(--sub-bg);padding:2px 6px;border-radius:6px;font-size:11px;" id="googleCbUri">https://DOMAIN-ANDA/auth/google/callback</code>
+                    Pengguna dicocokkan berdasarkan email akun (isi email user di data mereka).
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Google Client ID</label>
+                        <input type="text" id="google_client_id" class="form-control" placeholder="xxxx.apps.googleusercontent.com" value="<%= settings.google_client_id||'' %>">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Google Client Secret</label>
+                        <input type="password" id="google_client_secret" class="form-control" placeholder="GOCSPX-..." value="<%= settings.google_client_secret||'' %>">
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+                    <button class="tog-btn <%=settings.google_login_enabled==='1'?'active':''%>" id="togGoogle" onclick="toggleGoogle()" style="position:relative;width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;background:<%=settings.google_login_enabled==='1'?'#10B981':'#475569'%>;transition:background .2s;">
+                        <div class="tog-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;transform:<%=settings.google_login_enabled==='1'?'translateX(20px)':'translateX(0)'%>;"></div>
+                    </button>
+                    <span style="font-size:13px;font-weight:600;"><%= settings.google_login_enabled==='1' ? '✅ Login Google AKTIF' : '⛔ Login Google NONAKTIF' %></span>
+                </div>
+                <button class="btn btn-primary" onclick="saveGoogle()">💾 Simpan Pengaturan Google</button>
+            </div>
+
             <!-- Setting Notifikasi SLA -->
             <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
                 <h2 class="section-title">🔴 Notifikasi User Kritis (SLA)</h2>
@@ -1017,7 +1046,30 @@ async function save(keys){
     const res=await fetch('/settings/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await res.json();showToast(d.message,d.success?'success':'error');
 }
-async function testWA(){
+let googleEnabled = '<%=settings.google_login_enabled%>' === '1';
+function toggleGoogle() {
+    googleEnabled = !googleEnabled;
+    const btn = document.getElementById('togGoogle');
+    btn.style.background = googleEnabled ? '#10B981' : '#475569';
+    btn.querySelector('.tog-thumb').style.transform = googleEnabled ? 'translateX(20px)' : 'translateX(0)';
+    btn.classList.toggle('active', googleEnabled);
+}
+async function saveGoogle() {
+    const body = {
+        google_client_id: document.getElementById('google_client_id').value.trim(),
+        google_client_secret: document.getElementById('google_client_secret').value.trim(),
+        google_login_enabled: googleEnabled ? '1' : '0'
+    };
+    const res = await fetch('/settings/api/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const d = await res.json();
+    showToast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 1000);
+}
+// Tampilkan URI callback sesuai host yang sedang dibuka
+document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('googleCbUri');
+    if (el) el.textContent = location.origin + '/auth/google/callback';
+});
     const phone=prompt('Masukkan nomor HP tujuan test (format 628xxx):');
     if(!phone)return;
     const res=await fetch('/settings/api/test-wa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone,message:'Test from Dino-Bill ✅'})});
