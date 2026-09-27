@@ -610,6 +610,7 @@
                 <div>
                     <h3 style="font-size:14px; margin-bottom:12px"><%= t.add_new_user %></h3>
                     <div class="form-group"><label><%= t.username %></label><input type="text" id="u_user" class="form-control" placeholder="username"></div>
+                    <div class="form-group"><label>Email (Opsional)</label><input type="email" id="u_email" class="form-control" placeholder="email@contoh.com"></div>
                     <div class="form-group"><label><%= t.password %></label><input type="password" id="u_pass" class="form-control" placeholder="password"></div>
                     <div class="form-group"><label><%= t.role_position %></label>
                         <select id="u_role" class="form-control">
@@ -627,7 +628,7 @@
                     <div id="userListContainer" style="max-height:400px; overflow-y:auto">
                         <table style="width:100%; border-collapse:collapse; font-size:13px;">
                             <thead><tr style="text-align:left; color:var(--muted); border-bottom:1px solid var(--border)">
-                                <th style="padding:8px"><%= t.user_col %></th><th style="padding:8px"><%= t.role_col %></th><th style="padding:8px">No. HP</th><th style="padding:8px">Telegram ID</th><th style="padding:8px"><%= t.action %></th>
+                                <th style="padding:8px"><%= t.user_col %></th><th style="padding:8px"><%= t.role_col %></th><th style="padding:8px">Email</th><th style="padding:8px">No. HP</th><th style="padding:8px">Telegram ID</th><th style="padding:8px"><%= t.action %></th>
                             </tr></thead>
                             <tbody id="userTableBody"></tbody>
                         </table>
@@ -1297,6 +1298,7 @@ async function loadUsers() {
                 <tr style="border-bottom:1px solid var(--border)">
                     <td style="padding:10px;font-weight:600;">${u.username}</td>
                     <td style="padding:10px"><span style="background:${rc}22;color:${rc};border:1px solid ${rc}44;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">${u.role.toUpperCase()}</span></td>
+                    <td style="padding:10px;font-size:12px;color:var(--muted);">${u.email || '-'}</td>
                     <td style="padding:10px;font-size:12px;color:var(--muted);">${u.phone || '-'}</td>
                     <td style="padding:10px;font-size:11px;color:var(--muted);">${u.telegram_id || '-'}</td>
                     <td style="padding:10px">
@@ -1316,15 +1318,16 @@ async function addUser() {
     const role        = document.getElementById('u_role').value;
     const telegram_id = document.getElementById('u_telegram').value;
     const phone       = document.getElementById('u_phone').value;
+    const email       = document.getElementById('u_email').value;
     if (!username || !password) return showToast('Lengkapi username dan password!','error');
     const res = await fetch('/settings/api/users', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ username, password, role, telegram_id, phone })
+        body: JSON.stringify({ username, password, role, telegram_id, phone, email })
     });
     const d = await res.json();
     showToast(d.message, d.success ? 'success' : 'error');
     if (d.success) {
-        ['u_user','u_pass','u_telegram','u_phone'].forEach(id => document.getElementById(id).value='');
+        ['u_user','u_pass','u_telegram','u_phone','u_email'].forEach(id => document.getElementById(id).value='');
         loadUsers();
     }
 }
@@ -1333,6 +1336,7 @@ function openEditUser(u) {
     document.getElementById('eu_id').value         = u.id;
     document.getElementById('eu_user').value       = u.username;
     document.getElementById('eu_role').value       = u.role;
+    document.getElementById('eu_email').value      = u.email || '';
     document.getElementById('eu_phone').value      = u.phone || '';
     document.getElementById('eu_telegram').value   = u.telegram_id || '';
     document.getElementById('eu_pass').value       = '';
@@ -1344,6 +1348,7 @@ async function saveEditUser() {
     const body = {
         username:    document.getElementById('eu_user').value,
         role:        document.getElementById('eu_role').value,
+        email:       document.getElementById('eu_email').value,
         phone:       document.getElementById('eu_phone').value,
         telegram_id: document.getElementById('eu_telegram').value,
         password:    document.getElementById('eu_pass').value,
@@ -1464,6 +1469,10 @@ function showToast(msg,type){const t=document.getElementById('toast');t.textCont
         <div class="form-group" style="margin-bottom:14px;">
             <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Username</label>
             <input type="text" id="eu_user" class="form-control">
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Email</label>
+            <input type="email" id="eu_email" class="form-control" placeholder="email@contoh.com">
         </div>
         <div class="form-group" style="margin-bottom:14px;">
             <label style="display:block;margin-bottom:5px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;">Role</label>
