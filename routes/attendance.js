@@ -136,7 +136,7 @@ router.get('/report', async (req, res) => {
 
         // Rekap per teknisi per bulan
         const [recap] = await pool.query(`
-            SELECT a.user_id, ANY_VALUE(a.username) as username,
+            SELECT a.user_id, MIN(a.username) as username,
                    COUNT(*) as total_hadir,
                    SUM(a.status='hadir') as tepat_waktu,
                    SUM(a.status='terlambat') as terlambat,
@@ -145,7 +145,7 @@ router.get('/report', async (req, res) => {
                    AVG(a.distance_m) as avg_distance
             FROM attendances a
             WHERE DATE_FORMAT(a.date,'%Y-%m')=? AND a.status != 'ditolak'
-            GROUP BY a.user_id ORDER BY ANY_VALUE(a.username) ASC`, [month]);
+            GROUP BY a.user_id ORDER BY MIN(a.username) ASC`, [month]);
 
         // Detail presensi semua teknisi bulan ini
         const [details] = await pool.query(`

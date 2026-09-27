@@ -273,7 +273,7 @@ router.get('/attendance', adminGuard, async (req, res) => {
     try {
         const month = req.query.month || new Date(Date.now() + 7*3600e3).toISOString().slice(0,7);
         const [recap] = await pool.query(
-            `SELECT i.full_name, i.school, ANY_VALUE(a.username) as username,
+            `SELECT i.full_name, i.school, MIN(a.username) as username,
                     COUNT(*) as total_hadir,
                     SUM(a.status='hadir') as tepat_waktu,
                     SUM(a.status='terlambat') as terlambat
