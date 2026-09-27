@@ -6,6 +6,15 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 ## 🆕 Pembaruan Terbaru
 
+### v2.9 — Heatmap Gangguan, Periode SLA Fleksibel & Penyempurnaan (September 2026)
+- 🔥 **Heatmap gangguan di peta FO** — toggle "🔥 Heatmap Gangguan" dengan rentang waktu 1/3/7/14/30 hari; area yang sering down tampil membara (Leaflet.heat) → dasar keputusan investasi & perbaikan jaringan
+- 📅 **Periode perhitungan SLA fleksibel** — Pengaturan → Notifikasi SLA kini punya pilihan periode: Bulan Ini, Minggu Ini, 30/14/7 Hari Terakhir (key `sla_period_type`, dipakai dashboard SLA & notifikasi user kritis)
+- 📍 **Koordinat kantor pusat & pusat peta presisi** — diatur lewat **mini-map interaktif** di Pengaturan (klik peta untuk set titik), marker bisa di-drag; titik yang sama dipakai sebagai pusat validasi radius presensi
+- 👤 **Kelola User disempurnakan** — form tambah & modal edit kini punya **field email**, tabel menampilkan kolom Email, dan daftar difilter hanya **admin & teknisi** (user siswa magang tidak ikut tampil — dikelola di menu Manajemen Magang)
+- 🔍 **Pencarian & filter di daftar siswa magang** (`/interns`) — kotak pencarian nama/username/sekolah/jurusan/pembimbing + filter status Aktif/Selesai, penomoran ulang otomatis, indikator jumlah yang ditampilkan
+- 🔐 **Fix Google SSO di balik proxy** — `trust proxy` diaktifkan sehingga `redirect_uri` benar `https://` saat Node berada di belakang nginx/SSL (mengatasi error `redirect_uri_mismatch`)
+- 🌙 **Fix dropdown tema gelap** — `color-scheme: dark` pada form-control halaman magang sehingga select tak lagi tampil putih
+
 ### v2.8 — Manajemen Magang & Login Google SSO (September 2026)
 - 🎓 **Modul Manajemen Magang** — kelola siswa/mahasiswa magang lengkap:
   - Admin: tambah/edit/hapus siswa (akun langsung bisa login), rekap logbook per siswa per bulan, rekap presensi, **sertifikat magang siap cetak** (A4 landscape, statistik kehadiran & logbook, nama/logo perusahaan)
@@ -131,6 +140,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 
 ### 4b. 📈 Dashboard SLA (Service Level Agreement)
 - Perhitungan uptime per ONU berdasarkan history status Up/Down dari OLT (`onu_status_history`)
+- **Periode perhitungan dapat diatur** dari Pengaturan: Bulan Ini / Minggu Ini / 30/14/7 Hari Terakhir
 - Filter per periode (bulan), OLT, cluster kualitas, dan pencarian nama ONU/pelanggan
 - Cluster otomatis: 🔴 Kritis (< 90%), 🟠 Buruk (90–95%), 🟡 Perlu Pantau (95–99%), 🟢 Baik (≥ 99%)
 - Timeline insiden Down→Up per ONU dengan durasi tiap insiden
@@ -227,6 +237,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Manajemen splice point per kabel
 - Inventaris aset FO: kabel, splitter, ODP box, closure, konektor, dll
 - Peta visual infrastruktur FO lengkap dengan jalur kabel
+- **🔥 Heatmap gangguan** — toggle di toolbar peta FO dengan rentang 1/3/7/14/30 hari; area sering down tampil membara sebagai dasar evaluasi jaringan
 - **Popup detail pelanggan di peta FO** — klik titik pelanggan → telepon, paket, PPPoE, tunggakan + tombol "Rute dari Kantor" & "Profil"
 - **Marker kantor pusat + rute** di peta FO (sama seperti halaman Peta), tombol "🧹 Hapus Rute" di toolbar
 
@@ -350,7 +361,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **Role khusus `intern`** — akun siswa dibuat admin, login otomatis masuk ke dashboard magang
 - **Halaman login terpisah** di `/magang/login` (hanya menerima role intern)
 - **Sisi admin** (menu *Manajemen Magang*):
-  - *Siswa Magang* — tambah akun siswa (username + password), edit profil (sekolah/kampus, jurusan, periode magang, pembimbing, status), reset password, hapus beserta seluruh datanya; field **email** untuk keperluan login Google
+  - *Siswa Magang* — tambah akun siswa (username + password), edit profil (sekolah/kampus, jurusan, periode magang, pembimbing, status), reset password, hapus beserta seluruh datanya; field **email** untuk keperluan login Google; dilengkapi **pencarian teks** (nama/username/sekolah/jurusan/pembimbing) & **filter status** Aktif/Selesai dengan penomoran ulang otomatis
   - *Logbook Magang* — rekap kegiatan harian semua/per siswa, filter per bulan
   - *Presensi Magang* — rekap kehadiran per siswa (tepat waktu/terlambat) + detail harian
   - **Sertifikat magang** siap cetak (A4 landscape) — statistik kehadiran & jumlah logbook, nama/logo/ alamat perusahaan otomatis dari Pengaturan
@@ -371,11 +382,11 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - **IP Monitor**: daftar target ping & interval, notifikasi Telegram
 - **Payment Gateway**: pilih gateway default, konfigurasi Xendit & Tripay, data rekening bank manual
 - **GenieACS**: URL ACS, username, password, threshold online/offline, path virtual parameters
-- **Peta**: koordinat pusat, zoom default, mini preview map interaktif, ambil lokasi GPS
-- **Notifikasi SLA**: toggle aktif/nonaktif notifikasi user kritis + pilihan jam pengiriman (otomatis tanpa restart server)
+- **Peta**: koordinat pusat & kantor pusat via **mini-map interaktif** (klik peta / drag marker), zoom default, ambil lokasi GPS — titik yang sama menjadi pusat validasi radius presensi
+- **Notifikasi SLA**: toggle aktif/nonaktif notifikasi user kritis + pilihan jam pengiriman + **pilihan periode perhitungan** (bulan ini / minggu ini / 30/14/7 hari terakhir)
 - **Presensi**: radius maksimal check-in (meter), jam batas tepat waktu
 - **Login Google (SSO)**: Client ID & Client Secret OAuth Google, toggle aktif/nonaktif — tombol "Masuk dengan Google" hanya tampil jika diaktifkan
-- **Manajemen User**: tambah/edit/hapus user admin, teknisi, sales; set role, nomor HP, Telegram ID
+- **Manajemen User**: tambah/edit/hapus user admin, teknisi, sales; set role, **email** (untuk login Google), nomor HP, Telegram ID — daftar otomatis menyaring hanya role admin & teknisi
 - **Import/Export**: export pelanggan & invoice ke CSV, import pelanggan massal dari CSV
 - **Git Repository**: konfigurasi URL repo & branch untuk update sistem
 - **Update Sistem**: update dari GitHub langsung via tombol di dashboard (git pull)
@@ -387,6 +398,7 @@ Sistem manajemen billing dan operasional ISP (Internet Service Provider) berbasi
 - Halaman login terpisah untuk karyawan (`/login`) dan siswa magang (`/magang/login`) — masing-masing hanya menerima role yang sesuai
 - Session management dengan express-session
 - Middleware autentikasi per route group
+- Siap dijalankan di balik **reverse proxy nginx/SSL** (`trust proxy` aktif — `redirect_uri` OAuth & deteksi protokol tetap benar)
 - Verifikasi webhook Xendit via `x-callback-token` header
 - Verifikasi webhook Tripay via HMAC-SHA256 signature
 - Web Installer mode: jika `.env` belum ada, semua route dialihkan ke halaman setup
