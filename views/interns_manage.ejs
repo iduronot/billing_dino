@@ -52,19 +52,31 @@
         </div>
 
         <div class="intern-card">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+                <input type="text" id="internSearch" class="form-control" placeholder="🔍 Cari nama, username, sekolah, atau jurusan..." style="flex:1;min-width:220px;" oninput="filterInterns()">
+                <select id="internStatusFilter" class="form-control" style="max-width:160px;" onchange="filterInterns()">
+                    <option value="">Semua Status</option>
+                    <option value="active">Aktif</option>
+                    <option value="done">Selesai</option>
+                </select>
+                <span id="internCount" style="font-size:12px;color:var(--muted);white-space:nowrap;"></span>
+            </div>
             <table>
                 <thead><tr>
                     <th style="width:44px;">No</th><th>Nama</th><th>Username</th><th>Sekolah/Kampus</th><th>Jurusan</th>
                     <th>Periode</th><th>Pembimbing</th><th>Status</th><th>Aksi</th>
                 </tr></thead>
-                <tbody>
+                <tbody id="internTableBody">
                 <% if (interns.length === 0) { %>
                     <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:40px;">
                         Belum ada siswa magang — klik <b>➕ Tambah Siswa</b> untuk membuat akun pertama
                     </td></tr>
                 <% } %>
+                <tr id="noResultRow" style="display:none;"><td colspan="9" style="text-align:center;color:var(--muted);padding:40px;">
+                    Tidak ada siswa yang cocok dengan pencarian/filter
+                </td></tr>
                 <% interns.forEach((it, idx) => { %>
-                <tr>
+                <tr data-search="<%= (it.full_name+' '+it.username+' '+(it.school||'')+' '+(it.major||'')+' '+(it.mentor||'')).toLowerCase() %>" data-status="<%= it.status %>">
                     <td style="color:var(--muted);font-weight:600;"><%= idx + 1 %></td>
                     <td style="font-weight:700;">
                         <div style="display:flex;align-items:center;gap:10px;">
@@ -164,6 +176,24 @@
 
 <script>
 let currentEditId = null;
+
+// ── Pencarian & filter tabel siswa ──
+function filterInterns() {
+    const q  = document.getElementById('internSearch').value.toLowerCase().trim();
+    const st = document.getElementById('internStatusFilter').value;
+    const rows = document.querySelectorAll('#internTableBody tr[data-search]');
+    let n = 0, visible = 0;
+    rows.forEach(r => {
+        const ok = (!q || r.dataset.search.includes(q)) && (!st || r.dataset.status === st);
+        r.style.display = ok ? '' : 'none';
+        if (ok) { n++; visible++; r.cells[0].textContent = n; }
+    });
+    document.getElementById('noResultRow').style.display = visible ? 'none' : '';
+    const totalEl = document.getElementById('internCount');
+    if (totalEl) totalEl.textContent = (q || st) ? `Menampilkan ${visible} dari ${rows.length} siswa` : `${rows.length} siswa`;
+}
+document.addEventListener('DOMContentLoaded', filterInterns);
+
 function openAddModal() { document.getElementById('addModal').style.display = 'flex'; }
 function openEditModal(it) {
     currentEditId = it.id;
