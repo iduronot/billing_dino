@@ -101,9 +101,15 @@ router.post('/api/checkin', async (req, res) => {
         const nowTime  = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
         const status   = nowTime > lateTime ? 'terlambat' : 'hadir';
 
+        // Simpan waktu check-in sebagai string WIB yang dihitung di Node —
+        // CONVERT_TZ(NOW(),'+00:00','+07:00') yang lama menambah +7 jam ganda
+        // karena MySQL WAMP/live sudah berjalan di timezone lokal (WIB)
+        const wibTs = `${now.getUTCFullYear()}-${String(now.getUTCMonth()+1).padStart(2,'0')}-${String(now.getUTCDate()).padStart(2,'0')} `
+                    + `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}:${String(now.getUTCSeconds()).padStart(2,'0')}`;
+
         await pool.query(
-            'INSERT INTO attendances (user_id,username,date,check_in_time,lat,lng,distance_m,status,device_info) VALUES (?,?,?,CONVERT_TZ(NOW(),"+00:00","+07:00"),?,?,?,?,?)',
-            [userId, username, today, lat, lng, distM, status, device_info||null]
+            'INSERT INTO attendances (user_id,username,date,check_in_time,lat,lng,distance_m,status,device_info) VALUES (?,?,?,?,?,?,?,?,?)',
+            [userId, username, today, wibTs, lat, lng, distM, status, device_info||null]
         );
 
         const statusLabel = status === 'terlambat' ? '🟡 Terlambat' : '✅ Hadir';
