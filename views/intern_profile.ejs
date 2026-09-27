@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:20px;}
+        .card-head{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;}
+        .card-body{padding:18px;}
+        .form-group{margin-bottom:14px;}
+        .form-group label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
+        .form-control{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--input-bg,var(--sub-bg));color:var(--text);font-size:14px;font-family:'Outfit',sans-serif;box-sizing:border-box;}
+        textarea.form-control{min-height:70px;resize:vertical;}
+        .btn-primary{padding:11px 24px;border-radius:12px;border:none;background:linear-gradient(135deg,#10B981,#059669);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;}
+        .btn-ghost{padding:10px 18px;border-radius:12px;border:1px solid var(--border);background:var(--sub-bg);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;}
+
+        .photo-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+        .photo-circle{width:110px;height:110px;border-radius:50%;overflow:hidden;border:3px solid rgba(16,185,129,.4);background:var(--sub-bg);display:flex;align-items:center;justify-content:center;font-size:44px;flex-shrink:0;}
+        .photo-circle img{width:100%;height:100%;object-fit:cover;}
+        .photo-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;padding:10px 14px;text-align:left;}
+        td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+        tr:last-child td{border-bottom:none;}
+        .btn-del{padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.1);color:#EF4444;font-size:11px;cursor:pointer;font-weight:700;}
+        .btn-view{padding:4px 10px;border-radius:8px;border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.1);color:#3B82F6;font-size:11px;cursor:pointer;font-weight:700;text-decoration:none;display:inline-block;}
+        .result-card{border-radius:12px;padding:12px;margin-bottom:14px;text-align:center;display:none;font-size:13px;}
+        .result-card.success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);color:#10B981;}
+        .result-card.error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#EF4444;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Profil Saya' }) %>
+    <div class="content">
+
+        <h1 class="page-title" style="margin:0 0 20px;">👤 Profil & Dokumen Magang</h1>
+
+        <div id="resultCard" class="result-card"></div>
+
+        <!-- Foto Profil -->
+        <div class="card">
+            <div class="card-head">📷 Foto Profil</div>
+            <div class="card-body">
+                <div class="photo-wrap">
+                    <div class="photo-circle" id="photoCircle">
+                        <% if (intern.photo) { %>
+                        <img src="<%= intern.photo %>" alt="Foto">
+                        <% } else { %>
+                        🎓
+                        <% } %>
+                    </div>
+                    <div class="photo-actions">
+                        <input type="file" id="photoInput" accept=".jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadPhoto(this)">
+                        <button class="btn-primary" onclick="document.getElementById('photoInput').click()">📤 <%= intern.photo ? 'Ganti Foto' : 'Upload Foto' %></button>
+                        <% if (intern.photo) { %>
+                        <button class="btn-ghost" onclick="removePhoto()">🗑️ Hapus Foto</button>
+                        <% } %>
+                    </div>
+                </div>
+                <p style="font-size:12px;color:var(--muted);margin:12px 0 0;">JPG/PNG/WebP, maks. 2 MB.</p>
+            </div>
+        </div>
+
+        <!-- Data Diri -->
+        <div class="card">
+            <div class="card-head">🪪 Data Diri</div>
+            <div class="card-body">
+                <form id="profileForm">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                        <div class="form-group">
+                            <label>Nama Lengkap</label>
+                            <input class="form-control" value="<%= intern.full_name %>" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>Sekolah / Kampus</label>
+                            <input class="form-control" value="<%= intern.school || '-' %>" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>Tempat Lahir</label>
+                            <input class="form-control" name="birth_place" value="<%= intern.birth_place || '' %>" placeholder="Kota kelahiran">
+                        </div>
+                        <div class="form-group">
+                            <label>Tanggal Lahir</label>
+                            <input class="form-control" type="date" name="birth_date" value="<%= intern.birth_date || '' %>">
+                        </div>
+                        <div class="form-group">
+                            <label>Nomor HP</label>
+                            <input class="form-control" name="phone" value="<%= intern.phone || '' %>" placeholder="08xxxxxxxxxx">
+                        </div>
+                        <div class="form-group">
+                            <label>Jurusan</label>
+                            <input class="form-control" value="<%= intern.major || '-' %>" disabled>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Alamat Domisili</label>
+                        <textarea class="form-control" name="address" placeholder="Alamat tempat tinggal sekarang"><%= intern.address || '' %></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary" id="btnSaveProfile">💾 Simpan Data Diri</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dokumen Magang -->
+        <div class="card">
+            <div class="card-head">📁 Dokumen Magang</div>
+            <div class="card-body">
+                <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">
+                    Upload dokumen yang dibutuhkan, misalnya: KTP/KTM, surat pengantar sekolah, CV, sertifikat pendukung. Format PDF/JPG/PNG, maks. 5 MB per file.
+                </p>
+                <form id="docForm" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
+                    <input class="form-control" name="title" placeholder="Nama dokumen, misal: KTP" style="flex:1;min-width:180px;" required>
+                    <input type="file" name="file" accept=".pdf,.jpg,.jpeg,.png" required style="font-size:13px;color:var(--muted);">
+                    <button type="submit" class="btn-primary" id="btnUploadDoc" style="padding:10px 20px;">⬆️ Upload</button>
+                </form>
+                <table>
+                    <thead><tr><th>Dokumen</th><th style="width:150px;">Diupload</th><th style="width:140px;"></th></tr></thead>
+                    <tbody>
+                    <% if (docs.length === 0) { %>
+                        <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:32px;">Belum ada dokumen yang diupload</td></tr>
+                    <% } %>
+                    <% docs.forEach(d => { %>
+                    <tr>
+                        <td style="font-weight:600;">📄 <%= d.title %></td>
+                        <td style="color:var(--muted);font-size:12px;"><%= new Date(d.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></td>
+                        <td style="text-align:right;white-space:nowrap;">
+                            <a class="btn-view" href="<%= d.file_path %>" target="_blank">Lihat</a>
+                            <button class="btn-del" onclick="delDoc(<%= d.id %>, this)">Hapus</button>
+                        </td>
+                    </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+function showResult(msg, type) {
+    const card = document.getElementById('resultCard');
+    card.textContent = msg;
+    card.className = 'result-card ' + type;
+    card.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Simpan data diri
+document.getElementById('profileForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('btnSaveProfile');
+    const fd = new FormData(e.target);
+    btn.disabled = true; btn.textContent = '⏳ Menyimpan...';
+    const res = await fetch('/intern/api/me', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            birth_place: fd.get('birth_place'), birth_date: fd.get('birth_date'),
+            address: fd.get('address'), phone: fd.get('phone')
+        })
+    });
+    const d = await res.json();
+    showResult(d.message, d.success ? 'success' : 'error');
+    btn.disabled = false; btn.textContent = '💾 Simpan Data Diri';
+});
+
+// Upload foto
+async function uploadPhoto(input) {
+    if (!input.files || !input.files[0]) return;
+    const fd = new FormData();
+    fd.append('file', input.files[0]);
+    showResult('⏳ Mengupload foto...', 'success');
+    try {
+        const res = await fetch('/intern/api/photo', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (d.success) location.reload();
+        else showResult(d.message, 'error');
+    } catch(e) { showResult('Upload gagal: ' + e.message, 'error'); }
+    input.value = '';
+}
+
+async function removePhoto() {
+    if (!confirm('Hapus foto profil?')) return;
+    // Foto dihapus dengan mengganti ke kosong lewat upload tidak tersedia; gunakan endpoint hapus terpisah
+    const res = await fetch('/intern/api/photo', { method: 'DELETE' });
+    const d = await res.json();
+    if (d.success) location.reload();
+    else showResult(d.message, 'error');
+}
+
+// Upload dokumen
+document.getElementById('docForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('btnUploadDoc');
+    const fd = new FormData(e.target);
+    btn.disabled = true; btn.textContent = '⏳ Uploading...';
+    const res = await fetch('/intern/api/document', { method: 'POST', body: fd });
+    const d = await res.json();
+    if (d.success) location.reload();
+    else { showResult(d.message, 'error'); btn.disabled = false; btn.textContent = '⬆️ Upload'; }
+});
+
+async function delDoc(id, btn) {
+    if (!confirm('Hapus dokumen ini?')) return;
+    btn.disabled = true;
+    const res = await fetch('/intern/api/document/' + id, { method: 'DELETE' });
+    const d = await res.json();
+    if (d.success) location.reload();
+    else { alert(d.message); btn.disabled = false; }
+}
+</script>
+</body>
+</html>

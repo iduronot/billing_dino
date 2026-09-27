@@ -16,6 +16,121 @@ const internGuard = (req, res, next) => {
     next();
 };
 
+// ═════════════ SISWA: PROFIL LENGKAP & DOKUMEN MAGANG ═════════════
+
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const internStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const dir = path.join(__dirname, '..', 'public', 'uploads', 'interns');
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, Date.now() + '-' + Math.random().toString(36).slice(2, 8) + ext);
+    }
+});
+const imageFilter = (req, file, cb) => {
+    const ok = ['.jpg', '.jpeg', '.png', '.webp'].includes(path.extname(file.originalname).toLowerCase());
+    cb(ok ? null : new Error('Foto harus JPG, PNG, atau WebP'), ok);
+};
+const docFilter = (req, file, cb) => {
+    const ok = ['.pdf', '.jpg', '.jpeg', '.png'].includes(path.extname(file.originalname).toLowerCase());
+    cb(ok ? null : new Error('Dokumen harus PDF, JPG, atau PNG'), ok);
+};
+const photoUpload = multer({ storage: internStorage, fileFilter: imageFilter, limits: { fileSize: 2 * 1024 * 1024 } });
+const docUpload   = multer({ storage: internStorage, fileFilter: docFilter,   limits: { fileSize: 5 * 1024 * 1024 } });
+
+// GET /intern/profile — halaman profil siswa
+router.get('/profile', internGuard, async (req, res) => {
+    try {
+        const [[intern]] = await pool.query(
+            'SELECT * FROM interns WHERE user_id=?', [req.session.userId]);
+        if (!intern) return res.redirect('/intern');
+        const [docs] = await pool.query(
+            'SELECT * FROM intern_documents WHERE intern_id=? ORDER BY created_at DESC', [intern.id]);
+        res.render('intern_profile', {
+            user: req.session, intern, docs,
+            msg: req.query.msg || '', err: req.query.err || '',
+            currentPage: 'intern'
+        });
+    } catch (e) { res.status(500).send('Error: ' + e.message); }
+});
+
+// PUT /intern/api/me — simpan data diri
+// (path sengaja /api/me, bukan /api/profile — agar tidak tertangkap route admin PUT /api/:id)
+router.put('/api/me', internGuard, async (req, res) => {
+    try {
+        const { birth_place, birth_date, address, phone } = req.body;
+        await pool.query(
+            `UPDATE interns SET birth_place=?, birth_date=?, address=?, phone=? WHERE user_id=?`,
+            [birth_place || null, birth_date || null, address || null, phone || null, req.session.userId]);
+        res.json({ success: true, message: 'Profil tersimpan' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /intern/api/photo — upload foto profil
+router.post('/api/photo', internGuard, photoUpload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.json({ success: false, message: 'File tidak ditemukan' });
+        const [[intern]] = await pool.query('SELECT id, photo FROM interns WHERE user_id=?', [req.session.userId]);
+        if (!intern) return res.json({ success: false, message: 'Data magang tidak ditemukan' });
+        // Hapus foto lama
+        if (intern.photo) {
+            const old = path.join(__dirname, '..', 'public', intern.photo);
+            fs.unlink(old, () => {});
+        }
+        const filePath = '/uploads/interns/' + req.file.filename;
+        await pool.query('UPDATE interns SET photo=? WHERE id=?', [filePath, intern.id]);
+        res.json({ success: true, message: 'Foto diperbarui', path: filePath });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// DELETE /intern/api/photo — hapus foto profil
+router.delete('/api/photo', internGuard, async (req, res) => {
+    try {
+        const [[intern]] = await pool.query('SELECT id, photo FROM interns WHERE user_id=?', [req.session.userId]);
+        if (!intern || !intern.photo) return res.json({ success: false, message: 'Foto tidak ditemukan' });
+        const filePath = path.join(__dirname, '..', 'public', intern.photo);
+        fs.unlink(filePath, () => {});
+        await pool.query('UPDATE interns SET photo=NULL WHERE id=?', [intern.id]);
+        res.json({ success: true, message: 'Foto dihapus' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /intern/api/document — upload dokumen magang
+router.post('/api/document', internGuard, docUpload.single('file'), async (req, res) => {
+    try {
+        const { title } = req.body;
+        if (!req.file) return res.json({ success: false, message: 'File tidak ditemukan' });
+        if (!title || !title.trim()) return res.json({ success: false, message: 'Nama dokumen wajib diisi' });
+        const [[intern]] = await pool.query('SELECT id FROM interns WHERE user_id=?', [req.session.userId]);
+        if (!intern) return res.json({ success: false, message: 'Data magang tidak ditemukan' });
+        const filePath = '/uploads/interns/' + req.file.filename;
+        await pool.query(
+            'INSERT INTO intern_documents (intern_id, title, file_path) VALUES (?,?,?)',
+            [intern.id, title.trim(), filePath]);
+        res.json({ success: true, message: 'Dokumen terupload' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// DELETE /intern/api/document/:id — hapus dokumen sendiri
+router.delete('/api/document/:id', internGuard, async (req, res) => {
+    try {
+        const [[doc]] = await pool.query(
+            `SELECT d.* FROM intern_documents d JOIN interns i ON i.id=d.intern_id
+             WHERE d.id=? AND i.user_id=?`, [req.params.id, req.session.userId]);
+        if (!doc) return res.json({ success: false, message: 'Dokumen tidak ditemukan' });
+        const filePath = path.join(__dirname, '..', 'public', doc.file_path);
+        fs.unlink(filePath, () => {});
+        await pool.query('DELETE FROM intern_documents WHERE id=?', [doc.id]);
+        res.json({ success: true, message: 'Dokumen dihapus' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // ═════════════ ADMIN: KELOLA SISWA MAGANG ═════════════
 
 // POST /interns/api — tambah siswa magang (buat akun user role=intern + profil)

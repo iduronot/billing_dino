@@ -731,6 +731,23 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   // Kolom untuk Google SSO (ditambahkan ke tabel users yang sudah ada)
   checkAndAddColumn('users', 'email',     "VARCHAR(150) NULL");
   checkAndAddColumn('users', 'google_id', "VARCHAR(50) NULL");
+  // Kolom profil lengkap siswa magang
+  checkAndAddColumn('interns', 'photo',       "VARCHAR(255) NULL");
+  checkAndAddColumn('interns', 'birth_place', "VARCHAR(100) NULL");
+  checkAndAddColumn('interns', 'birth_date',  "DATE NULL");
+  checkAndAddColumn('interns', 'address',     "TEXT NULL");
+  checkAndAddColumn('interns', 'phone',       "VARCHAR(25) NULL");
+  // Dokumen magang siswa (KTP, surat pengantar, dsb)
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS intern_documents (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      intern_id INT NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      file_path VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_intern_doc (intern_id)
+    )
+  `).catch(console.error);
   checkAndAddColumn('fo_nodes', 'feed_cable_id', 'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_tube_id',  'INT NULL');
   checkAndAddColumn('fo_nodes', 'feed_core_id',  'INT NULL');
