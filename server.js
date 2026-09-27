@@ -44,6 +44,8 @@ app.use(express.static(path.join(__dirname, 'public'), {
 let pool; // Global database pool
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+// Percaya header proxy (X-Forwarded-Proto/Host) agar req.protocol benar di balik nginx/SSL
+app.set('trust proxy', true);
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback_secret',
