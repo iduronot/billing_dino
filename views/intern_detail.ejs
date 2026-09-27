@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <%- include('partials/head') %>
+    <style>
+        .card{background:var(--card-bg);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:20px;}
+        .card-head{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;}
+        .card-body{padding:18px;}
+        table{width:100%;border-collapse:collapse;}
+        th{background:var(--sub-bg);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;padding:10px 14px;text-align:left;}
+        td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;}
+        tr:last-child td{border-bottom:none;}
+        .photo-circle{width:100px;height:100px;border-radius:50%;overflow:hidden;border:3px solid rgba(16,185,129,.4);background:var(--sub-bg);display:flex;align-items:center;justify-content:center;font-size:38px;flex-shrink:0;}
+        .photo-circle img{width:100%;height:100%;object-fit:cover;}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;}
+        .info-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--border);font-size:13px;}
+        .info-row .k{color:var(--muted);flex-shrink:0;}
+        .info-row .v{font-weight:600;text-align:right;word-break:break-word;}
+        .stat-chip{background:var(--sub-bg);border:1px solid var(--border);border-radius:12px;padding:12px 18px;text-align:center;}
+        .stat-chip .n{font-size:22px;font-weight:800;background:linear-gradient(135deg,#10B981,#3B82F6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+        .stat-chip .t{font-size:11px;color:var(--muted);margin-top:2px;}
+        .btn-back{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:11px;border:1px solid var(--border);background:var(--sub-bg);color:var(--text);font-size:13px;font-weight:600;text-decoration:none;transition:all .2s;font-family:'Outfit',sans-serif;}
+        .btn-back:hover{border-color:var(--primary);color:var(--primary);transform:translateX(-2px);}
+        .btn-view{padding:4px 12px;border-radius:8px;border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.1);color:#3B82F6;font-size:11px;font-weight:700;text-decoration:none;display:inline-block;}
+        .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+        .badge-active{background:rgba(16,185,129,.12);color:#10B981;}
+        .badge-finished{background:rgba(148,163,184,.12);color:#94A3B8;}
+    </style>
+</head>
+<body>
+<%- include('partials/sidebar') %>
+<main class="main">
+    <%- include('partials/topbar', { title: 'Detail Siswa Magang' }) %>
+    <div class="content">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+            <h1 class="page-title" style="margin:0;">👤 <%= intern.full_name %></h1>
+            <a href="/interns" class="btn-back">← Kembali ke Daftar Siswa</a>
+        </div>
+
+        <!-- Profil & Data Diri -->
+        <div class="card">
+            <div class="card-head">🪪 Profil & Data Diri <span class="badge badge-<%= intern.status %>" style="float:right;"><%= intern.status === 'active' ? 'Aktif' : 'Selesai' %></span></div>
+            <div class="card-body">
+                <div style="display:flex;gap:22px;flex-wrap:wrap;">
+                    <div class="photo-circle">
+                        <% if (intern.photo) { %><img src="<%= intern.photo %>" alt="Foto"><% } else { %>🎓<% } %>
+                    </div>
+                    <div style="flex:1;min-width:280px;">
+                        <div class="info-grid">
+                            <div class="info-row"><span class="k">Username Login</span><span class="v" style="font-family:monospace;"><%= intern.username %></span></div>
+                            <div class="info-row"><span class="k">Email</span><span class="v"><%= intern.email || '—' %></span></div>
+                            <div class="info-row"><span class="k">Sekolah / Kampus</span><span class="v"><%= intern.school || '—' %></span></div>
+                            <div class="info-row"><span class="k">Jurusan</span><span class="v"><%= intern.major || '—' %></span></div>
+                            <div class="info-row"><span class="k">Tempat, Tanggal Lahir</span><span class="v">
+                                <%= intern.birth_place || '—' %><%= intern.birth_date ? ', ' + new Date(intern.birth_date+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}) : '' %>
+                            </span></div>
+                            <div class="info-row"><span class="k">Nomor HP</span><span class="v"><%= intern.phone || '—' %></span></div>
+                            <div class="info-row"><span class="k">Periode Magang</span><span class="v">
+                                <%= intern.start_date ? new Date(intern.start_date+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '?' %>
+                                s.d.
+                                <%= intern.end_date ? new Date(intern.end_date+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : '?' %>
+                            </span></div>
+                            <div class="info-row"><span class="k">Pembimbing</span><span class="v"><%= intern.mentor || '—' %></span></div>
+                            <div class="info-row" style="grid-column:1/-1;"><span class="k">Alamat Domisili</span><span class="v"><%= intern.address || '—' %></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistik -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+            <div class="stat-chip"><div class="n"><%= att.total || 0 %></div><div class="t">Hari Hadir</div></div>
+            <div class="stat-chip"><div class="n"><%= att.hadir || 0 %></div><div class="t">Tepat Waktu</div></div>
+            <div class="stat-chip"><div class="n"><%= att.terlambat || 0 %></div><div class="t">Terlambat</div></div>
+            <div class="stat-chip"><div class="n"><%= log_count %></div><div class="t">Logbook Diisi</div></div>
+        </div>
+
+        <!-- Dokumen -->
+        <div class="card">
+            <div class="card-head">📁 Dokumen Magang <span style="float:right;font-size:12px;color:var(--muted);font-weight:400;"><%= docs.length %> file</span></div>
+            <table>
+                <thead><tr><th>Dokumen</th><th style="width:150px;">Diupload</th><th style="width:100px;"></th></tr></thead>
+                <tbody>
+                <% if (docs.length === 0) { %>
+                    <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:32px;">Siswa belum mengupload dokumen</td></tr>
+                <% } %>
+                <% docs.forEach(d => { %>
+                <tr>
+                    <td style="font-weight:600;">📄 <%= d.title %></td>
+                    <td style="color:var(--muted);font-size:12px;"><%= new Date(d.created_at).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) %></td>
+                    <td style="text-align:right;"><a class="btn-view" href="<%= d.file_path %>" target="_blank">Lihat / Unduh</a></td>
+                </tr>
+                <% }) %>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <a href="/interns/logbook?user_id=<%= intern.user_id %>" class="btn-back">📔 Lihat Logbook Siswa Ini</a>
+            <a href="/interns/attendance" class="btn-back">📍 Rekap Presensi</a>
+            <a href="/interns/certificate/<%= intern.id %>" class="btn-back" target="_blank" style="border-color:rgba(245,158,11,.4);color:#F59E0B;">📜 Sertifikat</a>
+        </div>
+    </div>
+</main>
+</body>
+</html>

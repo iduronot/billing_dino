@@ -54,18 +54,26 @@
         <div class="intern-card">
             <table>
                 <thead><tr>
-                    <th>Nama</th><th>Username</th><th>Sekolah/Kampus</th><th>Jurusan</th>
+                    <th style="width:44px;">No</th><th>Nama</th><th>Username</th><th>Sekolah/Kampus</th><th>Jurusan</th>
                     <th>Periode</th><th>Pembimbing</th><th>Status</th><th>Aksi</th>
                 </tr></thead>
                 <tbody>
                 <% if (interns.length === 0) { %>
-                    <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:40px;">
+                    <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:40px;">
                         Belum ada siswa magang — klik <b>➕ Tambah Siswa</b> untuk membuat akun pertama
                     </td></tr>
                 <% } %>
-                <% interns.forEach(it => { %>
+                <% interns.forEach((it, idx) => { %>
                 <tr>
-                    <td style="font-weight:700;"><%= it.full_name %></td>
+                    <td style="color:var(--muted);font-weight:600;"><%= idx + 1 %></td>
+                    <td style="font-weight:700;">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:var(--sub-bg);display:inline-flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;border:1px solid var(--border);">
+                                <% if (it.photo) { %><img src="<%= it.photo %>" style="width:100%;height:100%;object-fit:cover;" alt=""><% } else { %>🎓<% } %>
+                            </span>
+                            <%= it.full_name %>
+                        </div>
+                    </td>
                     <td style="font-family:monospace;font-size:12px;"><%= it.username %></td>
                     <td><%= it.school || '-' %></td>
                     <td><%= it.major || '-' %></td>
@@ -77,6 +85,7 @@
                     <td><%= it.mentor || '-' %></td>
                     <td><span class="badge badge-<%= it.status %>"><%= it.status === 'active' ? 'Aktif' : 'Selesai' %></span></td>
                     <td style="white-space:nowrap;">
+                        <a href="/interns/detail/<%= it.id %>" class="btn-act" title="Lihat detail">👁️</a>
                         <a href="/interns/certificate/<%= it.id %>" class="btn-act cert" target="_blank" title="Cetak sertifikat">📜</a>
                         <button class="btn-act" onclick='openEditModal(<%- JSON.stringify(it) %>)' title="Edit">✏️</button>
                         <button class="btn-act del" onclick="delIntern(<%= it.id %>, '<%= it.full_name.replace(/'/g, "\\'") %>')" title="Hapus">🗑️</button>

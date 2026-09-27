@@ -206,6 +206,32 @@ router.delete('/api/:id', adminGuard, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// ═════════════ ADMIN: DETAIL SISWA (profil + dokumen yang diisi siswa) ═════════════
+
+// GET /interns/detail/:id — halaman detail lengkap
+router.get('/detail/:id', adminGuard, async (req, res) => {
+    try {
+        const [[intern]] = await pool.query(
+            `SELECT i.*, u.username, u.email FROM interns i
+             JOIN users u ON u.id = i.user_id WHERE i.id=?`, [req.params.id]);
+        if (!intern) return res.redirect('/interns?err=Siswa magang tidak ditemukan');
+
+        const [[att]] = await pool.query(
+            `SELECT COUNT(*) as total, SUM(status='hadir') as hadir, SUM(status='terlambat') as terlambat
+             FROM attendances WHERE user_id=? AND status!='ditolak'`, [intern.user_id]);
+        const [[{log_count}]] = await pool.query(
+            'SELECT COUNT(*) as log_count FROM logbooks WHERE user_id=?', [intern.user_id]);
+        const [docs] = await pool.query(
+            'SELECT * FROM intern_documents WHERE intern_id=? ORDER BY created_at DESC', [intern.id]);
+
+        res.render('intern_detail', {
+            user: req.session, intern, docs,
+            att: att || {}, log_count: log_count || 0,
+            currentPage: 'interns'
+        });
+    } catch (e) { res.status(500).send('Error: ' + e.message); }
+});
+
 // ═════════════ ADMIN: REKAP LOGBOOK ═════════════
 
 // GET /interns/logbook — rekap logbook semua/per siswa
