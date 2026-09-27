@@ -277,9 +277,9 @@
                 </div>
             </div>
             <div class="cert-sign">
-                <div class="role"><%= new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) %><br>Direktur / Pimpinan</div>
-                <div class="name">...........................</div>
-                <div class="title">( Nama Jelas )</div>
+                <div class="role"><%= new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}) %><br><%= settings.cert_director_title || 'Direktur / Pimpinan' %></div>
+                <div class="name"><%= settings.cert_director_name || '...........................' %></div>
+                <div class="title"><%= settings.cert_director_name ? (settings.cert_director_title || 'Direktur / Pimpinan') : '( Nama Jelas )' %></div>
             </div>
         </div>
     </div>

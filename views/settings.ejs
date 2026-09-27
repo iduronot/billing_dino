@@ -224,6 +224,26 @@
                 <button class="btn btn-primary" onclick="saveGoogle()">💾 Simpan Pengaturan Google</button>
             </div>
 
+            <!-- Setting Sertifikat Magang -->
+            <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
+                <h2 class="section-title">📜 Sertifikat Magang</h2>
+                <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+                    Nama & jabatan penandatangan yang tampil di sertifikat magang (kolom kanan, di bawah tanggal terbit).
+                    Kolom pembimbing otomatis terisi dari data pembimbing tiap siswa.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
+                    <div class="form-group" style="margin:0;">
+                        <label>Nama Direktur / Pimpinan</label>
+                        <input type="text" id="cert_director_name" class="form-control" placeholder="Kosongkan = tanda tangan manual" value="<%= settings.cert_director_name||'' %>">
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label>Jabatan</label>
+                        <input type="text" id="cert_director_title" class="form-control" placeholder="Direktur / Pimpinan" value="<%= settings.cert_director_title||'Direktur / Pimpinan' %>">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="save(['cert_director_name','cert_director_title'])">💾 Simpan Pengaturan Sertifikat</button>
+            </div>
+
             <!-- Setting Notifikasi SLA -->
             <div style="margin-top:24px; padding-top:20px; border-top:1px solid var(--border);">
                 <h2 class="section-title">🔴 Notifikasi User Kritis (SLA)</h2>

@@ -429,6 +429,9 @@ SESSION_SECRET=${Math.random().toString(36).substring(2, 15)}
   pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_login_enabled','0')").catch(()=>{});
   pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_client_id','')").catch(()=>{});
   pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('google_client_secret','')").catch(()=>{});
+  // Sertifikat magang — nama & jabatan penandatangan
+  pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('cert_director_name','')").catch(()=>{});
+  pool.query("INSERT IGNORE INTO settings (setting_key, setting_value) VALUES ('cert_director_title','Direktur / Pimpinan')").catch(()=>{});
   }
 
   pool.query(`

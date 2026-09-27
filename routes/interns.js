@@ -178,7 +178,7 @@ router.get('/certificate/:id', adminGuard, async (req, res) => {
             'SELECT COUNT(*) as log_count FROM logbooks WHERE user_id=?', [intern.user_id]);
 
         const [settingsRows] = await pool.query(
-            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('company_name','company_logo','company_address','company_phone')");
+            "SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('company_name','company_logo','company_address','company_phone','cert_director_name','cert_director_title')");
         const settings = {};
         settingsRows.forEach(s => settings[s.setting_key] = s.setting_value);
 
