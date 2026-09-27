@@ -57,7 +57,10 @@ router.post('/api/checkin', async (req, res) => {
     try {
         const userId  = req.session.userId;
         const username= req.session.username;
-        const today   = new Date().toISOString().split('T')[0];
+        // FIX (2026-09-27): gunakan tanggal WIB — versi UTC membuat presensi
+        // jam 00:00–07.00 WIB terbaca sebagai "kemarin" sehingga ditolak
+        // dengan pesan "sudah presensi hari ini"
+        const today   = new Date(Date.now() + 7*60*60*1000).toISOString().split('T')[0];
         const { lat, lng, device_info } = req.body;
 
         // Cek sudah presensi?
@@ -104,11 +107,12 @@ router.post('/api/checkin', async (req, res) => {
         );
 
         const statusLabel = status === 'terlambat' ? '🟡 Terlambat' : '✅ Hadir';
+        const timeStr = `${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}`;
         res.json({
             success: true,
             status,
             distance: distM,
-            time: now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}),
+            time: timeStr,
             message: `${statusLabel} — Presensi berhasil! Jarak ${distM}m dari kantor`
         });
     } catch(e) { res.status(500).json({ success:false, message:e.message }); }
@@ -117,7 +121,8 @@ router.post('/api/checkin', async (req, res) => {
 // ── GET /attendance/report — rekap admin ──
 router.get('/report', async (req, res) => {
     try {
-        const month = req.query.month || new Date().toISOString().slice(0,7);
+        // Default bulan WIB (konsisten dengan halaman presensi)
+        const month = req.query.month || new Date(Date.now() + 7*60*60*1000).toISOString().slice(0,7);
 
         // Semua teknisi
         const [technicians] = await pool.query(
