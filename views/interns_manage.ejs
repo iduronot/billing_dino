@@ -132,8 +132,8 @@
 <div class="modal-overlay" id="editModal">
     <div class="modal-card">
         <h3>✏️ Edit Siswa Magang</h3>
-        <form onsubmit="return saveIntern(event, editId)">
-            <input type="hidden" id="editId">
+        <form onsubmit="return saveIntern(event, currentEditId)">
+            <input type="hidden" id="editIdField">
             <div class="form-group"><label>Nama Lengkap *</label><input class="form-control" id="editName" required></div>
             <div class="form-group"><label>Email (Gmail untuk login Google)</label><input class="form-control" id="editEmail" type="email" placeholder="nama@gmail.com"></div>
             <div class="form-row">
@@ -163,11 +163,11 @@
 </div>
 
 <script>
-let editId = null;
+let currentEditId = null;
 function openAddModal() { document.getElementById('addModal').style.display = 'flex'; }
 function openEditModal(it) {
-    editId = it.id;
-    document.getElementById('editId').value = it.id;
+    currentEditId = it.id;
+    document.getElementById('editIdField').value = it.id;
     document.getElementById('editName').value = it.full_name;
     document.getElementById('editEmail').value = it.email || '';
     document.getElementById('editSchool').value = it.school || '';
